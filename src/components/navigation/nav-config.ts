@@ -1,14 +1,4 @@
-import {
-  Archive,
-  BellRing,
-  ChartNoAxesCombined,
-  ClipboardCheck,
-  Inbox,
-  LifeBuoy,
-  MapPinned,
-  Settings2,
-  UserRoundCog,
-} from "lucide-react"
+import { Archive, BellRing, ChartNoAxesCombined, ClipboardCheck, Inbox, LifeBuoy, MapPinned, Settings2, UserRoundCog } from "lucide-react"
 import type { AppRole } from "@/lib/auth/roles"
 import type { NavigationItem } from "./nav-types"
 
@@ -20,10 +10,10 @@ const common = [
 export const navigationByRole: Record<AppRole, NavigationItem[]> = {
   pelapor: [
     { title: "Ringkasan", url: "/pelapor/dashboard", icon: ChartNoAxesCombined },
-    { title: "Laporan Masuk", url: "#", icon: Inbox },
-    { title: "Buat Laporan", url: "#", icon: ClipboardCheck },
-    { title: "Laporan Saya", url: "#", icon: Archive },
-    ...common,
+    { title: "Buat Laporan", url: "/pelapor/buat-laporan", icon: ClipboardCheck },
+    { title: "Laporan Saya", url: "/pelapor/laporan-saya", icon: Archive },
+    { title: "Notifikasi", url: "/pelapor/notifikasi", icon: BellRing },
+    { title: "Profil", url: "/pelapor/profil", icon: UserRoundCog },
   ],
   satpam: [
     { title: "Ringkasan", url: "/satpam/dashboard", icon: ChartNoAxesCombined },

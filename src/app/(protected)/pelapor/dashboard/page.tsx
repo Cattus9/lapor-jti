@@ -1,15 +1,7 @@
-import { RoleDashboardPage } from "@/components/layout/role-dashboard-page"
+import { PelaporDashboard } from "@/features/reports/components/pelapor-dashboard"
 import { requireDummyRole } from "@/lib/auth/require-role"
 
 export default function PelaporDashboardPage() {
   const user = requireDummyRole("pelapor")
-
-  return (
-    <RoleDashboardPage
-      role="pelapor"
-      user={user}
-      title="Dashboard Pelapor"
-      description="Pantau laporan dan buat laporan baru."
-    />
-  )
+  return <PelaporDashboard user={user} />
 }

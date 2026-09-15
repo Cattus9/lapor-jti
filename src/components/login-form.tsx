@@ -28,9 +28,9 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-8", className)} {...props}>
-      <Card className="overflow-hidden border-border/80 p-0 shadow-lg">
+      <Card className="overflow-hidden border border-border p-0 shadow-xl ring-1 ring-border/80">
         <CardContent className="grid p-0 md:grid-cols-2">
-          <form className="space-y-2 p-8 md:p-10" onSubmit={handleSubmit}>
+          <form className="space-y-2 p-8 md:p-10" onSubmit={handleSubmit} noValidate>
             <FieldGroup>
               <div className="mb-2 flex flex-col items-center gap-3 text-center">
                 <h1 className="text-2xl font-bold">Welcome back</h1>
@@ -44,7 +44,6 @@ export function LoginForm({
                   id="email"
                   type="email"
                   placeholder="m@example.com"
-                  required
                 />
               </Field>
               <Field>
@@ -57,7 +56,7 @@ export function LoginForm({
                     Forgot your password?
                   </a>
                 </div>
-                <Input id="password" type="password" required />
+                <Input id="password" type="password" />
               </Field>
               <Field>
                 <Button type="submit">Login</Button>
@@ -99,13 +98,7 @@ export function LoginForm({
               </FieldDescription>
             </FieldGroup>
           </form>
-          <div className="relative hidden bg-muted md:block">
-            <img
-              src="/placeholder.svg"
-              alt="Image"
-              className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-            />
-          </div>
+          <div className="hidden border-l border-border bg-muted md:block" aria-hidden="true" />
         </CardContent>
       </Card>
       <FieldDescription className="px-6 text-center">
