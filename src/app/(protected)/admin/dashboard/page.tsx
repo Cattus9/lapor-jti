@@ -1,8 +1,8 @@
 import { RoleDashboardPage } from "@/components/layout/role-dashboard-page"
 import { requireDummyRole } from "@/lib/auth/require-role"
 
-export default function AdminDashboardPage() {
-  const user = requireDummyRole("admin")
+export default async function AdminDashboardPage() {
+  const user = await requireDummyRole("admin")
 
   return (
     <RoleDashboardPage

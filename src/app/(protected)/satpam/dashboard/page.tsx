@@ -1,15 +1,8 @@
-import { RoleDashboardPage } from "@/components/layout/role-dashboard-page"
+import { SatpamDashboard } from "@/features/lost-found/components/satpam-dashboard"
 import { requireDummyRole } from "@/lib/auth/require-role"
 
-export default function SatpamDashboardPage() {
-  const user = requireDummyRole("satpam")
+export default async function SatpamDashboardPage() {
+  const user = await requireDummyRole("satpam")
 
-  return (
-    <RoleDashboardPage
-      role="satpam"
-      user={user}
-      title="Dashboard Satpam"
-      description="Kelola laporan kehilangan dan temuan."
-    />
-  )
+  return <SatpamDashboard user={user} />
 }
