@@ -1,8 +1,11 @@
-import { RoleDashboardPage } from "@/components/layout/role-dashboard-page"
+import { ContentShell } from "@/components/layout/content-shell"
+import { DashboardLayout } from "@/components/layout/dashboard-layout"
+import { PageHeader } from "@/components/layout/page-header"
+import { PelaporNotificationList } from "@/features/notifications/components/pelapor-notification-list"
 import { requireDummyRole } from "@/lib/auth/require-role"
 
 export default function PelaporPage() {
   const user = requireDummyRole("pelapor")
 
-  return <RoleDashboardPage role="pelapor" user={user} title="Notifikasi" description="Pembaruan status untuk laporan Anda." />
+  return <DashboardLayout role="pelapor"><ContentShell><PageHeader title="Notifikasi" description={`Pembaruan penting tentang perkembangan laporan ${user.name}.`} /><PelaporNotificationList /></ContentShell></DashboardLayout>
 }

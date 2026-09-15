@@ -65,10 +65,10 @@ export function FileDropzone({
       >
         <span className="flex size-10 items-center justify-center rounded-xl border border-border bg-card text-primary shadow-2xs"><UploadCloud className="size-5" aria-hidden="true" /></span>
         <span className="text-sm font-medium text-foreground">Tarik dan lepaskan file di sini</span>
-        <span className="text-xs text-muted-foreground">atau klik untuk memilih dari perangkat</span>
+        <span className="text-xs text-muted-foreground/70">atau klik untuk memilih dari perangkat</span>
         <Input ref={inputRef} id={id} name={id} type="file" accept={accept.join(",")} multiple className="sr-only" onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = "" }} />
       </label>
-      <p className="text-xs text-muted-foreground">JPG, PNG, atau PDF · Maksimal {maxFiles} file · {maxSizeMb} MB per file</p>
+      <p className="text-xs text-muted-foreground/70">JPG, PNG, atau PDF · Maksimal {maxFiles} file · {maxSizeMb} MB per file</p>
       {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
       {value.length > 0 ? <div className="space-y-2" aria-live="polite">{value.map((file) => <div key={`${file.name}-${file.size}`} className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><FileText className="size-4" aria-hidden="true" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{file.name}</p><p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p></div><Button type="button" variant="ghost" size="icon-sm" aria-label={`Hapus ${file.name}`} onClick={() => onChange(value.filter((item) => item !== file))}><X className="size-4" /></Button></div>)}</div> : null}
     </div>
