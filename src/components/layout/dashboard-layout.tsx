@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { cookies } from "next/headers"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { getDummySessionUser } from "@/lib/auth/server-session"
 import type { AppRole } from "@/lib/auth/roles"
 
 export async function DashboardLayout({
@@ -13,10 +14,11 @@ export async function DashboardLayout({
 }) {
   const sidebarState = (await cookies()).get("sidebar_state")?.value
   const defaultOpen = sidebarState !== "false"
+  const sessionUser = await getDummySessionUser()
 
   return (
     <SidebarProvider defaultOpen={defaultOpen} className="h-svh min-h-0 overflow-hidden bg-sidebar">
-      <AppSidebar role={role} />
+      <AppSidebar role={role} user={sessionUser} />
       {/* Main content edge: soft elevation only, preserving the three-tone base palette. */}
       <SidebarInset className="m-2 h-[calc(100dvh-1rem)] min-h-0 overflow-hidden rounded-panel border border-border shadow-sm md:m-3 md:h-[calc(100dvh-1.5rem)] md:peer-data-[state=collapsed]:ml-3">
         <div className="relative flex min-h-0 flex-1 flex-col">

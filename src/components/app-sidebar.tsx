@@ -8,9 +8,9 @@ import { navigationByRole } from "@/components/navigation/nav-config"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from "@/components/ui/sidebar"
 import type { AppRole } from "@/lib/auth/roles"
 
-const user = { name: "Ayu Santoso", email: "ayu.santoso@example.com", avatar: "/avatars/shadcn.jpg" }
+const fallbackUser = { name: "Pengguna LaporJTI", email: "", avatar: "" }
 
-export function AppSidebar({ role = "pelapor", ...props }: React.ComponentProps<typeof Sidebar> & { role?: AppRole }) {
+export function AppSidebar({ role = "pelapor", user = fallbackUser, ...props }: React.ComponentProps<typeof Sidebar> & { role?: AppRole; user?: { name: string; email: string; avatar?: string } }) {
   const navigation = navigationByRole[role].map(({ icon: Icon, ...item }) => ({ ...item, icon: <Icon /> }))
 
   return (
@@ -31,7 +31,7 @@ export function AppSidebar({ role = "pelapor", ...props }: React.ComponentProps<
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent><NavMain items={navigation} /></SidebarContent>
-      <SidebarFooter><NavUser user={user} /></SidebarFooter>
+      <SidebarFooter><NavUser user={{ ...user, avatar: user.avatar ?? "" }} /></SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

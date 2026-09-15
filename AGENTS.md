@@ -16,6 +16,11 @@
 - KPI colors MUST use theme tokens or restrained semantic utility colors; arbitrary hex colors are prohibited.
 - This standard applies across dashboard roles; role-specific data may vary, but the visual composition remains consistent.
 
+### Dashboard KPI Implementation Rule
+- Every dashboard KPI MUST use the reusable `KpiCard` composition so sizing, spacing, icon treatment, and responsive behavior stay consistent across roles.
+- The outer layer MUST include a bottom affordance labeled `Detail` with a subtle `ArrowRight`; use a link when a detail route exists and a non-interactive footer while the route is still pending.
+- Role-specific dashboards MUST not recreate KPI card markup locally or introduce a different footer label/style.
+
 
 ## Icon Selection Priority
 - Use Lucide icons that are semantically specific to the feature or action whenever a suitable icon exists.

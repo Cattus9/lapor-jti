@@ -1,23 +1,29 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import { ChevronRightIcon } from "lucide-react"
+import { cn } from "cn"
 
-const menuButtonClass = "h-11 gap-2.5 px-3.5 text-[15px] text-sidebar-foreground/70 transition-colors data-active:bg-blue-100 data-active:text-blue-700 data-active:font-normal dark:data-active:bg-blue-950 dark:data-active:text-blue-300 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-[18px] [&_svg]:stroke-[1.75] group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:translate-x-1"
+const menuButtonClass = "h-11 gap-2.5 rounded-lg border border-transparent px-3.5 text-[15px] text-sidebar-foreground/70 transition-colors data-active:border-sidebar-border data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-[18px] [&_svg]:stroke-[1.75] group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:[&_svg]:translate-x-1"
+const activeMenuClass = "border-sidebar-border bg-sidebar-accent text-sidebar-accent-foreground font-medium"
 
 export function NavMain({ items }: { items: { title: string; url: string; icon?: React.ReactNode; isActive?: boolean; items?: { title: string; url: string }[] }[] }) {
+  const pathname = usePathname()
   return (
     <SidebarGroup className="px-1.5 py-2 group-data-[collapsible=icon]:px-0">
       <SidebarGroupLabel className="px-2">Workspace</SidebarGroupLabel>
       <SidebarMenu className="gap-1 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-3">
-        {items.map((item) => item.items?.length ? (
-          <Collapsible key={item.title} defaultOpen={item.isActive} className="group/collapsible" render={<SidebarMenuItem />}>
-            <CollapsibleTrigger render={<SidebarMenuButton isActive={item.isActive} tooltip={item.title} className={`${menuButtonClass} group-data-[collapsible=icon]:mx-auto`} />}>
+        {items.map((item) => {
+          const isActive = item.isActive ?? (item.url !== "#" && pathname === item.url)
+          return item.items?.length ? (
+          <Collapsible key={item.title} defaultOpen={isActive} className="group/collapsible" render={<SidebarMenuItem />}>
+            <CollapsibleTrigger render={<SidebarMenuButton isActive={isActive} tooltip={item.title} className={cn(menuButtonClass, isActive && activeMenuClass, "group-data-[collapsible=icon]:mx-auto")} />}>
               {item.icon}<span>{item.title}</span><ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-open/collapsible:rotate-90" />
             </CollapsibleTrigger>
             <CollapsibleContent className="overflow-hidden data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-top-1 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-top-1 data-open:duration-100 data-closed:duration-100">
@@ -27,8 +33,9 @@ export function NavMain({ items }: { items: { title: string; url: string; icon?:
             </CollapsibleContent>
           </Collapsible>
         ) : (
-          <SidebarMenuItem key={item.title}><SidebarMenuButton isActive={item.isActive} tooltip={item.title} className={`${menuButtonClass} group-data-[collapsible=icon]:mx-auto`} render={<Link href={item.url} />}>{item.icon}<span>{item.title}</span></SidebarMenuButton></SidebarMenuItem>
-        ))}
+          <SidebarMenuItem key={item.title}><SidebarMenuButton isActive={isActive} tooltip={item.title} className={cn(menuButtonClass, isActive && activeMenuClass, "group-data-[collapsible=icon]:mx-auto")} render={<Link href={item.url} />}>{item.icon}<span>{item.title}</span></SidebarMenuButton></SidebarMenuItem>
+        )
+        })}
       </SidebarMenu>
     </SidebarGroup>
   )

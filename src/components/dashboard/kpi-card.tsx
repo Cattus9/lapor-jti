@@ -26,7 +26,7 @@ export function KpiCard({
   detail?: string
   detailValue?: string | number
   detailTone?: KpiTone
-  href: string
+  href?: string
 }) {
   const tone = toneClasses[detailTone]
   const [indicatorColor, valueColor] = tone.split(" ")
@@ -54,10 +54,13 @@ export function KpiCard({
           </div>
         ) : null}
       </div>
-      <Link href={href} className="group flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-        <span>Lihat detail</span>
+      {href ? <Link href={href} className="group flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+        <span>Detail</span>
         <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" strokeWidth={1.75} />
-      </Link>
+      </Link> : <div className="group flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground">
+        <span>Detail</span>
+        <ArrowRight className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+      </div>}
     </Card>
   )
 }
