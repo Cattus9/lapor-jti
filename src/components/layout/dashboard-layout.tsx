@@ -1,23 +1,50 @@
-import type { ReactNode } from "react"
-import { cookies } from "next/headers"
+"use client"
+
+import { useState, useSyncExternalStore, type ReactNode } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { getDummySessionUser } from "@/lib/auth/server-session"
+import { dummyUser, getDummyUserByEmail, type CurrentUser } from "@/lib/auth/dummy-session"
 import type { AppRole } from "@/lib/auth/roles"
 
-export async function DashboardLayout({
+const DUMMY_EMAIL_COOKIE = "laporjti_dummy_email"
+const SIDEBAR_STATE_COOKIE = "sidebar_state"
+
+function getBrowserSessionUser() {
+  const email = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith(`${DUMMY_EMAIL_COOKIE}=`))
+    ?.split("=")[1]
+
+  return getDummyUserByEmail(email ?? "") ?? dummyUser
+}
+
+function subscribeToSession() {
+  return () => undefined
+}
+
+function getInitialSidebarOpen() {
+  if (typeof document === "undefined") return true
+
+  const sidebarState = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith(`${SIDEBAR_STATE_COOKIE}=`))
+    ?.split("=")[1]
+
+  return sidebarState !== "false"
+}
+
+export function DashboardLayout({
   children,
   role = "pelapor",
 }: {
   children: ReactNode
   role?: AppRole
 }) {
-  const sidebarState = (await cookies()).get("sidebar_state")?.value
-  const defaultOpen = sidebarState !== "false"
-  const sessionUser = await getDummySessionUser()
+  const sessionUser = useSyncExternalStore<CurrentUser>(subscribeToSession, getBrowserSessionUser, () => dummyUser)
+  const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen)
 
   return (
-    <SidebarProvider defaultOpen={defaultOpen} className="h-svh min-h-0 overflow-hidden bg-sidebar">
+    <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen} className="h-svh min-h-0 overflow-hidden bg-sidebar">
       <AppSidebar role={role} user={sessionUser} />
       {/* Main content edge: soft elevation only, preserving the three-tone base palette. */}
       <SidebarInset className="m-2 h-[calc(100dvh-1rem)] min-h-0 overflow-hidden rounded-panel border border-border shadow-sm md:m-3 md:h-[calc(100dvh-1.5rem)] md:peer-data-[state=collapsed]:ml-3">

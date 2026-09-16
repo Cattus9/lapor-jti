@@ -10,8 +10,8 @@ import {
 import { ChevronRightIcon } from "lucide-react"
 import { cn } from "cn"
 
-const menuButtonClass = "h-11 gap-2.5 rounded-lg border border-transparent px-3.5 text-[15px] text-sidebar-foreground/70 transition-colors data-active:border-sidebar-border data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-[18px] [&_svg]:stroke-[1.75] group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:[&_svg]:translate-x-1"
-const activeMenuClass = "border-sidebar-border bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+const menuButtonClass = "h-11 gap-2.5 rounded-lg border border-transparent px-3 text-[15px] font-medium text-sidebar-foreground/70 transition-colors data-active:border-sidebar-border data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-[18px] [&_svg]:stroke-[1.75] group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:[&_svg]:translate-x-1"
+const activeMenuClass = "border-sidebar-border bg-sidebar-accent text-sidebar-accent-foreground"
 
 export function NavMain({ items }: { items: { title: string; url: string; icon?: React.ReactNode; isActive?: boolean; items?: { title: string; url: string }[] }[] }) {
   const pathname = usePathname()

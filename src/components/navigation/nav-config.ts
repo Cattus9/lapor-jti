@@ -17,9 +17,10 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
   ],
   satpam: [
     { title: "Ringkasan", url: "/satpam/dashboard", icon: ChartNoAxesCombined },
-    { title: "Kehilangan & Temuan", url: "#", icon: Inbox },
-    { title: "Riwayat", url: "#", icon: Archive },
-    ...common,
+    { title: "Kehilangan & Temuan", url: "/satpam/kehilangan-temuan", icon: Inbox },
+    { title: "Riwayat", url: "/satpam/riwayat", icon: Archive },
+    { title: "Notifikasi", url: "/satpam/notifikasi", icon: BellRing },
+    { title: "Profil", url: "/satpam/profil", icon: UserRoundCog },
   ],
   teknisi: [
     { title: "Ringkasan", url: "/teknisi/dashboard", icon: ChartNoAxesCombined },
