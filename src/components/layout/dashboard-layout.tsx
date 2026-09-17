@@ -16,11 +16,12 @@ function getBrowserSessionUser() {
     .find((cookie) => cookie.startsWith(`${DUMMY_EMAIL_COOKIE}=`))
     ?.split("=")[1]
 
-  return getDummyUserByEmail(email ?? "") ?? dummyUser
+  return getDummyUserByEmail(decodeURIComponent(email ?? "")) ?? dummyUser
 }
 
-function subscribeToSession() {
-  return () => undefined
+function subscribeToSession(onStoreChange: () => void) {
+  const timer = window.setTimeout(onStoreChange, 0)
+  return () => window.clearTimeout(timer)
 }
 
 function getInitialSidebarOpen() {
