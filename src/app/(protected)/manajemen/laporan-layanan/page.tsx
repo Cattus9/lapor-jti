@@ -1,11 +1,8 @@
-import { ContentShell } from "@/components/layout/content-shell"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { PageHeader } from "@/components/layout/page-header"
-import { ManagementReportWorkspace } from "@/features/management/components/management-report-workspace"
+import { redirect } from "next/navigation"
 import { requireDummyRole } from "@/lib/auth/require-role"
 
 export default async function ManagementServiceReportsPage() {
-  const user = await requireDummyRole("manajemen")
+  await requireDummyRole("manajemen")
 
-  return <DashboardLayout role="manajemen" user={user}><ContentShell><PageHeader title="Laporan Layanan" description={`Kelola permintaan layanan internal JTI, ${user.name}.`} /><ManagementReportWorkspace category="Layanan" /></ContentShell></DashboardLayout>
+  redirect("/manajemen/laporan?category=layanan")
 }

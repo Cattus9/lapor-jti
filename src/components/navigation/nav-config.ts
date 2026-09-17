@@ -31,8 +31,7 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
   ],
   manajemen: [
     { title: "Ringkasan", url: "/manajemen/dashboard", icon: ChartNoAxesCombined },
-    { title: "Laporan Layanan", url: "/manajemen/laporan-layanan", icon: Inbox },
-    { title: "Laporan Lainnya", url: "/manajemen/laporan-lainnya", icon: Archive },
+    { title: "Kelola Laporan", url: "/manajemen/laporan", icon: ClipboardCheck },
     { title: "Monitoring", url: "/manajemen/monitoring", icon: MapPinned },
     { title: "Statistik", url: "/manajemen/statistik", icon: ChartNoAxesCombined },
     { title: "Rekap Laporan", url: "/manajemen/rekap-laporan", icon: FileSpreadsheet },
