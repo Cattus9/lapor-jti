@@ -89,7 +89,7 @@ function StatisticMetric({
           <p className="text-sm font-medium text-foreground">{label}</p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
         </div>
-        <Button className="mt-auto -ml-2.5 pt-3" size="sm" variant="ghost" render={<Link href={href} />}>
+        <Button className="mt-auto self-start text-primary hover:bg-primary/10 hover:text-primary" size="sm" variant="ghost" render={<Link href={href} />}>
           Lihat tiket <ArrowRight className="size-3.5" aria-hidden="true" />
         </Button>
       </CardContent>
