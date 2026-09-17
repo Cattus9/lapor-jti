@@ -7,5 +7,5 @@ import { requireDummyRole } from "@/lib/auth/require-role"
 export default async function ManagementProfilePage() {
   const user = await requireDummyRole("manajemen")
 
-  return <DashboardLayout role="manajemen"><ContentShell><PageHeader title="Profil" description="Data diri dan akses akun yang tersinkron dari SSO POLIJE." /><ProfileDetails user={user} /></ContentShell></DashboardLayout>
+  return <DashboardLayout role="manajemen" user={user}><ContentShell><PageHeader title="Profil" description="Data diri dan akses akun yang tersinkron dari SSO POLIJE." /><ProfileDetails user={user} /></ContentShell></DashboardLayout>
 }

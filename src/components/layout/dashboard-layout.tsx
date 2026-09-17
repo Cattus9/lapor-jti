@@ -38,11 +38,17 @@ function getInitialSidebarOpen() {
 export function DashboardLayout({
   children,
   role = "pelapor",
+  user,
 }: {
   children: ReactNode
   role?: AppRole
+  user?: CurrentUser
 }) {
-  const sessionUser = useSyncExternalStore<CurrentUser>(subscribeToSession, getBrowserSessionUser, () => dummyUser)
+  const sessionUser = useSyncExternalStore<CurrentUser>(
+    subscribeToSession,
+    getBrowserSessionUser,
+    () => user ?? dummyUser,
+  )
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen)
 
   return (

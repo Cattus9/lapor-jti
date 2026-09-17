@@ -7,5 +7,5 @@ import { requireDummyRole } from "@/lib/auth/require-role"
 export default async function ManagementOtherReportsPage() {
   const user = await requireDummyRole("manajemen")
 
-  return <DashboardLayout role="manajemen"><ContentShell><PageHeader title="Laporan Lainnya" description={`Tindak lanjuti laporan umum yang membutuhkan koordinasi jurusan, ${user.name}.`} /><ManagementReportWorkspace category="Lainnya" /></ContentShell></DashboardLayout>
+  return <DashboardLayout role="manajemen" user={user}><ContentShell><PageHeader title="Laporan Lainnya" description={`Tindak lanjuti laporan umum yang membutuhkan koordinasi jurusan, ${user.name}.`} /><ManagementReportWorkspace category="Lainnya" /></ContentShell></DashboardLayout>
 }

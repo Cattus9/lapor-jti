@@ -20,7 +20,7 @@ const categoryClass: Record<string, string> = {
 
 export function ManajemenDashboard({ user }: { user: CurrentUser }) {
   return (
-    <DashboardLayout role="manajemen">
+    <DashboardLayout role="manajemen" user={user}>
       <ContentShell>
         <PageHeader
           title="Dashboard Manajemen"
