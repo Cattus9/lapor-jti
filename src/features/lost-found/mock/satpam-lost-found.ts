@@ -118,17 +118,16 @@ export const satpamLostFoundReports: SatpamLostFoundReport[] = [
   },
 ]
 
-export const matchingCandidates = [
+// Mocked review pairs for the Satpam workflow. They are not an automatic matching score.
+export const manualReviewPairs = [
   {
     lossTicket: "LJ-2026-00126",
     foundTicket: "LJ-2026-00129",
-    confidence: "Cocok tinggi",
     criteria: ["Nama pemilik pada kartu sama", "Warna kartu dan lanyard sesuai", "Lokasi serta waktu berdekatan"],
   },
   {
     lossTicket: "LJ-2026-00131",
     foundTicket: "LJ-2026-00099",
-    confidence: "Perlu pemeriksaan",
     criteria: ["Jenis barang sama", "Warna dan ciri fisik belum sesuai", "Tidak ada identitas pemilik pada temuan"],
   },
 ]
