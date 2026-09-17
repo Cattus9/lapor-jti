@@ -36,6 +36,28 @@ export const dummyUsers: Record<string, CurrentUser> = {
     status: "Aktif",
     role: "satpam",
   },
+  "teknisi@gmail.com": {
+    id: "dummy-teknisi-001",
+    name: "Rizky Pratama",
+    email: "teknisi@gmail.com",
+    identifier: "TEKNISI-001",
+    username: "teknisi",
+    unit: "Unit Sarana dan Prasarana JTI",
+    studyProgram: "Tidak berlaku",
+    status: "Aktif",
+    role: "teknisi",
+  },
+  "manajemen@gmail.com": {
+    id: "dummy-manajemen-001",
+    name: "Dewi Lestari",
+    email: "manajemen@gmail.com",
+    identifier: "MANAJEMEN-001",
+    username: "manajemen",
+    unit: "Manajemen Jurusan Teknologi Informasi",
+    studyProgram: "Tidak berlaku",
+    status: "Aktif",
+    role: "manajemen",
+  },
 }
 
 export const dummyUser = dummyUsers["pelapor@gmail.com"]

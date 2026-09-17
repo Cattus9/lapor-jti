@@ -21,6 +21,15 @@
 - The outer layer MUST include a bottom affordance labeled `Detail` with a subtle `ArrowRight`; use a link when a detail route exists and a non-interactive footer while the route is still pending.
 - Role-specific dashboards MUST not recreate KPI card markup locally or introduce a different footer label/style.
 
+## Report Detail Modal Standard
+- `ReportDetailDialog` in `src/features/lost-found/components/satpam-lost-found-workspace.tsx` is the single source of truth for every operational report-detail modal.
+- Modal headers MUST use the compact metadata row: semantic icon, report category, ticket number, and status badge. Follow it with a prominent title and one concise update description. Do not use card-like headers or duplicate summary grids.
+- The body order MUST be: progress stepper, status action panel, report details, attachments, then status history. Use existing Shadcn primitives for every part.
+- The status action panel MUST use the muted bordered treatment with the primary action below explanatory copy. Terminal actions may open a nested confirmation form when a note is required.
+- Report details MUST use one or more `overflow-hidden rounded-xl border` definition-list tables with shared cell borders. Each field label pairs a semantic Lucide icon with a concise sublabel. Do not replace this structure with separate metric cards.
+- Section headers for details and attachments MUST pair a semantic icon badge with a title and supportive subtext. Attachments use the dashed empty-state treatment, and status history uses compact bordered entries.
+- Role-specific data and lifecycle labels may differ, but the visual hierarchy, spacing, borders, and interaction pattern must remain aligned with this standard.
+
 
 ## Icon Selection Priority
 - Use Lucide icons that are semantically specific to the feature or action whenever a suitable icon exists.

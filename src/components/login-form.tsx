@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ArrowRight, Building2, ImageOff, LogIn, ShieldCheck } from "lucide-react"
+import { ArrowRight, Building2, ImageOff, LogIn } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -45,12 +45,11 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               <Field>
                 <FieldLabel htmlFor="email">Email akun</FieldLabel>
                 <Input id="email" type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError("") }} placeholder="contoh@polije.ac.id" autoComplete="email" required aria-invalid={Boolean(error)} />
-                <FieldDescription>Akun dummy: pelapor@gmail.com atau satpam@gmail.com</FieldDescription>
+                <FieldDescription>Akun dummy: pelapor@gmail.com, satpam@gmail.com, teknisi@gmail.com, atau manajemen@gmail.com</FieldDescription>
                 {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
               </Field>
-              <div className="space-y-4">
+              <div>
                 <Button type="submit" size="lg" className="w-full sm:w-auto"><LogIn />Login dengan SSO POLIJE<ArrowRight className="ml-1" /></Button>
-                <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Role dan data identitas Anda ditentukan otomatis dari sistem SSO POLIJE.</span></div>
               </div>
             </div>
             <FieldDescription className="text-xs leading-relaxed">Dengan melanjutkan, Anda menyetujui penggunaan LaporJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</FieldDescription>

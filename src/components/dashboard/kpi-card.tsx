@@ -32,7 +32,7 @@ export function KpiCard({
   const [indicatorColor, valueColor] = tone.split(" ")
 
   return (
-    <Card className="justify-between rounded-2xl bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
+    <Card className="flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
       {/* KPI inner layer: floating content surface. */}
       <div className="space-y-3 rounded-xl border border-border/60 bg-card p-4 text-card-foreground shadow-2xs">
         <div className="flex items-center gap-3.5">

@@ -1,4 +1,4 @@
-import { Archive, BellRing, ChartNoAxesCombined, ClipboardCheck, Inbox, LifeBuoy, MapPinned, Settings2, UserRoundCog } from "lucide-react"
+import { Archive, BellRing, ChartNoAxesCombined, ClipboardCheck, FileSpreadsheet, Inbox, LifeBuoy, MapPinned, Settings2, UserRoundCog, Wrench } from "lucide-react"
 import type { AppRole } from "@/lib/auth/roles"
 import type { NavigationItem } from "./nav-types"
 
@@ -24,9 +24,10 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
   ],
   teknisi: [
     { title: "Ringkasan", url: "/teknisi/dashboard", icon: ChartNoAxesCombined },
-    { title: "Laporan Fasilitas", url: "#", icon: ClipboardCheck },
-    { title: "Riwayat Perbaikan", url: "#", icon: Archive },
-    ...common,
+    { title: "Laporan Fasilitas", url: "/teknisi/laporan-fasilitas", icon: Wrench },
+    { title: "Riwayat Perbaikan", url: "/teknisi/riwayat", icon: Archive },
+    { title: "Notifikasi", url: "/teknisi/notifikasi", icon: BellRing },
+    { title: "Profil", url: "/teknisi/profil", icon: UserRoundCog },
   ],
   manajemen: [
     { title: "Ringkasan", url: "/manajemen/dashboard", icon: ChartNoAxesCombined },
@@ -34,6 +35,7 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
     { title: "Laporan Lainnya", url: "#", icon: Archive },
     { title: "Monitoring", url: "#", icon: MapPinned },
     { title: "Statistik", url: "#", icon: ChartNoAxesCombined },
+    { title: "Rekap Laporan", url: "#", icon: FileSpreadsheet },
     ...common,
   ],
   admin: [
