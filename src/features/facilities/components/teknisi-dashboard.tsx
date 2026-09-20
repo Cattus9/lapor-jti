@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, ClipboardList, Clock3, CircleCheckBig, MapPin, ScanSearch, Wrench } from "lucide-react"
+import { ArrowRight, Building2, ClipboardList, Clock3, CircleCheckBig, MapPin, ScanSearch, Wrench } from "lucide-react"
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { TechnicianPriorityAnalysis } from "@/features/facilities/components/technician-priority-analysis"
 import { technicianOverview, technicianRepairQueue, technicianTasks } from "@/features/facilities/mock/teknisi-dashboard"
 import type { CurrentUser } from "@/lib/auth/dummy-session"
 
@@ -22,7 +23,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
       <ContentShell>
         <PageHeader
           title="Dashboard Teknisi"
-          description={`Selamat datang, ${user.name}. Kelola antrean laporan fasilitas JTI.`}
+          description={`Selamat datang, ${user.name}. Tinjau prioritas ruang dan kelola antrean fasilitas JTI.`}
           action={
             <Button render={<Link href="/teknisi/laporan-fasilitas" />} size="sm" className="shrink-0">
               <ClipboardList />
@@ -31,7 +32,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
           }
         />
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             label="Laporan baru"
             value={technicianOverview.newReports}
@@ -51,6 +52,15 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
             href="/teknisi/laporan-fasilitas"
           />
           <KpiCard
+            label="Ruang terdampak"
+            value={technicianOverview.affectedRooms}
+            icon={Building2}
+            detail="Prioritas utama"
+            detailValue={technicianOverview.priorityRoom}
+            detailTone="red"
+            href="/teknisi/laporan-fasilitas?view=priority"
+          />
+          <KpiCard
             label="Selesai hari ini"
             value={technicianOverview.completedToday}
             icon={CircleCheckBig}
@@ -60,6 +70,8 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
             href="/teknisi/riwayat"
           />
         </div>
+
+        <TechnicianPriorityAnalysis />
 
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
           <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
@@ -89,7 +101,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
                         <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
                         <p className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
                           <MapPin className="size-3 shrink-0" aria-hidden="true" />
-                          <span className="truncate">{item.ticket} · {item.facility} · {item.location}</span>
+                          <span className="truncate">{item.ticket} · {item.facility} - {item.location}</span>
                         </p>
                       </div>
                     </div>

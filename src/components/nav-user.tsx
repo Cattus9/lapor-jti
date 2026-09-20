@@ -1,5 +1,6 @@
 "use client"
 
+import { useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import {
   Avatar,
@@ -12,7 +13,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -21,7 +27,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import { ChevronsUpDownIcon, LogOutIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react"
+import { getThemeSnapshot, setTheme, subscribeToTheme, type AppTheme } from "@/lib/theme"
 
 export function NavUser({
   user,
@@ -34,6 +41,8 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
+  const isDark = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => false)
+  const theme: AppTheme = isDark ? "dark" : "light"
 
   function handleLogout() {
     document.cookie = "laporjti_dummy_email=; path=/; max-age=0; samesite=lax"
@@ -81,36 +90,40 @@ export function NavUser({
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <SparklesIcon
-                />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger openOnHover={false}>
+                <PaletteIcon />
+                Tampilan
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="min-w-44 border border-border/80 bg-popover p-1.5 shadow-lg">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Tema</DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuRadioGroup value={theme} onValueChange={(value) => {
+                  if (value === "light" || value === "dark") setTheme(value)
+                }}>
+                  <DropdownMenuRadioItem value="light" className="gap-2.5 py-1.5">
+                    <span className="flex size-7 items-center justify-center rounded-md border border-border bg-background text-foreground shadow-2xs">
+                      <SunIcon className="size-3.5" />
+                    </span>
+                    <span>Terang</span>
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark" className="gap-2.5 py-1.5">
+                    <span className="flex size-7 items-center justify-center rounded-md border border-border bg-foreground text-background shadow-2xs">
+                      <MoonIcon className="size-3.5" />
+                    </span>
+                    <span>Gelap</span>
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheckIcon
-                />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCardIcon
-                />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellIcon
-                />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
-              <LogOutIcon
-              />
-              Log out
+            <DropdownMenuItem
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleLogout}
+            >
+              <LogOutIcon />
+              Keluar
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

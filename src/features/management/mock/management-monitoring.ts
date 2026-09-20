@@ -1,3 +1,5 @@
+import { technicianFacilityReports } from "@/features/facilities/mock/teknisi-dashboard"
+
 export type MonitoringReportCategory = "Kehilangan & Temuan" | "Fasilitas" | "Layanan" | "Lainnya"
 
 export type MonitoringReportStatus =
@@ -32,7 +34,7 @@ export function isMonitoringReportInProgress(status: MonitoringReportStatus) {
   return status !== "Baru" && status !== "Selesai"
 }
 
-export const monitoringReports: readonly MonitoringReport[] = [
+const crossRoleMonitoringReports: readonly MonitoringReport[] = [
   {
     ticket: "LJ-2026-00131",
     title: "Dompet kulit hitam",
@@ -161,4 +163,36 @@ export const monitoringReports: readonly MonitoringReport[] = [
     attachments: 2,
     daysAgo: 11,
   },
+]
+
+function facilityReportedOn(submittedAt: string) {
+  if (submittedAt.startsWith("Hari ini")) return "2026-09-17"
+  if (submittedAt.startsWith("Kemarin")) return "2026-09-16"
+
+  const explicitDate = submittedAt.match(/^(\d{1,2}) September 2026/)
+  return explicitDate ? `2026-09-${explicitDate[1].padStart(2, "0")}` : "2026-09-17"
+}
+
+export const monitoringReports: readonly MonitoringReport[] = [
+  ...crossRoleMonitoringReports.filter((report) => report.category !== "Fasilitas"),
+  ...technicianFacilityReports.map((report) => {
+    const reportedOn = facilityReportedOn(report.submittedAt)
+
+    return {
+      ticket: report.ticket,
+      title: report.title,
+      category: "Fasilitas" as const,
+      status: report.status,
+      handler: "Teknisi" as const,
+      reporter: report.reporter,
+      context: `Fasilitas ${report.facility.toLowerCase()}`,
+      location: report.location,
+      submittedAt: report.submittedAt,
+      reportedOn,
+      updatedAt: report.updatedAt,
+      description: report.description,
+      attachments: report.attachments,
+      daysAgo: reportedOn === "2026-09-17" ? 0 : reportedOn === "2026-09-16" ? 1 : 11,
+    }
+  }),
 ]

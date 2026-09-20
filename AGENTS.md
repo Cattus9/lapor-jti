@@ -37,3 +37,8 @@
 - Keep icon selection visually varied across navigation sections while preserving Lucide's consistent stroke style.
 - Use a generic icon only when no sufficiently specific Lucide icon is available or when the generic icon is clearer for the user.
 - Confirm icon names and availability in the installed `lucide-react` package before implementation.
+
+## Validasi Frontend
+- Jangan menjalankan Preview Mode, browser automation, atau Playwright untuk validasi visual maupun interaksi.
+- Pengujian visual dan interaksi dilakukan manual oleh pengguna.
+- Tetap jalankan validasi statis yang relevan, seperti lint, type check, build, dan pemeriksaan format/diff, kecuali pengguna meminta untuk tidak melakukannya.

@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ActivityNotificationProvider } from "@/components/activity-notification-provider"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { dummyUser, getDummyUserByEmail, type CurrentUser } from "@/lib/auth/dummy-session"
 import type { AppRole } from "@/lib/auth/roles"
@@ -60,6 +61,7 @@ export function DashboardLayout({
           <div className="relative flex min-h-0 flex-1 flex-col">
             <div className="absolute inset-x-0 top-0 z-20 flex h-12 items-center border-b border-border bg-background/80 px-4 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/75">
               <SidebarTrigger aria-label="Buka navigasi" />
+              <ThemeToggle />
             </div>
             {children}
           </div>
