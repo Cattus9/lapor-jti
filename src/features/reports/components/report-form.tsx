@@ -52,10 +52,10 @@ const studyPrograms = ["TIF", "MIF", "TKK", "TRK", "TRPL", "Magister", "TIF Ngan
 function SelectField({ id, label, placeholder, value, onValueChange, options, description }: { id: string; label: string; placeholder: string; value: string; onValueChange: (value: string) => void; options: string[]; description?: string }) {
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel>{label}</FieldLabel>
       {description ? <FieldDescription>{description}</FieldDescription> : null}
       <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue ?? "")}>
-        <SelectTrigger id={id} className="!h-11 w-full bg-background/70"><SelectValue placeholder={placeholder} /></SelectTrigger>
+        <SelectTrigger id={id} aria-label={label} className="!h-11 w-full bg-background/70"><SelectValue placeholder={placeholder} /></SelectTrigger>
         <SelectContent>{options.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
       </Select>
     </Field>
@@ -65,9 +65,9 @@ function SelectField({ id, label, placeholder, value, onValueChange, options, de
 function RoomSelectField({ value, onValueChange }: { value: string; onValueChange: (value: string) => void }) {
   return (
     <Field>
-      <FieldLabel htmlFor="facility-location">Ruangan</FieldLabel>
+      <FieldLabel>Ruangan</FieldLabel>
       <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue ?? "")}>
-        <SelectTrigger id="facility-location" className="!h-11 w-full bg-background/70"><SelectValue placeholder="Pilih ruangan" /></SelectTrigger>
+        <SelectTrigger id="facility-location" aria-label="Ruangan" className="!h-11 w-full bg-background/70"><SelectValue placeholder="Pilih ruangan" /></SelectTrigger>
         <SelectContent matchTriggerWidth={false} className="w-[min(42rem,calc(100vw-2rem))] p-2" listClassName="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {roomGroups.map((group) => (
             <SelectGroup key={group.floor} className="rounded-lg border border-border/60 bg-muted/30 p-1.5">
@@ -91,11 +91,10 @@ function FacilityMultiSelectField({ value, onValueChange }: { value: string[]; o
 
   return (
     <Field>
-      <FieldLabel htmlFor="facility-type">Jenis fasilitas</FieldLabel>
-      <FieldDescription>Pilih seluruh objek yang terdampak pada laporan ini.</FieldDescription>
+      <FieldLabel>Jenis fasilitas</FieldLabel>
       <input type="hidden" name="facilities" value={value.join(",")} />
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger render={<Button id="facility-type" type="button" variant="outline" className="h-11 w-full justify-between bg-background/70 text-left font-normal" />}>
+        <PopoverTrigger render={<Button id="facility-type" type="button" variant="outline" aria-label="Jenis fasilitas" className="h-11 w-full justify-between bg-background/70 text-left font-normal" />}>
           <span className={value.length ? "truncate text-foreground" : "truncate text-muted-foreground/70"}>{summary}</span>
           <span className="flex items-center gap-2"><span className="text-xs text-muted-foreground">{value.length || ""}</span><ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" /></span>
         </PopoverTrigger>
@@ -114,6 +113,7 @@ function FacilityMultiSelectField({ value, onValueChange }: { value: string[]; o
           <div className="flex items-center justify-between border-t border-border/60 px-4 py-3"><p className="text-xs text-muted-foreground">{value.length ? `${value.length} fasilitas dipilih` : "Belum ada fasilitas dipilih"}</p><div className="flex items-center gap-2">{value.length ? <Button type="button" size="sm" variant="ghost" onClick={() => onValueChange([])}>Bersihkan</Button> : null}<Button type="button" size="sm" onClick={() => setOpen(false)}>Selesai</Button></div></div>
         </PopoverContent>
       </Popover>
+      <FieldDescription>Pilih seluruh objek yang terdampak pada laporan ini.</FieldDescription>
     </Field>
   )
 }
@@ -168,28 +168,40 @@ function TimePickerField({ value, onValueChange }: { value: string; onValueChang
 
   return (
     <Field>
-      <FieldLabel htmlFor="incident-time">Waktu</FieldLabel>
-      <Popover open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger render={<Button id="incident-time" type="button" variant="outline" className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}>
-          <Clock3 className="size-4 text-muted-foreground" aria-hidden="true" />
-          {value || <span className="text-muted-foreground/70">Pilih waktu</span>}
-        </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={6} className="w-[min(26rem,calc(100vw-2rem))] p-0">
-          <div className="border-b border-border/60 px-4 py-3">
-            <p className="text-sm font-semibold text-foreground">Pilih waktu</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Pilih jam dan menit kejadian.</p>
-          </div>
-          <div className="flex items-center justify-center gap-7 px-5 py-5 sm:gap-10">
-            <TimeUnitSpinner label="Jam" value={selectedHour} maximum={23} onValueChange={setSelectedHour} />
-            <span className="mt-6 text-2xl font-semibold text-muted-foreground" aria-hidden="true">:</span>
-            <TimeUnitSpinner label="Menit" value={selectedMinute} maximum={59} onValueChange={setSelectedMinute} />
-          </div>
-          <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
-            <p className="text-xs text-muted-foreground">{selectedHour && selectedMinute ? `${normalizeTimePart(selectedHour, 23)}:${normalizeTimePart(selectedMinute, 59)}` : "Belum dipilih"}</p>
-            <div className="flex items-center gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Batal</Button><Button type="button" size="sm" disabled={!selectedHour || !selectedMinute} onClick={confirmTime}>Selesai</Button></div>
-          </div>
-        </PopoverContent>
-      </Popover>
+      <FieldLabel>Waktu</FieldLabel>
+      <Input
+        id="incident-time-mobile"
+        type="time"
+        value={value}
+        onChange={(event) => onValueChange(event.target.value)}
+        step="60"
+        aria-label="Waktu kejadian"
+        className="h-11 bg-background/70 tabular-nums sm:hidden"
+      />
+      <p className="text-xs text-muted-foreground sm:hidden">Gunakan pemilih waktu perangkat untuk memilih jam dan menit.</p>
+      <div className="hidden sm:block">
+        <Popover open={open} onOpenChange={handleOpenChange}>
+          <PopoverTrigger render={<Button id="incident-time-desktop" type="button" variant="outline" aria-label="Waktu kejadian" className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}>
+            <Clock3 className="size-4 text-muted-foreground" aria-hidden="true" />
+            {value || <span className="text-muted-foreground/70">Pilih waktu</span>}
+          </PopoverTrigger>
+          <PopoverContent align="start" sideOffset={6} className="w-[min(26rem,calc(100vw-2rem))] p-0">
+            <div className="border-b border-border/60 px-4 py-3">
+              <p className="text-sm font-semibold text-foreground">Pilih waktu</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Pilih jam dan menit kejadian.</p>
+            </div>
+            <div className="flex items-center justify-center gap-7 px-5 py-5 sm:gap-10">
+              <TimeUnitSpinner label="Jam" value={selectedHour} maximum={23} onValueChange={setSelectedHour} />
+              <span className="mt-6 text-2xl font-semibold text-muted-foreground" aria-hidden="true">:</span>
+              <TimeUnitSpinner label="Menit" value={selectedMinute} maximum={59} onValueChange={setSelectedMinute} />
+            </div>
+            <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
+              <p className="text-xs text-muted-foreground">{selectedHour && selectedMinute ? `${normalizeTimePart(selectedHour, 23)}:${normalizeTimePart(selectedMinute, 59)}` : "Belum dipilih"}</p>
+              <div className="flex items-center gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Batal</Button><Button type="button" size="sm" disabled={!selectedHour || !selectedMinute} onClick={confirmTime}>Selesai</Button></div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
     </Field>
   )
 }
@@ -246,7 +258,7 @@ export function ReportForm() {
             {category === "fasilitas" ? <><div className="grid gap-5 sm:grid-cols-2"><RoomSelectField value={location} onValueChange={setLocation} /><FacilityMultiSelectField value={selectedFacilities} onValueChange={setSelectedFacilities} /></div><SelectField id="working-space" label="Area tambahan" placeholder="Pilih area bila berada di working space" value={workspace} onValueChange={setWorkspace} options={workingSpaces} description="Isi bila laporan berada di working space, bukan di ruangan." /></> : null}
             {category === "layanan" ? <div className="grid gap-5 sm:grid-cols-2"><SelectField id="service" label="Jenis layanan" placeholder="Pilih layanan" value={service} onValueChange={setService} options={services} /><SelectField id="program" label="Unit atau program studi" placeholder="Pilih unit terkait" value={program} onValueChange={setProgram} options={studyPrograms} /></div> : null}
             {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><Field><FieldLabel htmlFor="incident-date">Tanggal kejadian</FieldLabel><Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}><PopoverTrigger render={<Button id="incident-date" type="button" variant="outline" className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}><CalendarDays className="size-4 text-muted-foreground" />{incidentDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(incidentDate) : <span className="text-muted-foreground/70">Pilih tanggal</span>}</PopoverTrigger><PopoverContent align="start"><Calendar mode="single" selected={incidentDate} onSelect={(date) => { setIncidentDate(date); setDatePickerOpen(false) }} /></PopoverContent></Popover></Field><TimePickerField value={incidentTime} onValueChange={setIncidentTime} />{category !== "fasilitas" ? <Field><FieldLabel htmlFor="location">Lokasi kejadian</FieldLabel><Input id="location" name="location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Gedung JTI, Ruang 3.4" required /></Field> : <div className="flex items-end text-sm text-muted-foreground"><div className="flex items-start gap-2 rounded-lg bg-muted/60 p-3"><MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>Lokasi fasilitas dipilih dari data ruangan JTI di atas.</span></div></div>}</div>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"><Field><FieldLabel>Tanggal kejadian</FieldLabel><Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}><PopoverTrigger render={<Button id="incident-date" type="button" variant="outline" aria-label="Tanggal kejadian" className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}><CalendarDays className="size-4 text-muted-foreground" />{incidentDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(incidentDate) : <span className="text-muted-foreground/70">Pilih tanggal</span>}</PopoverTrigger><PopoverContent align="start"><Calendar mode="single" selected={incidentDate} onSelect={(date) => { setIncidentDate(date); setDatePickerOpen(false) }} /></PopoverContent></Popover></Field><TimePickerField value={incidentTime} onValueChange={setIncidentTime} />{category !== "fasilitas" ? <Field><FieldLabel htmlFor="location">Lokasi kejadian</FieldLabel><Input id="location" name="location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Gedung JTI, Ruang 3.4" required /></Field> : <div className="flex items-end text-sm text-muted-foreground"><div className="flex items-start gap-2 rounded-lg bg-muted/60 p-3"><MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>Lokasi fasilitas dipilih dari data ruangan JTI di atas.</span></div></div>}</div>
             <Field><FieldLabel htmlFor="description">Deskripsi laporan</FieldLabel><Textarea id="description" name="description" placeholder="Jelaskan kronologi, kondisi, atau kendala secara singkat dan jelas." required /><FieldDescription>Hindari data pribadi yang tidak diperlukan dalam laporan.</FieldDescription></Field>
           </FieldGroup></div> : null}
           {category ? <div className="space-y-5 border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">2</span><h2 className="text-sm font-semibold">Lampiran dan pengiriman</h2></div><Field><FieldLabel htmlFor="attachment">Lampiran pendukung <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel><FileDropzone id="attachment" value={attachments} onChange={setAttachments} /><FieldDescription>Foto atau dokumen pendukung membantu pengelola memahami laporan Anda.</FieldDescription></Field><div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Data laporan hanya digunakan untuk penanganan internal JTI.</span></div><div className="flex flex-col-reverse gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={handleDraft} disabled={savedState === "submitted"}><Save />Simpan draft</Button><Button type="submit" disabled={!canSubmit || savedState === "submitted"}><Send />Kirim laporan<ArrowRight className="ml-0.5" /></Button></div></div></div> : <div className="rounded-lg border border-dashed border-border bg-muted/30 p-5 text-center text-sm text-muted-foreground">Pilih kategori laporan untuk mulai mengisi formulir.</div>}
