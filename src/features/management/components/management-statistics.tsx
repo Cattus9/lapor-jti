@@ -132,7 +132,7 @@ function FacilityPriorityOverview() {
         <section className="border-b border-border/60 p-4 md:p-5 xl:border-r xl:border-b-0" aria-labelledby="room-ranking-title">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div><h3 id="room-ranking-title" className="text-sm font-semibold text-foreground">Ranking ruang</h3><p className="mt-1 text-xs text-muted-foreground">Pilih ruang untuk melihat objek dominan.</p></div>
-            <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">{technicianRoomPriorities.reduce((total, room) => total + room.activeReports, 0)} aktif</Badge>
+            <Badge variant="outline" tone="primary">{technicianRoomPriorities.reduce((total, room) => total + room.activeReports, 0)} aktif</Badge>
           </div>
           <div className="space-y-2">
             {technicianRoomPriorities.map((room, index) => {
@@ -149,7 +149,7 @@ function FacilityPriorityOverview() {
         <section className="bg-muted/20 p-4 md:p-5" aria-labelledby="facility-breakdown-title">
           <div className="flex items-start justify-between gap-3">
             <div><h3 id="facility-breakdown-title" className="text-sm font-semibold text-foreground">Objek di {selectedRoom.room}</h3><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3.5" aria-hidden="true" />{selectedRoom.location}</p></div>
-            <Badge variant="outline" className="border-border bg-card text-foreground">{selectedRoom.activeReports} laporan</Badge>
+            <Badge variant="outline" tone="neutral">{selectedRoom.activeReports} laporan</Badge>
           </div>
           <div className="mt-4 space-y-2">
             {selectedRoom.facilities.map((facility) => {

@@ -1,5 +1,5 @@
 import { CheckCheck, ClipboardList, MapPin, Wrench } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { ReportDetailDialog, type ReportActivity } from "@/features/facilities/components/teknisi-facility-report-list"
 import { technicianFacilityReports, technicianRepairHistory, type TechnicianFacilityReport } from "@/features/facilities/mock/teknisi-dashboard"
@@ -38,7 +38,7 @@ export function TeknisiRepairHistory() {
                     <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3" aria-hidden="true" />{item.ticket} · {item.facility} · {item.location}</p>
                   </div>
                 </div>
-                <Badge className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700" variant="outline">Selesai</Badge>
+                <StatusBadge className="w-fit" status="Selesai" />
               </div>
               <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>

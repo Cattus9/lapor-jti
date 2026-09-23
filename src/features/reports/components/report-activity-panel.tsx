@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { ArrowRight, CheckCircle2, CircleDotDashed, Clock3, FileSearch, Wrench } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Card } from "@/components/ui/card"
 import type { ReportSummary } from "@/features/reports/types"
 
@@ -19,7 +19,6 @@ const categoryLabel = {
 }
 
 const statusLabel = { baru: "Baru", diverifikasi: "Diverifikasi", diproses: "Diproses", selesai: "Selesai" }
-const statusVariant = { baru: "outline", diverifikasi: "secondary", diproses: "default", selesai: "secondary" } as const
 
 export function ReportActivityPanel({ reports }: { reports: ReportSummary[] }) {
   return (
@@ -46,7 +45,7 @@ export function ReportActivityPanel({ reports }: { reports: ReportSummary[] }) {
                   <p className="truncate text-sm font-medium text-foreground">{report.title}</p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">{report.ticketNumber} · {categoryLabel[report.category]} · {report.updatedAt}</p>
                 </div>
-                <Badge variant={statusVariant[report.status]}>{statusLabel[report.status]}</Badge>
+                <StatusBadge status={statusLabel[report.status]} />
               </Link>
             )
           })}

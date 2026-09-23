@@ -6,6 +6,11 @@
 - The user-provided context, visual references, and explicit constraints define the scope and take precedence over generic Shadcn defaults.
 - Keep changes aligned with the existing Shadcn design system, semantic HTML, keyboard behavior, focus states, and accessibility requirements.
 
+## Helper Text Standard
+- Helper text (supporting text below a form field that explains context, input rules, or an example) MUST use the shared Shadcn `FieldDescription` primitive.
+- `FieldDescription` MUST use `text-xs` (12px) with muted semantic color and comfortable leading. Do not recreate helper text using arbitrary local font-size classes.
+- This rule applies to field-level helper text only. Page, card, and modal descriptions retain their own hierarchy and must not be reduced solely to match field helper text.
+
 ## KPI Card Standard
 - KPI cards MUST use a layered Shadcn `Card` composition: an outer `bg-sidebar` wrapper and an inner `bg-card` content surface.
 - Outer card styling: `border border-border rounded-2xl p-1.5 flex flex-col justify-between overflow-hidden shadow-xs`.

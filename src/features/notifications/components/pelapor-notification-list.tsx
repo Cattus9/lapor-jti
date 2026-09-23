@@ -31,11 +31,15 @@ export function NotificationList({ initialItems, detailHref }: { initialItems: N
 
   return (
     <Card className="shrink-0 gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
+      <div className="flex h-10 shrink-0 items-center gap-2 px-3 text-xs font-medium text-muted-foreground">
+        <BellRing className="size-4 text-primary" aria-hidden="true" />
+        <span>Pembaruan laporan</span>
+      </div>
       <div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs">
         <div className="flex flex-col gap-4 border-b border-border/60 p-4 md:flex-row md:items-center md:justify-between md:p-5">
-          <div className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-xl border border-border bg-background text-primary"><BellRing className="size-4" aria-hidden="true" /></span>
-            <div><p className="text-sm font-semibold text-foreground">Pemberitahuan</p><p className="mt-0.5 text-xs text-muted-foreground">{unreadCount ? `${unreadCount} belum dibaca` : "Semua sudah dibaca"}</p></div>
+          <div>
+            <p className="text-base font-semibold text-foreground">Pemberitahuan</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{unreadCount ? `${unreadCount} belum dibaca` : "Semua sudah dibaca"}</p>
           </div>
           <Button type="button" variant="outline" size="sm" className="w-full bg-card md:w-auto" onClick={markAllRead} disabled={!unreadCount}><CheckCheck />Tandai semua dibaca</Button>
         </div>

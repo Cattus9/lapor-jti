@@ -23,6 +23,7 @@ import { useActivityNotifications } from "@/components/activity-notification-pro
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge as SharedStatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -59,16 +60,6 @@ const statusActions: Partial<Record<SatpamReportStatus, { label: string; nextSta
   Diserahkan: { label: "Selesaikan laporan", nextStatus: "Selesai", description: "Tutup tiket setelah penyerahan tercatat dan tidak ada tindak lanjut." },
 }
 
-const statusClass: Record<SatpamReportStatus, string> = {
-  Baru: "border-slate-200 bg-slate-100 text-slate-700",
-  Diverifikasi: "border-amber-200 bg-amber-50 text-amber-700",
-  Diproses: "border-blue-200 bg-blue-50 text-blue-700",
-  "Barang teridentifikasi": "border-cyan-200 bg-cyan-50 text-cyan-700",
-  Diserahkan: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  Selesai: "border-border bg-muted text-muted-foreground",
-  Ditolak: "border-destructive/20 bg-destructive/10 text-destructive",
-}
-
 const tabMeta: Record<SatpamReportKind, { label: string; description: string }> = {
   kehilangan: { label: "Kehilangan", description: "Laporan barang hilang dari pelapor." },
   temuan: { label: "Temuan", description: "Barang yang ditemukan dan dititipkan kepada Satpam." },
@@ -79,7 +70,7 @@ function statusStep(status: SatpamReportStatus) {
 }
 
 function StatusBadge({ status }: { status: SatpamReportStatus }) {
-  return <Badge className={statusClass[status]} variant="outline">{status}</Badge>
+  return <SharedStatusBadge status={status} />
 }
 
 function ReportStepper({ status }: { status: SatpamReportStatus }) {
@@ -352,7 +343,7 @@ function MatchingWorkspace({
         <div className="hidden h-full items-center justify-center xl:flex"><ArrowLeftRight className="size-5 text-muted-foreground" aria-hidden="true" /></div>
         <CandidateList title="Barang temuan" reports={foundReports} selectedTicket={activeFoundTicket} activities={statusHistory} onStatusChange={onStatusChange} onOpenMatching={onOpenMatching} onSelect={(ticket) => { setSelectedFound(ticket); setMatchedPair(null); setMatchingPreviewOpen(false); setHandoverRecorded(false); setHandoverRecipient("") }} />
       </div>
-      <Card className="gap-1 rounded-xl border-border bg-muted/50 p-1.5 shadow-none"><div className="rounded-lg border border-border/60 bg-card p-4 md:p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0"><div className="flex items-center gap-2"><span className="flex size-9 items-center justify-center rounded-xl border border-border bg-background text-primary"><SearchCheck className="size-4" aria-hidden="true" /></span><div><p className="text-sm font-semibold text-foreground">Indikasi kesesuaian</p><p className="mt-0.5 text-xs text-muted-foreground">{loss && found ? `${loss.ticket} dibandingkan dengan ${found.ticket}` : "Pilih dua laporan untuk mulai membandingkan."}</p></div></div>{candidate ? <div className="mt-4 space-y-2.5"><Badge className="border-primary/20 bg-primary/5 text-primary" variant="outline">Perlu konfirmasi Satpam</Badge><ul className="space-y-2">{candidate.criteria.map((item) => <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground"><Check className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />{item}</li>)}</ul><p className="text-xs leading-relaxed text-muted-foreground">Indikator ini membantu pemeriksaan, bukan keputusan otomatis.</p></div> : <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Belum ada pasangan yang dapat diperiksa. Bandingkan ciri, lokasi, dan waktu sebelum membuat keputusan.</p>}</div>{!matchedPair ? <Button type="button" className="lg:mt-0" disabled={!candidate} onClick={() => setMatchingPreviewOpen(true)}><Eye className="size-4" />Tinjau pencocokan</Button> : null}</div></div></Card>
+      <Card className="gap-1 rounded-xl border-border bg-muted/50 p-1.5 shadow-none"><div className="rounded-lg border border-border/60 bg-card p-4 md:p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0"><div className="flex items-center gap-2"><span className="flex size-9 items-center justify-center rounded-xl border border-border bg-background text-primary"><SearchCheck className="size-4" aria-hidden="true" /></span><div><p className="text-sm font-semibold text-foreground">Indikasi kesesuaian</p><p className="mt-0.5 text-xs text-muted-foreground">{loss && found ? `${loss.ticket} dibandingkan dengan ${found.ticket}` : "Pilih dua laporan untuk mulai membandingkan."}</p></div></div>{candidate ? <div className="mt-4 space-y-2.5"><Badge tone="primary" variant="outline">Perlu konfirmasi Satpam</Badge><ul className="space-y-2">{candidate.criteria.map((item) => <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground"><Check className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />{item}</li>)}</ul><p className="text-xs leading-relaxed text-muted-foreground">Indikator ini membantu pemeriksaan, bukan keputusan otomatis.</p></div> : <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Belum ada pasangan yang dapat diperiksa. Bandingkan ciri, lokasi, dan waktu sebelum membuat keputusan.</p>}</div>{!matchedPair ? <Button type="button" className="lg:mt-0" disabled={!candidate} onClick={() => setMatchingPreviewOpen(true)}><Eye className="size-4" />Tinjau pencocokan</Button> : null}</div></div></Card>
       {matchedPair ? <Card className="gap-1 rounded-xl border-emerald-200 bg-emerald-50/60 p-1.5 shadow-none"><div className="rounded-lg border border-emerald-200 bg-card p-4 md:p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700"><BadgeCheck className="size-4" aria-hidden="true" /></span><div><p className="text-sm font-semibold text-foreground">{handoverRecorded ? `${matchedPair.title} telah diserahkan` : `${matchedPair.title} siap diserahkan`}</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">{handoverRecorded ? `Barang telah diterima oleh ${handoverRecipient}. Kedua tiket kini berstatus Diserahkan.` : `${matchedPair.lossTicket} dan ${matchedPair.foundTicket} telah dipasangkan. Konfirmasi penyerahan kepada ${matchedPair.reporter} saat barang diterima.`}</p></div></div>{handoverRecorded ? null : <Button type="button" className="shrink-0" onClick={() => setHandoverOpen(true)}><Handshake />Konfirmasi penyerahan</Button>}</div></div></Card> : null}
       <MatchingConfirmationDialog loss={loss} found={found} criteria={candidate?.criteria ?? []} open={matchingPreviewOpen} onOpenChange={setMatchingPreviewOpen} onConfirm={() => { if (loss && found) { onRecordMatch(loss.ticket, found.ticket); setMatchedPair({ lossTicket: loss.ticket, foundTicket: found.ticket, title: loss.title, reporter: loss.reporter }); setMatchingPreviewOpen(false) } }} />
       <HandoverDialog pair={matchedPair} open={handoverOpen} onOpenChange={setHandoverOpen} onConfirm={(recipient, note) => { if (matchedPair) { onConfirmHandover(matchedPair, recipient, note); setHandoverRecipient(recipient); setHandoverRecorded(true) } }} />

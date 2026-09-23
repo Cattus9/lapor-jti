@@ -4,7 +4,7 @@ import { CalendarDays, Check, ClipboardList, Clock3, FilePlus2, FileText, Headph
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { ContentShell } from "@/components/layout/content-shell"
 import { PageHeader } from "@/components/layout/page-header"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -13,12 +13,6 @@ import { pelaporReports } from "@/features/reports/mock/pelapor-reports"
 import type { ReportCategory, ReportStatus, ReportSummary } from "@/features/reports/types"
 
 const statusLabel: Record<ReportStatus, string> = { baru: "Baru", diverifikasi: "Diverifikasi", diproses: "Diproses", selesai: "Selesai" }
-const statusStyle: Record<ReportStatus, string> = {
-  baru: "border-slate-200 bg-slate-100 text-slate-700",
-  diverifikasi: "border-amber-200 bg-amber-50 text-amber-700",
-  diproses: "border-blue-200 bg-blue-50 text-blue-700",
-  selesai: "border-emerald-200 bg-emerald-50 text-emerald-700",
-}
 const categoryMeta: Record<ReportCategory, { label: string; icon: LucideIcon }> = {
   "kehilangan-temuan": { label: "Kehilangan & Temuan", icon: PackageSearch },
   fasilitas: { label: "Fasilitas", icon: Wrench },
@@ -82,9 +76,7 @@ function ReportDetailDialog({ report }: { report: ReportSummary }) {
             <span>{meta.label}</span>
             <span aria-hidden="true">·</span>
             <span>{report.ticketNumber}</span>
-            <Badge className={`ml-auto ${statusStyle[report.status]}`} variant="outline">
-              {statusLabel[report.status]}
-            </Badge>
+            <StatusBadge className="ml-auto" status={statusLabel[report.status]} />
           </div>
           <DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">
             {report.title}
@@ -166,7 +158,7 @@ function ReportDetailDialog({ report }: { report: ReportSummary }) {
 function ReportRow({ report }: { report: ReportSummary }) {
   const meta = categoryMeta[report.category]
   const Icon = meta.icon
-  return <article className="rounded-xl border border-border bg-background/60 p-4 transition-colors hover:border-primary/40 md:p-5"><div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-2xs"><Icon className="size-5" aria-hidden="true" /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold text-foreground md:text-base">{report.title}</h2><p className="mt-1 text-xs text-muted-foreground">{report.ticketNumber} · {meta.label}</p></div></div><Badge className={statusStyle[report.status]} variant="outline">{statusLabel[report.status]}</Badge></div><div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><span>{getStepSummary(report)} · Diperbarui {report.updatedAt}</span></div><ReportDetailDialog report={report} /></div></article>
+  return <article className="rounded-xl border border-border bg-background/60 p-4 transition-colors hover:border-primary/40 md:p-5"><div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-2xs"><Icon className="size-5" aria-hidden="true" /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold text-foreground md:text-base">{report.title}</h2><p className="mt-1 text-xs text-muted-foreground">{report.ticketNumber} · {meta.label}</p></div></div><StatusBadge status={statusLabel[report.status]} /></div><div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><span>{getStepSummary(report)} · Diperbarui {report.updatedAt}</span></div><ReportDetailDialog report={report} /></div></article>
 }
 
 export function PelaporReportList({ user }: { user: CurrentUser }) {

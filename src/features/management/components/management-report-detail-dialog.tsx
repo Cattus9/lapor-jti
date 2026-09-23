@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Check, CheckCheck, ClipboardList, Clock3, FileText, ImageIcon, MapPin, MessageSquareText, Paperclip } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge as SharedStatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -19,23 +20,12 @@ export type ManagementReportActivity = {
 
 const lifecycle = ["Baru", "Sedang Diproses", "Selesai"] as const
 
-const statusClass: Record<ManagementReportStatus, string> = {
-  Baru: "border-slate-200 bg-slate-100 text-slate-700",
-  "Sedang Diproses": "border-blue-200 bg-blue-50 text-blue-700",
-  Selesai: "border-emerald-200 bg-emerald-50 text-emerald-700",
-}
-
-const categoryClass = {
-  Layanan: "border-violet-200 bg-violet-50 text-violet-700",
-  Lainnya: "border-amber-200 bg-amber-50 text-amber-700",
-} as const
-
 export function ManagementStatusBadge({ status }: { status: ManagementReportStatus }) {
-  return <Badge className={statusClass[status]} variant="outline">{status}</Badge>
+  return <SharedStatusBadge status={status} />
 }
 
 export function ManagementCategoryBadge({ category }: { category: ManagementReport["category"] }) {
-  return <Badge className={categoryClass[category]} variant="outline">{category}</Badge>
+  return <Badge tone={category === "Layanan" ? "violet" : "warning"} variant="outline">{category}</Badge>
 }
 
 export function createManagementInitialActivity(report: ManagementReport): ManagementReportActivity[] {

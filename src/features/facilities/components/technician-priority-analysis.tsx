@@ -33,12 +33,6 @@ const facilityChartConfig = {
   },
 } satisfies ChartConfig
 
-const priorityClass = {
-  utama: "border-destructive/25 bg-destructive/10 text-destructive",
-  tinggi: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  sedang: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
-} as const
-
 function getPriority(rank: number, reportCount: number) {
   if (rank === 0) return { label: "Prioritas utama", tone: "utama" as const }
   if (reportCount >= 3) return { label: "Prioritas tinggi", tone: "tinggi" as const }
@@ -78,7 +72,7 @@ export function TechnicianPriorityAnalysis() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="w-fit border-primary/20 bg-primary/10 text-primary" variant="outline">{totalActiveReports} laporan aktif</Badge>
+              <Badge className="w-fit" tone="primary" variant="outline">{totalActiveReports} laporan aktif</Badge>
               <Button nativeButton={false} variant="outline" size="sm" className="bg-card" render={<Link href="/teknisi/laporan-fasilitas?view=priority" />}>Buka prioritas<ArrowRight /></Button>
             </div>
           </div>
@@ -130,7 +124,7 @@ export function TechnicianPriorityAnalysis() {
                           <span className="block truncate text-sm font-medium text-foreground">{room.room}</span>
                           <span className="mt-0.5 block text-xs text-muted-foreground">{room.activeReports} laporan aktif</span>
                         </span>
-                        <Badge className={cn("shrink-0", priorityClass[priority.tone])} variant="outline">{priority.label}</Badge>
+                        <Badge className="shrink-0" tone={priority.tone === "utama" ? "destructive" : priority.tone === "tinggi" ? "warning" : "info"} variant="outline">{priority.label}</Badge>
                       </Button>
                     )
                   })}

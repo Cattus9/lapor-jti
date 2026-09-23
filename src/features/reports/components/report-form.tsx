@@ -238,7 +238,7 @@ function TimePickerField({ value, onValueChange }: { value: string; onValueChang
         aria-label="Waktu kejadian"
         className="h-11 bg-background/70 tabular-nums sm:hidden"
       />
-      <p className="text-xs text-muted-foreground sm:hidden">Gunakan pemilih waktu perangkat untuk memilih jam dan menit.</p>
+      <FieldDescription className="sm:hidden">Gunakan pemilih waktu perangkat untuk memilih jam dan menit.</FieldDescription>
       <div className="hidden sm:block">
         <Popover open={open} onOpenChange={handleOpenChange}>
           <PopoverTrigger render={<Button id="incident-time-desktop" type="button" variant="outline" aria-label="Waktu kejadian" className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}>
@@ -307,6 +307,17 @@ export function ReportForm() {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setSavedState("submitted") }
   const hasCompleteFacilityDetails = Boolean(location && selectedFacilities.length && (location !== "Lainnya" || otherLocation.trim()) && (!selectedFacilities.includes("Lainnya") || otherFacility.trim()))
   const canSubmit = Boolean(category && incidentDate && incidentTime) && (category !== "kehilangan-temuan" || Boolean(reportType)) && (category !== "fasilitas" || hasCompleteFacilityDetails) && (category !== "layanan" || Boolean(service && program))
+  const titlePlaceholder = category === "kehilangan-temuan"
+    ? reportType === "Kehilangan"
+      ? "Contoh: Dompet hilang di Ruang 3.4"
+      : reportType === "Temuan"
+        ? "Contoh: Kartu mahasiswa ditemukan di Lobi Gedung JTI"
+        : "Contoh: Barang hilang atau temuan di Gedung JTI"
+    : category === "fasilitas"
+      ? "Contoh: Proyektor di Lab Multimedia tidak menyala"
+      : category === "layanan"
+        ? "Contoh: Tidak dapat mengakses JTI E-Learning"
+        : "Contoh: Usulan perbaikan papan informasi digital"
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
@@ -315,7 +326,7 @@ export function ReportForm() {
           <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih satu kategori untuk menampilkan kolom yang relevan.</FieldDescription><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} onSelect={() => resetCategory(item.value)} />)}</div></Field>
           {category ? <div className="space-y-5 border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">1</span><h2 className="text-sm font-semibold">Informasi laporan</h2></div><FieldGroup>
             {category === "kehilangan-temuan" ? <SelectField id="report-type" label="Jenis laporan" placeholder="Pilih jenis laporan" value={reportType} onValueChange={setReportType} options={["Kehilangan", "Temuan"]} /> : null}
-            <Field><FieldLabel htmlFor="title">Judul laporan</FieldLabel><Input id="title" name="title" className="h-11 bg-background/70" placeholder="Contoh: Dompet tertinggal di Ruang 3.4" required /></Field>
+            <Field><FieldLabel htmlFor="title">Judul laporan</FieldLabel><Input id="title" name="title" className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
             {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field><Field><FieldLabel htmlFor="item-details">Ciri-ciri barang</FieldLabel><Textarea id="item-details" name="item-details" placeholder="Tuliskan ciri khas, isi, atau tanda pengenal barang." required /></Field></> : null}
             {category === "fasilitas" ? <div className="grid gap-5 sm:grid-cols-2"><FacilityLocationSelectField value={location} onValueChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} /><FacilityMultiSelectField value={selectedFacilities} onValueChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /></div> : null}
             {category === "layanan" ? <div className="grid gap-5 sm:grid-cols-2"><SelectField id="service" label="Jenis layanan" placeholder="Pilih layanan" value={service} onValueChange={setService} options={services} /><SelectField id="program" label="Unit atau program studi" placeholder="Pilih unit terkait" value={program} onValueChange={setProgram} options={studyPrograms} /></div> : null}

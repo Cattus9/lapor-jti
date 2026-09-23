@@ -4,18 +4,12 @@ import { KpiCard } from "@/components/dashboard/kpi-card"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TechnicianPriorityAnalysis } from "@/features/facilities/components/technician-priority-analysis"
 import { technicianOverview, technicianRepairQueue, technicianTasks } from "@/features/facilities/mock/teknisi-dashboard"
 import type { CurrentUser } from "@/lib/auth/dummy-session"
-
-const statusClass: Record<string, string> = {
-  Baru: "border-slate-200 bg-slate-100 text-slate-700",
-  Diverifikasi: "border-amber-200 bg-amber-50 text-amber-700",
-  Diproses: "border-blue-200 bg-blue-50 text-blue-700",
-}
 
 export function TeknisiDashboard({ user }: { user: CurrentUser }) {
   return (
@@ -107,7 +101,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
                     </div>
                     <div className="flex items-center justify-between gap-3 sm:justify-end">
                       <span className="text-xs text-muted-foreground">{item.updatedAt}</span>
-                      <Badge className={statusClass[item.status]} variant="outline">{item.status}</Badge>
+                      <StatusBadge status={item.status} />
                     </div>
                   </article>
                 ))}

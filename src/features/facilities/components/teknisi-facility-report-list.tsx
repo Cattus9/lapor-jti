@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { Armchair, Check, CheckCheck, ClipboardList, Clock3, FileText, ImageIcon, LampCeiling, Layers3, MapPin, Monitor, Paperclip, SlidersHorizontal, Snowflake, Table2, Tv, Wrench, type LucideIcon } from "lucide-react"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge as SharedStatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -23,13 +24,6 @@ export type ReportActivity = {
 const lifecycle = ["Baru", "Diverifikasi", "Diproses", "Selesai"] as const
 const statuses: Array<TechnicianReportStatus | "Semua"> = ["Semua", ...lifecycle]
 
-const statusClass: Record<TechnicianReportStatus, string> = {
-  Baru: "border-slate-200 bg-slate-100 text-slate-700",
-  Diverifikasi: "border-amber-200 bg-amber-50 text-amber-700",
-  Diproses: "border-blue-200 bg-blue-50 text-blue-700",
-  Selesai: "border-emerald-200 bg-emerald-50 text-emerald-700",
-}
-
 const nextAction: Partial<Record<TechnicianReportStatus, { label: string; nextStatus: TechnicianReportStatus; description: string }>> = {
   Baru: { label: "Verifikasi laporan", nextStatus: "Diverifikasi", description: "Pastikan detail kerusakan dan lokasi dapat ditindaklanjuti." },
   Diverifikasi: { label: "Mulai penanganan", nextStatus: "Diproses", description: "Tandai laporan setelah pekerjaan perbaikan mulai dilakukan." },
@@ -37,7 +31,7 @@ const nextAction: Partial<Record<TechnicianReportStatus, { label: string; nextSt
 }
 
 function StatusBadge({ status }: { status: TechnicianReportStatus }) {
-  return <Badge className={statusClass[status]} variant="outline">{status}</Badge>
+  return <SharedStatusBadge status={status} />
 }
 
 function createInitialActivity(report: TechnicianFacilityReport): ReportActivity[] {
@@ -159,7 +153,7 @@ function PriorityRoomCard({ room, rank, reports, activities, onStatusChange }: {
             <FacilityPriorityStrip facilities={room.facilities} />
           </div>
         </div>
-        <Badge className={rank === 0 ? "w-fit border-destructive/25 bg-destructive/10 text-destructive" : "w-fit border-primary/20 bg-primary/10 text-primary"} variant="outline">{priorityLabel(rank, room.activeReports)} · {room.activeReports} aktif</Badge>
+        <Badge className="w-fit" tone={rank === 0 ? "destructive" : "primary"} variant="outline">{priorityLabel(rank, room.activeReports)} · {room.activeReports} aktif</Badge>
       </div>
 
       <div className="space-y-2 p-3">

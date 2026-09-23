@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Building2, ClipboardList, FileText, ImageIcon, MapPin, PackageSearch, RotateCcw, ScanSearch, Search, ShieldCheck, UserRoundCog, Wrench } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge as SharedStatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -46,18 +46,8 @@ const handlerPresentation = {
 
 const handlerOrder: MonitoringReport["handler"][] = ["Satpam", "Teknisi", "Manajemen Jurusan"]
 
-const statusClass: Record<MonitoringReportStatus, string> = {
-  Baru: "border-slate-200 bg-slate-100 text-slate-700",
-  Diverifikasi: "border-blue-200 bg-blue-50 text-blue-700",
-  Diproses: "border-blue-200 bg-blue-50 text-blue-700",
-  "Barang teridentifikasi": "border-cyan-200 bg-cyan-50 text-cyan-700",
-  Diserahkan: "border-teal-200 bg-teal-50 text-teal-700",
-  "Sedang Diproses": "border-blue-200 bg-blue-50 text-blue-700",
-  Selesai: "border-emerald-200 bg-emerald-50 text-emerald-700",
-}
-
 function MonitoringStatusBadge({ status }: { status: MonitoringReportStatus }) {
-  return <Badge className={statusClass[status]} variant="outline">{status}</Badge>
+  return <SharedStatusBadge status={status} />
 }
 
 function MonitoringReportRow({ report, defaultOpen = false }: { report: MonitoringReport; defaultOpen?: boolean }) {

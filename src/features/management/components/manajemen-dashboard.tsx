@@ -4,19 +4,10 @@ import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { managementFocus, managementOverview, managementPriorityQueue } from "@/features/management/mock/manajemen-dashboard"
 import type { CurrentUser } from "@/lib/auth/dummy-session"
-
-const statusClass: Record<string, string> = {
-  Baru: "border-slate-200 bg-slate-100 text-slate-700",
-  "Sedang Diproses": "border-blue-200 bg-blue-50 text-blue-700",
-}
-
-const categoryClass: Record<string, string> = {
-  Layanan: "border-violet-200 bg-violet-50 text-violet-700",
-  Lainnya: "border-amber-200 bg-amber-50 text-amber-700",
-}
 
 export function ManajemenDashboard({ user }: { user: CurrentUser }) {
   return (
@@ -93,8 +84,8 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
                       <span className="text-xs text-muted-foreground">{report.updatedAt}</span>
-                      <Badge className={categoryClass[report.category]} variant="outline">{report.category}</Badge>
-                      <Badge className={statusClass[report.status]} variant="outline">{report.status}</Badge>
+                      <Badge tone={report.category === "Layanan" ? "violet" : "warning"} variant="outline">{report.category}</Badge>
+                      <StatusBadge status={report.status} />
                     </div>
                   </article>
                 ))}
