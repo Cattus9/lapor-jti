@@ -24,6 +24,7 @@ export type MonitoringReport = {
   location: string
   submittedAt: string
   reportedOn: string
+  completedOn?: string
   updatedAt: string
   description: string
   attachments: number
@@ -189,6 +190,7 @@ export const monitoringReports: readonly MonitoringReport[] = [
       location: report.location,
       submittedAt: report.submittedAt,
       reportedOn,
+      completedOn: report.completedOn,
       updatedAt: report.updatedAt,
       description: report.description,
       attachments: report.attachments,

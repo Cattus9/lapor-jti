@@ -9,6 +9,7 @@ export type TechnicianFacilityReport = {
   reporter: string
   submittedAt: string
   updatedAt: string
+  completedOn?: string
   status: TechnicianReportStatus
   description: string
   attachments: number
@@ -194,6 +195,7 @@ export const technicianFacilityReports: readonly TechnicianFacilityReport[] = [
     reporter: "Maya Putri",
     submittedAt: "16 September 2026, 13.45",
     updatedAt: "Kemarin, 15.20",
+    completedOn: "2026-09-16",
     status: "Selesai",
     description: "Dudukan kursi bagian kanan longgar dan tidak aman digunakan untuk perkuliahan.",
     attachments: 1,
@@ -207,6 +209,7 @@ export const technicianFacilityReports: readonly TechnicianFacilityReport[] = [
     reporter: "Fajar Ramadhan",
     submittedAt: "16 September 2026, 09.20",
     updatedAt: "Kemarin, 11.05",
+    completedOn: "2026-09-16",
     status: "Selesai",
     description: "Salah satu kaki meja tidak stabil saat digunakan untuk praktikum desain.",
     attachments: 0,

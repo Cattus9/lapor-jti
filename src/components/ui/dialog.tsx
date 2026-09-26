@@ -19,12 +19,13 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
-function DialogContent({ className, children, showCloseButton = true, ...props }: DialogPrimitive.Popup.Props & { showCloseButton?: boolean }) {
+function DialogContent({ className, overlayClassName, children, showCloseButton = true, showNestedBackdrop = false, ...props }: DialogPrimitive.Popup.Props & { showCloseButton?: boolean; showNestedBackdrop?: boolean; overlayClassName?: string }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop
         data-slot="dialog-overlay"
-        className="fixed inset-0 z-50 bg-foreground/20 backdrop-blur-xs transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0"
+        forceRender={showNestedBackdrop}
+        className={cn("fixed inset-0 z-50 bg-foreground/20 backdrop-blur-xs transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0", overlayClassName)}
       />
       <DialogPrimitive.Popup
         data-slot="dialog-content"

@@ -23,7 +23,26 @@ export type SatpamLostFoundReport = {
   description: string
   characteristics: string
   attachments: number
+  photoUrl?: string
 }
+
+export type SatpamPendingHandover = {
+  lossTicket: string
+  foundTicket: string
+  title: string
+  reporter: string
+  matchedAt: string
+}
+
+export const satpamPendingHandovers: SatpamPendingHandover[] = [
+  {
+    lossTicket: "LJ-2026-00107",
+    foundTicket: "LJ-2026-00108",
+    title: "Tumbler stainless hitam",
+    reporter: "Dimas Aditya",
+    matchedAt: "13 September 2026, 17.25",
+  },
+]
 
 export const satpamLostFoundReports: SatpamLostFoundReport[] = [
   {
@@ -87,6 +106,21 @@ export const satpamLostFoundReports: SatpamLostFoundReport[] = [
     attachments: 1,
   },
   {
+    ticket: "LJ-2026-00108",
+    kind: "temuan",
+    title: "Tumbler stainless hitam",
+    reporter: "Nadia Putri",
+    location: "Ruang 3.7",
+    eventDate: "13 September 2026",
+    eventTime: "17.00",
+    submittedAt: "13 September, 17.15",
+    updatedAt: "13 September",
+    status: "Barang teridentifikasi",
+    description: "Tumbler ditemukan setelah sesi praktikum dan disimpan di pos Satpam.",
+    characteristics: "Stainless hitam doff, tutup ulir, dan stiker kecil berbentuk petir.",
+    attachments: 1,
+  },
+  {
     ticket: "LJ-2026-00118",
     kind: "temuan",
     title: "Kunci motor dengan lanyard biru",
@@ -115,19 +149,5 @@ export const satpamLostFoundReports: SatpamLostFoundReport[] = [
     description: "Dompet ditemukan di koridor lantai dua dan langsung diserahkan kepada petugas Satpam.",
     characteristics: "Kulit cokelat tua, lipatan dua, tanpa kartu identitas yang terlihat.",
     attachments: 1,
-  },
-]
-
-// Mocked review pairs for the Satpam workflow. They are not an automatic matching score.
-export const manualReviewPairs = [
-  {
-    lossTicket: "LJ-2026-00126",
-    foundTicket: "LJ-2026-00129",
-    criteria: ["Nama pemilik pada kartu sama", "Warna kartu dan lanyard sesuai", "Lokasi serta waktu berdekatan"],
-  },
-  {
-    lossTicket: "LJ-2026-00131",
-    foundTicket: "LJ-2026-00099",
-    criteria: ["Jenis barang sama", "Warna dan ciri fisik belum sesuai", "Tidak ada identitas pemilik pada temuan"],
   },
 ]
