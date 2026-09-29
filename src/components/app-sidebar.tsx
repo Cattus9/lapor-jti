@@ -8,7 +8,7 @@ import { navigationByRole } from "@/components/navigation/nav-config"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from "@/components/ui/sidebar"
 import type { AppRole } from "@/lib/auth/roles"
 
-const fallbackUser = { name: "Pengguna LaporJTI", email: "", avatar: "" }
+const fallbackUser = { name: "Pengguna AspirasiJTI", email: "", avatar: "" }
 
 export function AppSidebar({ role = "pelapor", user = fallbackUser, ...props }: React.ComponentProps<typeof Sidebar> & { role?: AppRole; user?: { name: string; email: string; avatar?: string } }) {
   const navigation = navigationByRole[role].map(({ icon: Icon, ...item }) => ({ ...item, icon: <Icon /> }))
@@ -23,7 +23,7 @@ export function AppSidebar({ role = "pelapor", user = fallbackUser, ...props }: 
                 <ChartNoAxesCombined className="size-[18px]" />
               </div>
               <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate font-medium">LaporJTI</span>
+                <span className="truncate font-medium">AspirasiJTI</span>
                 <span className="truncate text-xs text-muted-foreground">Workspace</span>
               </div>
             </SidebarMenuButton>

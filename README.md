@@ -1,6 +1,6 @@
-# LaporJTI
+# AspirasiJTI
 
-Portal pelaporan internal untuk Jurusan Teknologi Informasi (JTI) POLIJE. LaporJTI menyatukan pelaporan Kehilangan & Temuan, fasilitas, layanan internal, dan laporan umum ke dalam alur berbasis tiket yang dapat dipantau oleh pelapor dan ditangani oleh pengelola yang tepat.
+Portal pelaporan internal untuk Jurusan Teknologi Informasi (JTI) POLIJE. AspirasiJTI menyatukan pelaporan Kehilangan & Temuan, fasilitas, layanan internal, dan laporan umum ke dalam alur berbasis tiket yang dapat dipantau oleh pelapor dan ditangani oleh pengelola yang tepat.
 
 > Status: frontend MVP. Antarmuka, alur per role, dan data demonstrasi telah tersedia. Integrasi SSO POLIJE, basis data, notifikasi persisten, serta ekspor nyata masih menjadi pekerjaan backend berikutnya.
 
@@ -160,4 +160,4 @@ Gunakan branch terpisah untuk setiap perubahan, jalankan lint dan type check seb
 
 ---
 
-LaporJTI dikembangkan sebagai proyek portal pelaporan internal Jurusan Teknologi Informasi POLIJE.
+AspirasiJTI dikembangkan sebagai proyek portal pelaporan internal Jurusan Teknologi Informasi POLIJE.

@@ -34,7 +34,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
           <form className="flex min-h-[calc(100svh-1.5rem)] flex-col justify-between gap-8 p-6 sm:p-8 md:p-10" onSubmit={handleSubmit}>
             <div className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
               <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs"><Building2 className="size-4" aria-hidden="true" /></span>
-              <span>LaporJTI</span>
+              <span>AspirasiJTI</span>
             </div>
             <div className="m-auto w-full max-w-md space-y-8 py-10">
               <div className="space-y-3">
@@ -52,11 +52,11 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 <Button type="submit" size="lg" className="w-full sm:w-auto"><LogIn />Login dengan SSO POLIJE<ArrowRight className="ml-1" /></Button>
               </div>
             </div>
-            <FieldDescription className="text-xs leading-relaxed">Dengan melanjutkan, Anda menyetujui penggunaan LaporJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</FieldDescription>
+            <FieldDescription className="text-xs leading-relaxed">Dengan melanjutkan, Anda menyetujui penggunaan AspirasiJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</FieldDescription>
           </form>
-          <aside className="flex min-h-52 flex-col items-center justify-center border-t border-border bg-muted/60 p-8 text-center md:min-h-0 md:border-t-0 md:border-l" aria-label="Area ilustrasi LaporJTI">
+          <aside className="flex min-h-52 flex-col items-center justify-center border-t border-border bg-muted/60 p-8 text-center md:min-h-0 md:border-t-0 md:border-l" aria-label="Area ilustrasi AspirasiJTI">
             <div className="flex size-16 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground shadow-2xs"><ImageOff className="size-7" strokeWidth={1.5} aria-hidden="true" /></div>
-            <p className="mt-5 text-sm font-medium text-foreground">Area visual LaporJTI</p>
+            <p className="mt-5 text-sm font-medium text-foreground">Area visual AspirasiJTI</p>
             <p className="mt-1.5 max-w-52 text-xs leading-relaxed text-muted-foreground">Ilustrasi pendukung akan ditambahkan pada tahap berikutnya.</p>
           </aside>
         </CardContent>

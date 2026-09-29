@@ -10,14 +10,14 @@ const fontSans = Inter({
 
 
 export const metadata: Metadata = {
-  title: "LaporJTI Dashboard",
-  description: "Workspace dashboard for campus reports and activities.",
+  title: "AspirasiJTI | Portal Pelaporan JTI",
+  description: "Portal AspirasiJTI untuk menyampaikan dan memantau laporan internal Jurusan Teknologi Informasi POLIJE.",
 };
 
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${fontSans.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="id" className={`${fontSans.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full bg-background font-sans text-foreground">
         <script
           dangerouslySetInnerHTML={{
