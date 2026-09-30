@@ -31,6 +31,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
             label="Sedang diproses"
             value={managementOverview.inProgress}
             icon={TimerReset}
+            iconTone="amber"
             detail="Menunggu pembaruan"
             detailValue={`${managementOverview.inProgress} laporan`}
             detailTone="blue"
@@ -39,6 +40,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
             label="Selesai bulan ini"
             value={managementOverview.completedThisMonth}
             icon={ListChecks}
+            iconTone="green"
             detail="Tercatat periode ini"
             detailValue={`${managementOverview.completedThisMonth} laporan`}
             detailTone="green"
@@ -47,6 +49,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
             label="Layanan aktif"
             value={managementOverview.activeServiceReports}
             icon={MessageSquareText}
+            iconTone="amber"
             detail="Layanan internal JTI"
             detailValue="Perlu dipantau"
             detailTone="blue"

@@ -11,13 +11,14 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { isMonitoringReportInProgress, monitoringReports, type MonitoringReport, type MonitoringReportCategory, type MonitoringReportStatus, type MonitoringStatusFilter } from "@/features/management/mock/management-monitoring"
 
-type Period = "semua" | "hari-ini" | "7-hari" | "30-hari"
+type Period = "semua" | "hari-ini" | "7-hari" | "30-hari" | "rentang"
 
 const periods: Record<Period, { label: string; maxDays?: number }> = {
   semua: { label: "Semua periode" },
   "hari-ini": { label: "Hari ini", maxDays: 0 },
   "7-hari": { label: "7 hari terakhir", maxDays: 7 },
   "30-hari": { label: "30 hari terakhir", maxDays: 30 },
+  rentang: { label: "Rentang dari Statistik" },
 }
 
 const categories: MonitoringReportCategory[] = ["Kehilangan & Temuan", "Fasilitas", "Layanan", "Lainnya"]
@@ -118,11 +119,15 @@ export function ManagementMonitoring() {
   const ticketFromNotification = searchParams.get("ticket")?.trim() ?? ""
   const categoryFromQuery = searchParams.get("category")
   const statusFromQuery = searchParams.get("status")
+  const fromQuery = searchParams.get("from") ?? ""
+  const toQuery = searchParams.get("to") ?? ""
+  const validRange = /^\d{4}-\d{2}-\d{2}$/.test(fromQuery) && /^\d{4}-\d{2}-\d{2}$/.test(toQuery) && fromQuery <= toQuery
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<MonitoringReportCategory | "semua">(() => isMonitoringCategory(categoryFromQuery) ? categoryFromQuery : "semua")
   const [status, setStatus] = useState<MonitoringStatusFilter>(() => statusFromQuery === "dalam-penanganan" || isMonitoringStatus(statusFromQuery) ? statusFromQuery as MonitoringStatusFilter : "semua")
-  const [period, setPeriod] = useState<Period>("30-hari")
-  const hasFilters = query || category !== "semua" || status !== "semua" || period !== "30-hari" || Boolean(ticketFromNotification || categoryFromQuery || statusFromQuery)
+  const [period, setPeriod] = useState<Period>(validRange ? "rentang" : "30-hari")
+  const [range, setRange] = useState(validRange ? { from: fromQuery, to: toQuery } : null)
+  const hasFilters = query || category !== "semua" || status !== "semua" || period !== "30-hari" || Boolean(ticketFromNotification || categoryFromQuery || statusFromQuery || range)
 
   const reports = useMemo(() => {
     const normalizedQuery = (query.trim() || ticketFromNotification).toLocaleLowerCase()
@@ -132,11 +137,13 @@ export function ManagementMonitoring() {
       const matchesQuery = !normalizedQuery || `${report.ticket} ${report.title} ${report.reporter} ${report.category} ${report.context} ${report.location} ${report.handler}`.toLocaleLowerCase().includes(normalizedQuery)
       const matchesCategory = category === "semua" || report.category === category
       const matchesStatus = status === "semua" ? true : status === "dalam-penanganan" ? isMonitoringReportInProgress(report.status) : report.status === status
-      const matchesPeriod = maxDays === undefined || report.daysAgo <= maxDays
+      const matchesPeriod = period === "rentang" && range
+        ? report.reportedOn >= range.from && report.reportedOn <= range.to
+        : maxDays === undefined || report.daysAgo <= maxDays
 
       return matchesQuery && matchesCategory && matchesStatus && matchesPeriod
     })
-  }, [category, period, query, status, ticketFromNotification])
+  }, [category, period, query, range, status, ticketFromNotification])
   const handlerCounts = useMemo(() => Object.fromEntries(handlerOrder.map((handler) => [handler, reports.filter((report) => report.handler === handler).length])) as Record<MonitoringReport["handler"], number>, [reports])
 
   function resetFilters() {
@@ -144,7 +151,21 @@ export function ManagementMonitoring() {
     setCategory("semua")
     setStatus("semua")
     setPeriod("30-hari")
-    if (ticketFromNotification || categoryFromQuery || statusFromQuery) router.replace("/manajemen/monitoring")
+    setRange(null)
+    if (ticketFromNotification || categoryFromQuery || statusFromQuery || fromQuery || toQuery) router.replace("/manajemen/monitoring")
+  }
+
+  function changePeriod(value: Period) {
+    setPeriod(value)
+    if (value !== "rentang") {
+      setRange(null)
+      if (fromQuery || toQuery) {
+        const params = new URLSearchParams(searchParams.toString())
+        params.delete("from")
+        params.delete("to")
+        router.replace("/manajemen/monitoring?" + params.toString())
+      }
+    }
   }
 
   return (
@@ -157,13 +178,13 @@ export function ManagementMonitoring() {
             <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 bg-background pl-9" placeholder="Cari tiket, pelapor, atau kategori" aria-label="Cari laporan" /></div>
             <Select value={category} onValueChange={(value) => setCategory(value as MonitoringReportCategory | "semua")}><SelectTrigger className="h-9 w-full bg-background" aria-label="Filter kategori"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="semua">Semua kategori</SelectItem>{categories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
             <Select value={status} onValueChange={(value) => setStatus(value as MonitoringStatusFilter)}><SelectTrigger className="h-9 w-full bg-background" aria-label="Filter status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="semua">Semua status</SelectItem><SelectItem value="dalam-penanganan">Dalam penanganan</SelectItem>{statuses.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
-            <Select value={period} onValueChange={(value) => setPeriod(value as Period)}><SelectTrigger className="h-9 w-full bg-background" aria-label="Filter periode"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(periods).map(([value, item]) => <SelectItem key={value} value={value}>{item.label}</SelectItem>)}</SelectContent></Select>
+            <Select value={period} onValueChange={(value) => changePeriod(value as Period)}><SelectTrigger className="h-9 w-full bg-background" aria-label="Filter periode"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(periods).filter(([value]) => value !== "rentang" || Boolean(range)).map(([value, item]) => <SelectItem key={value} value={value}>{item.label}</SelectItem>)}</SelectContent></Select>
             {hasFilters ? <Button type="button" variant="outline" size="sm" className="h-9 bg-card" onClick={resetFilters}><RotateCcw />Reset</Button> : null}
           </div>
         </CardHeader>
         <CardContent className="p-4 md:p-5">
           {ticketFromNotification ? <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary"><ClipboardList className="size-3.5" aria-hidden="true" />Tiket dari notifikasi: {ticketFromNotification}</div> : null}
-          <div className="mb-4 flex flex-col gap-3 border-b border-border/60 pb-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap items-center gap-x-4 gap-y-2"><span>{reports.length} laporan ditemukan</span>{handlerOrder.map((handler) => { const HandlerIcon = handlerPresentation[handler].icon; return <span key={handler} className="inline-flex items-center gap-1.5"><HandlerIcon className="size-3.5 text-primary" aria-hidden="true" />{handlerCounts[handler]} {handler}</span> })}</div><span>{periods[period].label}</span></div>
+          <div className="mb-4 flex flex-col gap-3 border-b border-border/60 pb-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap items-center gap-x-4 gap-y-2"><span>{reports.length} laporan ditemukan</span>{handlerOrder.map((handler) => { const HandlerIcon = handlerPresentation[handler].icon; return <span key={handler} className="inline-flex items-center gap-1.5"><HandlerIcon className="size-3.5 text-primary" aria-hidden="true" />{handlerCounts[handler]} {handler}</span> })}</div><span>{range && period === "rentang" ? range.from + " – " + range.to : periods[period].label}</span></div>
           {reports.length ? <div className="space-y-2">{reports.map((report) => <MonitoringReportRow key={report.ticket} report={report} defaultOpen={report.ticket === ticketFromNotification} />)}</div> : <div className="flex min-h-52 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center"><ScanSearch className="size-6 text-muted-foreground" aria-hidden="true" /><p className="mt-3 text-sm font-medium text-foreground">Tidak ada laporan yang sesuai</p><p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">Ubah kata kunci atau filter untuk menampilkan laporan pada periode lain.</p>{hasFilters ? <Button type="button" variant="outline" size="sm" className="mt-4 bg-card" onClick={resetFilters}><RotateCcw />Reset filter</Button> : null}</div>}
         </CardContent>
       </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChartNoAxesCombined } from "lucide-react"
+import Image from "next/image"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { navigationByRole } from "@/components/navigation/nav-config"
@@ -19,8 +19,8 @@ export function AppSidebar({ role = "pelapor", user = fallbackUser, ...props }: 
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="pointer-events-none h-11 select-none gap-2.5 px-3.5">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <ChartNoAxesCombined className="size-[18px]" />
+              <div className="relative size-8 shrink-0 overflow-hidden rounded-lg">
+                <Image src="/logo/logo-sb-login.png" alt="" fill sizes="32px" className="object-cover" />
               </div>
               <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-medium">AspirasiJTI</span>

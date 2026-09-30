@@ -12,6 +12,9 @@ const fontSans = Inter({
 export const metadata: Metadata = {
   title: "AspirasiJTI | Portal Pelaporan JTI",
   description: "Portal AspirasiJTI untuk menyampaikan dan memantau laporan internal Jurusan Teknologi Informasi POLIJE.",
+  icons: {
+    icon: [{ url: "/logo/logo-1-R.png", type: "image/png" }],
+  },
 };
 
 

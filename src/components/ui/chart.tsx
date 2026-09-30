@@ -44,6 +44,7 @@ function ChartContainer({
   children,
   config,
   initialDimension = INITIAL_DIMENSION,
+  resizeDebounce = 0,
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig
@@ -54,6 +55,7 @@ function ChartContainer({
     width: number
     height: number
   }
+  resizeDebounce?: number
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
@@ -72,6 +74,7 @@ function ChartContainer({
         <ChartStyle id={chartId} config={config} />
         <RechartsPrimitive.ResponsiveContainer
           initialDimension={initialDimension}
+          debounce={resizeDebounce}
         >
           {children}
         </RechartsPrimitive.ResponsiveContainer>
@@ -114,6 +117,18 @@ ${colorConfig
 }
 
 const ChartTooltip = RechartsPrimitive.Tooltip
+
+function useStablePieTooltip() {
+  const [isChartHovered, setIsChartHovered] = React.useState(false)
+
+  return {
+    containerProps: {
+      onMouseEnter: () => setIsChartHovered(true),
+      onMouseLeave: () => setIsChartHovered(false),
+    },
+    tooltipActive: isChartHovered ? true : undefined,
+  }
+}
 
 function ChartTooltipContent({
   active,
@@ -366,6 +381,7 @@ export {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  useStablePieTooltip,
   ChartLegend,
   ChartLegendContent,
   ChartStyle,

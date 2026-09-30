@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ArrowRight, Building2, ImageOff, LogIn } from "lucide-react"
+import Image from "next/image"
+import { ArrowRight, LogIn } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,15 +29,15 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   }
 
   return (
-    <div className={cn("flex", className)} {...props}>
-      <Card className="min-h-[calc(100svh-1.5rem)] w-full overflow-hidden rounded-2xl border border-border bg-card p-0 shadow-xl ring-1 ring-border/80">
-        <CardContent className="grid min-h-[inherit] p-0 md:grid-cols-[2fr_3fr]">
-          <form className="flex min-h-[calc(100svh-1.5rem)] flex-col justify-between gap-8 p-6 sm:p-8 md:p-10" onSubmit={handleSubmit}>
+    <div className={cn("flex min-h-dvh w-full", className)} {...props}>
+      <Card className="min-h-dvh w-full gap-0 rounded-none border-0 bg-sidebar p-2.5 shadow-none ring-0">
+        <CardContent className="grid min-h-[calc(100dvh-1.25rem)] flex-1 gap-2.5 p-0 md:grid-cols-[minmax(0,45fr)_minmax(0,55fr)]">
+          <form className="login-form-panel flex min-w-0 flex-col justify-between gap-8 rounded-xl border border-border/70 bg-card p-6 sm:p-8 md:p-8 lg:p-10" onSubmit={handleSubmit}>
             <div className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs"><Building2 className="size-4" aria-hidden="true" /></span>
+              <span className="relative size-9 shrink-0 overflow-hidden rounded-xl shadow-xs"><Image src="/logo/logo-sb-login.png" alt="" fill sizes="36px" className="object-cover" /></span>
               <span>AspirasiJTI</span>
             </div>
-            <div className="m-auto w-full max-w-md space-y-8 py-10">
+            <div className="m-auto w-full max-w-sm space-y-8 py-10">
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-xs font-medium text-primary"><LogIn className="size-4" aria-hidden="true" />Portal pelaporan internal JTI</div>
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Masuk ke akun Anda</h1>
@@ -49,15 +50,17 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
               </Field>
               <div>
-                <Button type="submit" size="lg" className="w-full sm:w-auto"><LogIn />Login dengan SSO POLIJE<ArrowRight className="ml-1" /></Button>
+                <Button type="submit" size="lg" className="w-full"><LogIn />Login dengan SSO POLIJE<ArrowRight className="ml-1" /></Button>
               </div>
             </div>
-            <FieldDescription className="text-xs leading-relaxed">Dengan melanjutkan, Anda menyetujui penggunaan AspirasiJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</FieldDescription>
+            <p className="text-xs leading-relaxed text-muted-foreground">Dengan melanjutkan, Anda menyetujui penggunaan AspirasiJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</p>
           </form>
-          <aside className="flex min-h-52 flex-col items-center justify-center border-t border-border bg-muted/60 p-8 text-center md:min-h-0 md:border-t-0 md:border-l" aria-label="Area ilustrasi AspirasiJTI">
-            <div className="flex size-16 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground shadow-2xs"><ImageOff className="size-7" strokeWidth={1.5} aria-hidden="true" /></div>
-            <p className="mt-5 text-sm font-medium text-foreground">Area visual AspirasiJTI</p>
-            <p className="mt-1.5 max-w-52 text-xs leading-relaxed text-muted-foreground">Ilustrasi pendukung akan ditambahkan pada tahap berikutnya.</p>
+          <aside className="login-visual-panel hidden min-w-0 items-center rounded-xl border border-primary/30 p-10 text-login-panel-foreground md:flex lg:p-16" aria-label="Tentang AspirasiJTI">
+            <div className="w-full text-left">
+              <Image src="/login/aspirasijti.png" alt="AspirasiJTI" width={866} height={288} sizes="(min-width: 1024px) 480px, 45vw" className="h-auto w-full max-w-[480px]" />
+              {/* The logo PNG has transparent margins; align the copy to its visible artwork. */}
+              <p className="-mt-5 pl-[min(12.2%,59px)] text-base leading-relaxed lg:-mt-7 lg:text-lg">Selamat datang di AspirasiJTI, ruang untuk menyampaikan aspirasi dan laporan di lingkungan Jurusan Teknologi Informasi. Laporkan kebutuhan fasilitas, kendala layanan, atau kehilangan dan temuan melalui satu portal. Masuk untuk memantau progres penanganan dan mengetahui tindak lanjut setiap laporan hingga selesai.</p>
+            </div>
           </aside>
         </CardContent>
       </Card>

@@ -11,10 +11,18 @@ const toneClasses = {
 
 type KpiTone = keyof typeof toneClasses
 
+const iconToneClasses: Record<KpiTone, string> = {
+  blue: "border-primary/20 bg-primary/10 text-primary",
+  green: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  amber: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  red: "border-destructive/20 bg-destructive/10 text-destructive",
+}
+
 export function KpiCard({
   label,
   value,
   icon: Icon,
+  iconTone = "blue",
   detail,
   detailValue,
   detailTone = "blue",
@@ -23,6 +31,7 @@ export function KpiCard({
   label: string
   value: string | number
   icon: LucideIcon
+  iconTone?: KpiTone
   detail?: string
   detailValue?: string | number
   detailTone?: KpiTone
@@ -32,12 +41,12 @@ export function KpiCard({
   const [indicatorColor, valueColor] = tone.split(" ")
 
   return (
-    <Card className="flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
+    <Card className="flex min-h-44 flex-col justify-between gap-1 overflow-hidden rounded-2xl border border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
       {/* KPI inner layer: floating content surface. */}
-      <div className="space-y-3 rounded-xl border border-border/60 bg-card p-4 text-card-foreground shadow-2xs">
+      <div className="flex-1 space-y-3 rounded-xl border border-border/60 bg-card p-4 text-card-foreground shadow-2xs">
         <div className="flex items-center gap-3.5">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background shadow-2xs">
-            <Icon className="size-5 text-foreground" strokeWidth={1.75} />
+          <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs ${iconToneClasses[iconTone]}`}>
+            <Icon className="size-5" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div className="flex flex-col">
             <span className="block text-xs font-medium text-muted-foreground">{label}</span>

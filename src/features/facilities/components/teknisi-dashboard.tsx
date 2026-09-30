@@ -40,6 +40,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
             label="Dalam penanganan"
             value={technicianOverview.inProgress}
             icon={Wrench}
+            iconTone="amber"
             detail="Perbaikan aktif"
             detailValue={`${technicianOverview.inProgress} pekerjaan`}
             detailTone="blue"
@@ -49,6 +50,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
             label="Ruang terdampak"
             value={technicianOverview.affectedRooms}
             icon={Building2}
+            iconTone="red"
             detail="Prioritas utama"
             detailValue={technicianOverview.priorityRoom}
             detailTone="red"
@@ -58,6 +60,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
             label="Selesai hari ini"
             value={technicianOverview.completedToday}
             icon={CircleCheckBig}
+            iconTone="green"
             detail="Catatan tersimpan"
             detailValue={`${technicianOverview.completedToday} laporan`}
             detailTone="green"

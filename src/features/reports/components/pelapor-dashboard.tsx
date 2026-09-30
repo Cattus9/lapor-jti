@@ -19,9 +19,9 @@ export function PelaporDashboard({ user }: { user: CurrentUser }) {
       <ContentShell>
         <PageHeader title="Dashboard Pelapor" description={`Selamat datang kembali, ${user.name}. Pantau laporan Anda di sini.`} action={<Button nativeButton={false} render={<Link href="/pelapor/buat-laporan" />}><FilePlus2 />Buat Laporan</Button>} />
         <div className="grid gap-4 sm:grid-cols-3">
-          <KpiCard label="Laporan aktif" value={activeReports} icon={Clock3} detail="Sedang ditangani" detailValue={`${activeReports} tiket`} detailTone="amber" href="/pelapor/laporan-saya" />
+          <KpiCard label="Laporan aktif" value={activeReports} icon={Clock3} iconTone="amber" detail="Sedang ditangani" detailValue={`${activeReports} tiket`} detailTone="amber" href="/pelapor/laporan-saya" />
           <KpiCard label="Total laporan" value={pelaporReports.length} icon={ClipboardCheck} detail="Semua kategori" detailValue="Riwayat" href="/pelapor/laporan-saya" />
-          <KpiCard label="Laporan selesai" value={completedReports} icon={FileCheck2} detail="Terselesaikan" detailValue={`${completedReports} tiket`} detailTone="green" href="/pelapor/laporan-saya" />
+          <KpiCard label="Laporan selesai" value={completedReports} icon={FileCheck2} iconTone="green" detail="Terselesaikan" detailValue={`${completedReports} tiket`} detailTone="green" href="/pelapor/laporan-saya" />
         </div>
         <ReportActivityPanel reports={pelaporReports} />
       </ContentShell>
