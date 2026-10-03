@@ -1,4 +1,6 @@
 import { ClipboardList, FileText, Gauge, ListChecks, MessageSquareText, TimerReset } from "lucide-react"
+// [AUTH-ROLE] CurrentUser/AppRole dipakai untuk presentasi setelah validasi pada halaman server.
+// Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -7,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { managementFocus, managementOverview, managementPriorityQueue } from "@/features/management/mock/manajemen-dashboard"
-import type { CurrentUser } from "@/lib/auth/dummy-session"
+import type { CurrentUser } from "@/lib/auth/current-user"
 
 export function ManajemenDashboard({ user }: { user: CurrentUser }) {
   return (

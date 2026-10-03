@@ -1,4 +1,6 @@
 import { Archive, BellRing, ChartNoAxesCombined, ClipboardCheck, FileSpreadsheet, Inbox, LifeBuoy, MapPinned, Settings2, UserRoundCog, Wrench } from "lucide-react"
+// [AUTH-ROLE] Pemetaan navigasi menurut role internal aplikasi, independen dari metode login.
+// Menyembunyikan menu tidak mengamankan endpoint; pertahankan pemeriksaan role di server.
 import type { AppRole } from "@/lib/auth/roles"
 import type { NavigationItem } from "./nav-types"
 

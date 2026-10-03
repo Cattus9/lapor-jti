@@ -1,19 +1,9 @@
-import type { AppRole } from "./roles"
+import type { CurrentUser } from "../../src/lib/auth/current-user"
+// [AUTH-LOCAL] Identitas demo untuk seed lokal; bukan sumber identitas/role pengguna production.
+// Google Workspace harus dipetakan ke pengguna database yang sah, tanpa mengandalkan email/ID fixture ini.
 
-export type CurrentUser = {
-  id: string
-  name: string
-  email: string
-  identifier: string
-  username: string
-  unit: string
-  studyProgram: string
-  status: "Aktif" | "Nonaktif"
-  avatar?: string
-  role: AppRole
-}
-
-export const dummyUsers: Record<string, CurrentUser> = {
+// Development fixtures only. These IDs never become authenticated database identities.
+export const demoUsers: Record<string, CurrentUser> = {
   "pelapor@gmail.com": {
     id: "dummy-pelapor-001",
     name: "Ayu Santoso",
@@ -58,14 +48,4 @@ export const dummyUsers: Record<string, CurrentUser> = {
     status: "Aktif",
     role: "manajemen",
   },
-}
-
-export const dummyUser = dummyUsers["pelapor@gmail.com"]
-
-export function getDummyUserByEmail(email: string): CurrentUser | undefined {
-  return dummyUsers[email.trim().toLowerCase()]
-}
-
-export function getDummyUser(): CurrentUser {
-  return dummyUser
 }

@@ -1,7 +1,10 @@
 "use client"
+// [AUTH-SESSION] Keluar harus membatalkan session aplikasi melalui Better Auth.
+// Untuk Google Workspace, logout aplikasi tidak berarti logout seluruh akun Google; pertahankan pembatalan session lokal.
 
-import { useSyncExternalStore } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
+import { authClient } from "@/lib/auth/client"
 import {
   Avatar,
   AvatarFallback,
@@ -41,13 +44,28 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
+  const [isPending, setIsPending] = useState(false)
+  const [logoutError, setLogoutError] = useState("")
   const isDark = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => false)
   const theme: AppTheme = isDark ? "dark" : "light"
 
-  function handleLogout() {
-    document.cookie = "laporjti_dummy_email=; path=/; max-age=0; samesite=lax"
-    router.push("/login")
-    router.refresh()
+  async function handleLogout() {
+    if (isPending) return
+    setIsPending(true)
+    setLogoutError("")
+    try {
+      const result = await authClient.signOut()
+      if (result.error) {
+        setLogoutError("Gagal keluar. Silakan coba lagi.")
+        return
+      }
+      router.replace("/login")
+      router.refresh()
+    } catch {
+      setLogoutError("Gagal keluar. Periksa koneksi dan coba lagi.")
+    } finally {
+      setIsPending(false)
+    }
   }
 
   return (
@@ -121,12 +139,14 @@ export function NavUser({
             <DropdownMenuItem
               className="text-destructive focus:bg-destructive/10 focus:text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={handleLogout}
+              disabled={isPending}
             >
               <LogOutIcon />
-              Keluar
+              {isPending ? "Memproses..." : "Keluar"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {logoutError ? <p className="px-2 py-1 text-xs text-destructive" role="alert">{logoutError}</p> : null}
       </SidebarMenuItem>
     </SidebarMenu>
   )

@@ -1,8 +1,10 @@
 import { RoleDashboardPage } from "@/components/layout/role-dashboard-page"
-import { requireDummyRole } from "@/lib/auth/require-role"
+import { requireRole } from "@/lib/auth/require-role"
 
 export default async function AdminDashboardPage() {
-  const user = await requireDummyRole("admin")
+  // [AUTH-ROLE] Halaman ini hanya untuk role "admin" dari database aplikasi.
+  // Pertahankan guard ini saat beralih ke Google Workspace; adaptasi session ada di server-session.ts.
+  const user = await requireRole("admin")
 
   return (
     <RoleDashboardPage

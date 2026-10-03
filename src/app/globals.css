@@ -30,6 +30,9 @@
   --popover-foreground: #0c121a;
   --primary: #297cef;
   --primary-foreground: #ffffff;
+  /* Opaque action surfaces preserve text contrast without changing the brand/chart palette. */
+  --primary-action: #216fdd;
+  --primary-action-hover: #1c63cc;
   --secondary: #e9ebee;
   --secondary-foreground: #222933;
   --muted: #eceff1;
@@ -91,6 +94,8 @@
   --popover-foreground: #f0f2f4;
   --primary: #3a8cff;
   --primary-foreground: #040609;
+  --primary-action: #3a8cff;
+  --primary-action-hover: #559cff;
   --secondary: #1c2024;
   --secondary-foreground: #d9dfe5;
   --muted: #181b1f;
@@ -147,6 +152,8 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-action: var(--primary-action);
+  --color-primary-action-hover: var(--primary-action-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

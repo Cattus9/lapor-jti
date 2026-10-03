@@ -1,32 +1,17 @@
 import type { ComponentProps, ReactNode } from "react"
-import { Badge, type BadgeTone } from "@/components/ui/badge"
-
-const statusTones: Record<string, BadgeTone> = {
-  Baru: "neutral",
-  baru: "neutral",
-  "Perlu diverifikasi": "warning",
-  Diverifikasi: "warning",
-  diverifikasi: "warning",
-  Diproses: "info",
-  diproses: "info",
-  "Sedang Diproses": "info",
-  "Barang teridentifikasi": "cyan",
-  Ditemukan: "cyan",
-  Dicocokkan: "cyan",
-  Diserahkan: "success",
-  Selesai: "success",
-  selesai: "success",
-  Ditolak: "destructive",
-}
+import { cn } from "cn"
+import { Badge } from "@/components/ui/badge"
+import { getStatusBadgePresentation } from "./status-badge-presentation"
 
 type StatusBadgeProps = Omit<ComponentProps<typeof Badge>, "children" | "tone"> & {
   status: string
   children?: ReactNode
 }
 
-function StatusBadge({ status, children, ...props }: StatusBadgeProps) {
+function StatusBadge({ status, children, className, ...props }: StatusBadgeProps) {
+  const presentation = getStatusBadgePresentation(status)
   return (
-    <Badge variant="outline" tone={statusTones[status] ?? "neutral"} {...props}>
+    <Badge variant="outline" tone={presentation.tone} className={cn(presentation.className, className)} {...props}>
       {children ?? status}
     </Badge>
   )

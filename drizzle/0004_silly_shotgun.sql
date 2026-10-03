@@ -1,0 +1,3 @@
+DROP INDEX "drafts_reporter_updated_idx";--> statement-breakpoint
+CREATE INDEX "drafts_reporter_updated_idx" ON "report_drafts" USING btree ("reporter_id","updated_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "report_drafts"."submitted_report_id" is null;--> statement-breakpoint
+ALTER TABLE "report_drafts" ADD CONSTRAINT "draft_revision_check" CHECK ("report_drafts"."revision" >= 0 and "report_drafts"."schema_version" > 0);

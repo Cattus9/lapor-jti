@@ -2,14 +2,16 @@ import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
 import { ManagementReportWorkspace } from "@/features/management/components/management-report-workspace"
-import { requireDummyRole } from "@/lib/auth/require-role"
+import { requireRole } from "@/lib/auth/require-role"
 
 type ManagementReportsPageProps = {
   searchParams: Promise<{ category?: string }>
 }
 
 export default async function ManagementReportsPage({ searchParams }: ManagementReportsPageProps) {
-  const user = await requireDummyRole("manajemen")
+  // [AUTH-ROLE] Halaman ini hanya untuk role "manajemen" dari database aplikasi.
+  // Pertahankan guard ini saat beralih ke Google Workspace; adaptasi session ada di server-session.ts.
+  const user = await requireRole("manajemen")
   const { category } = await searchParams
   const initialCategory = category === "layanan" ? "Layanan" : category === "lainnya" ? "Lainnya" : "Semua"
 

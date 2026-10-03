@@ -1,29 +1,17 @@
 "use client"
+// [AUTH-SESSION] Identitas sidebar berasal dari provider server, bukan cookie email atau pilihan role browser.
+// [AUTH-ROLE] Prop role hanya mengatur tampilan; izin halaman tetap diperiksa melalui requireRole().
 
-import { useState, useSyncExternalStore, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ActivityNotificationProvider } from "@/components/activity-notification-provider"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { dummyUser, getDummyUserByEmail, type CurrentUser } from "@/lib/auth/dummy-session"
+import type { CurrentUser } from "@/lib/auth/current-user"
+import { useCurrentUser } from "@/components/auth-user-provider"
 import type { AppRole } from "@/lib/auth/roles"
 
-const DUMMY_EMAIL_COOKIE = "laporjti_dummy_email"
 const SIDEBAR_STATE_COOKIE = "sidebar_state"
-
-function getBrowserSessionUser() {
-  const email = document.cookie
-    .split("; ")
-    .find((cookie) => cookie.startsWith(`${DUMMY_EMAIL_COOKIE}=`))
-    ?.split("=")[1]
-
-  return getDummyUserByEmail(decodeURIComponent(email ?? "")) ?? dummyUser
-}
-
-function subscribeToSession(onStoreChange: () => void) {
-  const timer = window.setTimeout(onStoreChange, 0)
-  return () => window.clearTimeout(timer)
-}
 
 function getInitialSidebarOpen() {
   if (typeof document === "undefined") return true
@@ -45,11 +33,8 @@ export function DashboardLayout({
   role?: AppRole
   user?: CurrentUser
 }) {
-  const sessionUser = useSyncExternalStore<CurrentUser>(
-    subscribeToSession,
-    getBrowserSessionUser,
-    () => user ?? dummyUser,
-  )
+  const authenticatedUser = useCurrentUser()
+  const sessionUser = authenticatedUser ?? user
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen)
 
   return (

@@ -1,4 +1,6 @@
 "use client"
+// [AUTH-ROLE] CurrentUser/AppRole dipakai untuk presentasi setelah validasi pada halaman server.
+// Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 
 import Image from "next/image"
 import { useMemo, useState } from "react"
@@ -34,7 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { satpamLostFoundReports, satpamPendingHandovers, type SatpamLostFoundReport, type SatpamPendingHandover, type SatpamReportKind, type SatpamReportStatus } from "@/features/lost-found/mock/satpam-lost-found"
-import type { CurrentUser } from "@/lib/auth/dummy-session"
+import type { CurrentUser } from "@/lib/auth/current-user"
 import { cn } from "cn"
 
 const lifecycle = ["Baru", "Diverifikasi", "Diproses", "Barang teridentifikasi", "Diserahkan", "Selesai"] as const
@@ -168,7 +170,7 @@ function StatusActionPanel({
 }
 
 function StatusActivity({ activities }: { activities: StatusHistoryItem[] }) {
-  return <section className="border-t border-border/60 pt-6"><h3 className="text-sm font-semibold text-foreground">Riwayat status</h3><div className="mt-3 space-y-2">{[...activities].reverse().map((activity, index) => <div key={`${activity.status}-${activity.timestamp}-${index}`} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/60 p-3"><span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><div className="min-w-0"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><p className="text-sm font-medium text-foreground">{activity.status}</p><span className="text-xs text-muted-foreground">{activity.timestamp}</span></div><p className="mt-1 text-xs text-muted-foreground">Oleh {activity.actor}{activity.note ? ` · ${activity.note}` : ""}</p></div></div>)}</div></section>
+  return <section className="border-t border-border/60 pt-6"><h3 className="text-sm font-semibold text-foreground">Riwayat status</h3><div className="mt-3 space-y-2">{[...activities].reverse().map((activity, index) => <div key={`${activity.status}-${activity.timestamp}-${index}`} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/60 p-3"><span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><div className="min-w-0"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><StatusBadge status={activity.status} /><span className="text-xs text-muted-foreground">{activity.timestamp}</span></div><p className="mt-1 text-xs text-muted-foreground">Oleh {activity.actor}{activity.note ? ` · ${activity.note}` : ""}</p></div></div>)}</div></section>
 }
 
 function ReportDetailDialog({
@@ -424,7 +426,7 @@ function HandoverWorkspace({ pendingPairs, onConfirmHandover }: {
                     <p className="mt-1 text-xs text-muted-foreground">Pelapor kehilangan: {pair.reporter}</p>
                   </div>
                 </div>
-                <Badge variant="outline" tone="warning">Menunggu penyerahan</Badge>
+                <SharedStatusBadge status="Menunggu penyerahan" />
               </div>
               <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden="true" />Dicocokkan {pair.matchedAt}</span>

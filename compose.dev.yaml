@@ -1,0 +1,42 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+
+  migrate:
+    environment:
+      NODE_ENV: development
+      # [AUTH-LOCAL] Hanya untuk seed manual di development; tidak disertakan pada app/production.
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
+    volumes:
+      - ./drizzle:/app/drizzle
+      - ./src/db:/app/src/db:ro
+      - ./src/features/reports/domain:/app/src/features/reports/domain:ro
+      - ./scripts:/app/scripts:ro
+
+  app:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:${APP_PORT:-3000}}
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+          initial_sync: true
+        - action: sync
+          path: ./public
+          target: /app/public
+          initial_sync: true
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
+        - action: rebuild
+          path: ./next.config.ts
+        - action: rebuild
+          path: ./tsconfig.json
+        - action: rebuild
+          path: ./postcss.config.mjs

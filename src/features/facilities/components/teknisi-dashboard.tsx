@@ -1,4 +1,6 @@
 import Link from "next/link"
+// [AUTH-ROLE] CurrentUser/AppRole dipakai untuk presentasi setelah validasi pada halaman server.
+// Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 import { ArrowRight, Building2, ClipboardList, Clock3, CircleCheckBig, MapPin, ScanSearch, Wrench } from "lucide-react"
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { ContentShell } from "@/components/layout/content-shell"
@@ -9,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TechnicianPriorityAnalysis } from "@/features/facilities/components/technician-priority-analysis"
 import { technicianOverview, technicianRepairQueue, technicianTasks } from "@/features/facilities/mock/teknisi-dashboard"
-import type { CurrentUser } from "@/lib/auth/dummy-session"
+import type { CurrentUser } from "@/lib/auth/current-user"
 
 export function TeknisiDashboard({ user }: { user: CurrentUser }) {
   return (

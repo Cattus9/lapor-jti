@@ -1,4 +1,7 @@
 "use client"
+// [AUTH-LOCAL] Form email/password sementara untuk akun uji dan akun yang disiapkan pengelola.
+// Saat Google Workspace diaktifkan, sesuaikan aksi signIn dan field/copy login di sini.
+// [AUTH-ROLE] Dashboard dipilih oleh server dari role database, bukan nilai role yang dikirim form.
 
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -9,30 +12,41 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { getDummyUserByEmail } from "@/lib/auth/dummy-session"
+import { authClient } from "@/lib/auth/client"
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter()
   const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState("")
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const user = getDummyUserByEmail(email)
-    if (!user) {
-      setError("Gunakan email dummy yang terdaftar untuk melanjutkan.")
-      return
+    if (isPending) return
+    setError("")
+    setIsPending(true)
+    try {
+      const result = await authClient.signIn.email({ email: email.trim().toLowerCase(), password })
+      if (result.error) {
+        setError(result.error.status === 429 ? "Terlalu banyak percobaan. Tunggu satu menit lalu coba lagi." : "Tidak dapat masuk. Periksa email dan password, atau hubungi pengelola akun.")
+        return
+      }
+      // Refresh server-rendered identity; the root selects the current database role.
+      router.replace("/")
+      router.refresh()
+    } catch {
+      setError("Tidak dapat menghubungi server. Silakan coba lagi.")
+    } finally {
+      setIsPending(false)
     }
-    document.cookie = `laporjti_dummy_email=${encodeURIComponent(user.email)}; path=/; max-age=86400; samesite=lax`
-    router.push(`/${user.role}/dashboard`)
-    router.refresh()
   }
 
   return (
     <div className={cn("flex min-h-dvh w-full", className)} {...props}>
       <Card className="min-h-dvh w-full gap-0 rounded-none border-0 bg-sidebar p-2.5 shadow-none ring-0">
-        <CardContent className="grid min-h-[calc(100dvh-1.25rem)] flex-1 gap-2.5 p-0 md:grid-cols-[minmax(0,45fr)_minmax(0,55fr)]">
-          <form className="login-form-panel flex min-w-0 flex-col justify-between gap-8 rounded-xl border border-border/70 bg-card p-6 sm:p-8 md:p-8 lg:p-10" onSubmit={handleSubmit}>
+        <CardContent className="grid min-h-[calc(100dvh-1.25rem)] flex-1 gap-2.5 p-0 md:grid-cols-[minmax(0,40fr)_minmax(0,60fr)]">
+          <form className="login-form-panel flex min-w-0 flex-col justify-between gap-8 rounded-xl border border-border/70 bg-card p-6 sm:p-8 md:p-8 lg:p-10" onSubmit={handleSubmit} aria-busy={isPending}>
             <div className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
               <span className="relative size-9 shrink-0 overflow-hidden rounded-xl shadow-xs"><Image src="/logo/logo-sb-login.png" alt="" fill sizes="36px" className="object-cover" /></span>
               <span>AspirasiJTI</span>
@@ -41,23 +55,27 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-xs font-medium text-primary"><LogIn className="size-4" aria-hidden="true" />Portal pelaporan internal JTI</div>
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Masuk ke akun Anda</h1>
-                <p className="max-w-md text-sm leading-relaxed text-muted-foreground">Gunakan akun SSO POLIJE untuk membuat laporan, memantau tiket, dan menerima pembaruan dari pengelola.</p>
+                <p className="max-w-md text-sm leading-relaxed text-muted-foreground">Gunakan email dan password akun yang telah disiapkan pengelola. Login SSO kampus belum tersedia.</p>
               </div>
               <Field>
                 <FieldLabel htmlFor="email">Email akun</FieldLabel>
-                <Input id="email" type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError("") }} placeholder="contoh@polije.ac.id" autoComplete="email" required aria-invalid={Boolean(error)} />
-                <FieldDescription>Akun dummy: pelapor@gmail.com, satpam@gmail.com, teknisi@gmail.com, atau manajemen@gmail.com</FieldDescription>
-                {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
+                <Input id="email" name="email" type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError("") }} placeholder="Email akun Anda" autoComplete="username" required disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
+                <FieldDescription>Gunakan email akun yang terdaftar di AspirasiJTI.</FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input id="password" name="password" type="password" value={password} onChange={(event) => { setPassword(event.target.value); setError("") }} autoComplete="current-password" required maxLength={128} disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
               </Field>
               <div>
-                <Button type="submit" size="lg" className="w-full"><LogIn />Login dengan SSO POLIJE<ArrowRight className="ml-1" /></Button>
+                {error ? <p id="login-error" className="mb-3 text-sm text-destructive" role="alert">{error}</p> : null}
+                <Button type="submit" size="lg" className="w-full" disabled={isPending}><LogIn />{isPending ? "Memproses..." : "Masuk"}<ArrowRight className="ml-1" /></Button>
               </div>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">Dengan melanjutkan, Anda menyetujui penggunaan AspirasiJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</p>
           </form>
           <aside className="login-visual-panel hidden min-w-0 items-center rounded-xl border border-primary/30 p-10 text-login-panel-foreground md:flex lg:p-16" aria-label="Tentang AspirasiJTI">
             <div className="w-full text-left">
-              <Image src="/login/aspirasijti.png" alt="AspirasiJTI" width={866} height={288} sizes="(min-width: 1024px) 480px, 45vw" className="h-auto w-full max-w-[480px]" />
+              <Image src="/login/aspirasijti.png" alt="AspirasiJTI" width={866} height={288} sizes="(min-width: 1024px) 480px, 60vw" className="h-auto w-full max-w-[480px]" />
               {/* The logo PNG has transparent margins; align the copy to its visible artwork. */}
               <p className="-mt-5 pl-[min(12.2%,59px)] text-base leading-relaxed lg:-mt-7 lg:text-lg">Selamat datang di AspirasiJTI, ruang untuk menyampaikan aspirasi dan laporan di lingkungan Jurusan Teknologi Informasi. Laporkan kebutuhan fasilitas, kendala layanan, atau kehilangan dan temuan melalui satu portal. Masuk untuk memantau progres penanganan dan mengetahui tindak lanjut setiap laporan hingga selesai.</p>
             </div>

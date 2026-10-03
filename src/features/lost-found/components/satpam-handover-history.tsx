@@ -1,4 +1,6 @@
 "use client"
+// [AUTH-ROLE] CurrentUser/AppRole dipakai untuk presentasi setelah validasi pada halaman server.
+// Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 
 import { useMemo, useState } from "react"
 import Image from "next/image"
@@ -17,7 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { satpamHandoverHistory, type SatpamHandoverHistoryItem } from "@/features/lost-found/mock/satpam-history"
-import type { CurrentUser } from "@/lib/auth/dummy-session"
+import type { CurrentUser } from "@/lib/auth/current-user"
 
 function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
   return (

@@ -2,7 +2,7 @@
 
 Portal pelaporan internal untuk Jurusan Teknologi Informasi (JTI) POLIJE. AspirasiJTI menyatukan pelaporan Kehilangan & Temuan, fasilitas, layanan internal, dan laporan umum ke dalam alur berbasis tiket yang dapat dipantau oleh pelapor dan ditangani oleh pengelola yang tepat.
 
-> Status: frontend MVP. Antarmuka, alur per role, dan data demonstrasi telah tersedia. Integrasi SSO POLIJE, basis data, notifikasi persisten, serta ekspor nyata masih menjadi pekerjaan backend berikutnya.
+> Status: frontend MVP dengan backend Docker, PostgreSQL, Drizzle, dan Better Auth. Login email/password, session database, logout, dan pemeriksaan role server sudah tersedia. Laporan, statistik, dan notifikasi masih memakai data demonstrasi. Integrasi SSO dan backend workflow menjadi tahap berikutnya; aplikasi belum siap dibuka sebagai layanan production.
 
 ## Tujuan
 
@@ -30,7 +30,7 @@ Portal pelaporan internal untuk Jurusan Teknologi Informasi (JTI) POLIJE. Aspira
 | **Teknisi** | Menangani laporan fasilitas, memperbarui status perbaikan, melihat prioritas ruangan dan objek fasilitas, serta membuka riwayat perbaikan. |
 | **Manajemen Jurusan** | Mengelola laporan layanan dan lainnya, memantau laporan lintas kategori, membaca statistik, serta menyiapkan rekap operasional. |
 
-Role Admin tidak dibangun sebagai modul terpisah. Manajemen Jurusan menjadi hierarki operasional tertinggi pada MVP ini; pemetaan identitas dan role direncanakan melalui SSO POLIJE.
+Role Admin tidak dibangun sebagai modul terpisah. Manajemen Jurusan menjadi hierarki operasional tertinggi pada MVP ini. Role ditentukan di database aplikasi, termasuk ketika metode login SSO ditambahkan nanti.
 
 ## Fitur yang tersedia
 
@@ -72,13 +72,17 @@ Antarmuka dirancang dengan pola komponen Shadcn yang konsisten, mendukung mode t
 - Shadcn UI dengan Base UI primitives
 - Lucide React untuk ikon
 - Recharts untuk visualisasi statistik
+- PostgreSQL 18 dengan penyimpanan Docker volume
+- Drizzle ORM + `pg`, Drizzle Kit untuk migrasi
+- Better Auth untuk autentikasi dan session
+- Docker Compose untuk development dan production
 
 ## Struktur proyek
 
 ```text
 src/
 ├── app/
-│   ├── (auth)/login/             # Halaman autentikasi demonstrasi
+│   ├── (auth)/login/             # Login email/password Better Auth
 │   └── (protected)/              # Route per role yang memerlukan sesi
 │       ├── pelapor/
 │       ├── satpam/
@@ -95,61 +99,195 @@ src/
 │   ├── management/               # Monitoring, statistik, dan rekap Manajemen
 │   ├── notifications/
 │   └── profile/
+├── db/                           # Schema, koneksi PostgreSQL, dan akses server-only
 └── lib/
-    └── auth/                     # Sesi dan role dummy untuk MVP
+    └── auth/                     # Better Auth, session server, dan pemeriksaan role
 ```
 
-## Menjalankan proyek secara lokal
+## Menjalankan proyek dengan Docker
 
 ### Prasyarat
 
-- Node.js 20 atau lebih baru
-- npm
+- Git dan Docker Desktop yang sedang berjalan (Windows: WSL 2).
+- Docker Compose yang mendukung Watch dan `initial_sync` (disarankan versi bawaan Docker Desktop terbaru).
+- Node.js dan PostgreSQL tidak perlu dipasang di host untuk alur container penuh.
 
-### Instalasi
+### Setup pertama
 
-```bash
+```powershell
 git clone https://github.com/Cattus9/lapor-jti.git
 cd lapor-jti
-npm install
-npm run dev
+Copy-Item .env.example .env
+# Isi BETTER_AUTH_SECRET di .env dengan hasil perintah berikut:
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+docker compose -f compose.yaml -f compose.dev.yaml up --build --watch
 ```
 
-Buka [http://localhost:3000](http://localhost:3000). Aplikasi akan mengarahkan pengguna ke halaman login.
+Pada Linux/macOS, gunakan `cp .env.example .env` sebagai pengganti `Copy-Item`. `.env` berisi konfigurasi laptop masing-masing dan tidak masuk Git. Jika port 3000 sudah digunakan, ubah `APP_PORT` di `.env`, misalnya menjadi `3001`, dan sesuaikan `BETTER_AUTH_URL` menjadi `http://localhost:3001`. Gunakan alamat yang sama di browser; `localhost` dan `127.0.0.1` adalah origin berbeda untuk autentikasi. Tanpa Node.js di host, secret dapat dibuat dengan `docker run --rm node:24-bookworm-slim node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+
+Alur startup: Docker membangun image Node.js dan menjalankan `npm ci`, PostgreSQL menyiapkan database dan akun, migrator menerapkan SQL yang belum dijalankan, lalu Next.js development menyala. Watch menyinkronkan perubahan `src` dan `public` untuk hot reload; perubahan dependency atau konfigurasi build memicu rebuild. Jangan menghubungkan `node_modules` Windows ke container Linux.
+
+Buka `http://localhost:3000` atau port sesuai `APP_PORT`. Endpoint `GET /api/health` mengembalikan HTTP 200 jika koneksi PostgreSQL berhasil, atau 503 jika koneksi gagal. Endpoint ini tidak menampilkan kredensial atau data pengguna.
+
+### Layanan dan penyimpanan
+
+| Layanan | Fungsi | Akun database |
+| --- | --- | --- |
+| `db` | PostgreSQL, data disimpan di volume `postgres_data` | Pemilik database dan akun aplikasi dibuat saat inisialisasi pertama |
+| `migrate` | Menjalankan migrasi satu kali sebelum aplikasi menyala | `POSTGRES_USER`, pemilik schema |
+| `app` | Next.js dan Drizzle ORM | `APP_DB_USER`, hanya akses data tanpa izin membuat tabel |
+
+File `docker/postgres/init-app-user.sh` membuat akun aplikasi dan izin default untuk tabel yang dibuat oleh migrator. Nama akun owner dan aplikasi harus berbeda. Perubahan password di `.env` tidak otomatis mengubah akun pada database yang sudah ada; lakukan perubahan akun melalui PostgreSQL dan perbarui konfigurasi secara bersamaan. Script inisialisasi hanya dijalankan untuk volume kosong.
+
+Database dipublikasikan ke `127.0.0.1:${DB_PORT}` hanya pada development. Di dalam container, hostname database adalah `db`; alat database di laptop memakai `127.0.0.1`. `src/db/environment.ts` menyusun URL dari variabel `PG*` dan mengodekan username/password. Jika berjalan pada host, klien aplikasi memakai `APP_DB_*`, sedangkan migrator memakai `POSTGRES_*`. `DATABASE_URL` dapat dipakai sebagai override untuk koneksi dari alat lokal, tetapi jangan mengisinya dengan kredensial owner untuk container aplikasi.
+
+`docker compose -f compose.yaml -f compose.dev.yaml down` menghentikan container sambil mempertahankan volume data. **Jangan menambahkan `-v` jika data harus disimpan**, karena opsi itu menghapus volume. Clone di device lain membuat database tersendiri; data tidak ikut Git.
+
+### Migrasi dan data contoh
+
+Schema ada di `src/db/schema.ts`: tabel `users` menyimpan profil, role dan status aktif, sedangkan `accounts`, `sessions`, dan `verifications` menyimpan data autentikasi Better Auth. Migration `0001_better_auth.sql` menambahkan tabel dan kolom tanpa menghapus pengguna sebelumnya. Schema laporan belum ditambahkan. Adanya role `admin` pada enum hanya mempertahankan tipe role lama, tidak menambahkan modul atau akun admin.
+
+Setelah container berjalan, gunakan terminal lain:
+
+```powershell
+# Periksa koneksi dengan akun aplikasi.
+docker compose -f compose.yaml -f compose.dev.yaml exec app npm run db:check
+
+# Opsional: tambahkan empat akun demo dengan password dari DEMO_USER_PASSWORD.
+docker compose -f compose.yaml -f compose.dev.yaml run --rm migrate npm run db:seed
+
+# Setelah mengubah schema, buat migrasi SQL yang disimpan di repository.
+docker compose -f compose.yaml -f compose.dev.yaml run --rm migrate npm run db:generate -- --name=nama_perubahan
+
+# Tinjau SQL yang dihasilkan, lalu terapkan.
+docker compose -f compose.yaml -f compose.dev.yaml run --rm migrate npm run db:migrate
+```
+
+Folder `drizzle/` dihubungkan ke host pada layanan migrator development agar file migrasi hasil generate tersimpan di repository. Migrasi dijalankan otomatis pada startup; perubahan schema selanjutnya tetap perlu generate dan migrate. Seed tidak otomatis dijalankan dan ditolak jika `NODE_ENV` bukan `development`. Seed meng-hash `DEMO_USER_PASSWORD` menggunakan algoritme Better Auth. Pengguna demo lama yang cocok mendapat kredensial jika belum ada, serta pengisian field profil yang masih kosong. Password, role, dan profil yang telah terisi tidak diganti saat seed diulang. Seed menolak memasang kredensial demo ke pengguna yang tidak cocok dengan fixture.
+
+### Konfigurasi production di VPS
+
+```bash
+cp .env.production.example .env.production
+# Isi password owner/aplikasi dan BETTER_AUTH_SECRET dengan nilai acak berbeda.
+# Isi BETTER_AUTH_URL dengan origin HTTPS publik kampus.
+docker compose --env-file .env.production -p aspirasijti-production -f compose.yaml up --build -d
+```
+
+Gunakan project name production yang berbeda agar volume, network, dan container tidak tercampur dengan development. Hanya file contoh environment yang masuk Git; kredensial server disediakan saat runtime dan tidak dimasukkan ke image. File `.env*` sebenarnya, `.git`, serta dependency host dikeluarkan oleh `.dockerignore`.
+
+Image production memakai output Next.js `standalone`, berjalan sebagai pengguna non-root, dan tidak mengaktifkan hot reload. PostgreSQL tidak membuka port host; Next.js hanya membuka port pada loopback host untuk diakses reverse proxy HTTPS. Konfigurasi auth menolak origin HTTP pada production. Reverse proxy, domain, kebijakan akun resmi/SSO, backend workflow beserta otorisasi mutasi, penyimpanan lampiran, backup/restore terjadwal, dan pemeriksaan keamanan dependency harus diselesaikan sebelum layanan dibuka ke pengguna kampus. Volume mempertahankan data, tetapi bukan pengganti backup. Jangan menjalankan seed demo pada production.
+
+Panduan teknis: [Compose Watch](https://docs.docker.com/compose/how-tos/file-watch/), [urutan startup Compose](https://docs.docker.com/compose/how-tos/startup-order/), [Next.js standalone](https://nextjs.org/docs/app/api-reference/config/next-config-js/output), dan [image PostgreSQL](https://github.com/docker-library/docs/blob/master/postgres/README.md).
+
+### Alternatif: menjalankan Next.js di host
+
+Jika diperlukan untuk debugging khusus, jalankan `npm ci` dengan Node.js 24, nyalakan hanya layanan `db`, lalu `npm run dev`. Koneksi aplikasi memakai `APP_DB_*` dari `.env` dan host `127.0.0.1:${DB_PORT}`. Alur Docker penuh di atas adalah alur utama proyek.
 
 ### Akun demonstrasi
 
-Masukkan salah satu email berikut pada halaman login. Tidak ada password pada implementasi demonstrasi saat ini.
+Jalankan seed opsional terlebih dahulu. Masukkan salah satu email berikut dan password sesuai `DEMO_USER_PASSWORD` saat seed pertama kali membuat kredensial (contoh development: `AspirasiJTI-Dev-2026!`). Password ini hanya untuk pengujian lokal, bukan password Google kampus. Mengubah nilai environment tidak mereset kredensial yang sudah tersimpan.
 
-| Role | Email dummy |
+| Role | Email akun uji |
 | --- | --- |
 | Pelapor | `pelapor@gmail.com` |
 | Satpam | `satpam@gmail.com` |
 | Teknisi | `teknisi@gmail.com` |
 | Manajemen Jurusan | `manajemen@gmail.com` |
 
+### Perilaku autentikasi
+
+Komentar penanda migrasi auth tersedia pada seluruh `page.tsx` dan file implementasi terkait:
+
+- `AUTH-LOCAL`: form/kredensial email-password serta fixture development yang perlu ditinjau ketika login Google menjadi metode utama.
+- `AUTH-SESSION`: validasi session, adapter identitas, logout, dan konfigurasi engine autentikasi.
+- `AUTH-ROLE`: izin internal dari database aplikasi yang tetap diperlukan untuk login lokal maupun Google Workspace.
+- `AUTH-SSO`: titik integrasi provider Google yang belum diaktifkan.
+- `AUTH-SCHEMA`: penyimpanan/migrasi database; jangan menghapus data atau mengubah SQL yang sudah diterapkan saat migrasi auth.
+
+Google Workspace adalah sumber identitas/metode login; Better Auth dapat tetap menjadi engine session. Jika engine benar-benar diganti, mulai dari `src/lib/auth/server-session.ts`, lalu migrasikan handler/client dan session secara terencana. Pertahankan guard role di setiap halaman. Penanda dapat dicari dengan `rg -n 'AUTH-(LOCAL|SESSION|ROLE|SSO|SCHEMA)' src scripts`.
+
+- Login dan logout melalui `/api/auth/*`; cookie session HttpOnly diterbitkan Better Auth dan session disimpan di PostgreSQL. Masa berlaku 7 hari dengan pembaruan harian.
+- Tidak ada fallback pengguna default. Cookie email dummy lama diabaikan. Setiap halaman protected memeriksa session; setiap halaman role memeriksa role database saat request server.
+- Pendaftaran publik email/password dinonaktifkan. Role, status aktif, dan metadata institusi tidak dapat diubah melalui input auth pengguna.
+- Akun nonaktif ditolak saat membuat session dan saat mengakses halaman protected, termasuk session yang dibuat sebelum akun dinonaktifkan.
+- Login dibatasi 5 percobaan per menit per IP. Rate limit masih in-memory per proses; gunakan penyimpanan bersama bila deployment memakai beberapa instance. Konfigurasi IP reverse proxy harus ditinjau saat hosting.
+- SSO/Google, verifikasi email dan reset password melalui email belum diaktifkan. Tabel `verifications` disediakan untuk kebutuhan auth berikutnya, bukan berarti fitur pengiriman email sudah tersedia.
+- Jangan menyalin volume atau akun demo ke production. Penyediaan akun resmi akan ditentukan setelah konfigurasi SSO kampus jelas.
+
+### Pengujian autentikasi
+
+`npm run test:auth-config` menguji validasi secret dan origin. `test:auth-smoke` memeriksa API serta otorisasi route HTTP (tanpa browser): cookie lama, password salah, penolakan registrasi, empat role, pencegahan perubahan role, origin tidak tepercaya, logout, dan rate limit. Jalankan setelah seed di server development lokal:
+
+```powershell
+$env:NODE_ENV='development'
+npm run test:auth-smoke
+```
+
+Smoke check dijalankan dari host dengan Node.js agar origin loopback mengarah ke server yang sama dengan browser. Node.js host tidak diperlukan untuk menjalankan aplikasi melalui Docker. Tunggu setidaknya satu menit sebelum mengulang tes karena sengaja menguji batas login. Validasi tampilan/interaksi browser tetap manual.
+
 ## Perintah yang tersedia
 
 ```bash
 npm run dev      # Menjalankan server pengembangan
 npm run lint     # Memeriksa aturan ESLint
-npx tsc --noEmit # Memeriksa tipe TypeScript
+npm run typecheck # Memeriksa tipe TypeScript
 npm run build    # Membuat production build
 npm run start    # Menjalankan production build
+npm run db:generate # Membuat SQL migrasi dari perubahan schema
+npm run db:migrate  # Menerapkan migrasi ke database
+npm run db:check    # Memeriksa koneksi dan tabel pengguna
+npm run db:seed     # Menambahkan pengguna demo pada development
+npm run test:db-config # Memeriksa URL, karakter khusus, dan validasi konfigurasi database
+npm run test:auth-config # Memeriksa konfigurasi secret dan origin autentikasi
+npm run test:auth-smoke  # Pengujian API/route lokal setelah seed (NODE_ENV=development)
 ```
+
+## Backend Pelapor
+
+Dashboard, Buat Laporan, Laporan Saya/detail, draft, lampiran, dan notifikasi Pelapor sudah menggunakan PostgreSQL. Profil memakai identitas database dari session. Data demonstrasi Pelapor tidak dimasukkan otomatis; akun yang belum mengirim laporan akan melihat ringkasan kosong.
+
+Schema auth tetap berada di `src/db/schema.ts`. Schema laporan bersama berada di `src/db/reports-schema.ts` dan diekspor lewat schema utama. Migrasi `0002` membuat tabel serta pilihan referensi lokasi/objek/layanan dari form yang ada; ini bukan seed akun/laporan demo. Migrasi berikutnya menambah constraint dan index. Jangan mengubah migrasi yang sudah diterapkan. Nilai referensi tambahan/perubahan berikutnya dibuat lewat migrasi baru, bukan mengganti label/ID yang telah dipakai.
+
+Struktur fitur laporan:
+
+- `domain/`: kategori, status/lifecycle, routing pengelola, validasi field dan lampiran; tanpa React/Next/Drizzle.
+- `application/`: proses aplikasi dan kontrak repository/storage. ESLint membatasi import UI/framework/infrastructure pada kedua lapisan ini.
+- `infrastructure/`: adapter Drizzle, penyimpanan privat, dan validasi HTTP/session/origin.
+- `server.ts`: merangkai implementasi adapter; halaman/API menjadi pemanggil tipis.
+- `components/`: presentasi Shadcn dan state interaksi. Detail baru dimuat ketika modal dibuka.
+
+Satu laporan dipakai lintas role; kategori menentukan Satpam/Teknisi/Manajemen di server. Pelapor hanya boleh membaca laporan, draft, lampiran, dan notifikasinya sendiri. Identitas/role/status dari request tidak dipercaya. Pengiriman membuat laporan, detail kategori, pemindahan lampiran draft, riwayat awal, dan notifikasi dalam transaksi. Counter tiket tahunan dibuat atomik; retry dengan submission key yang sama tidak menggandakan laporan. Draft memiliki revision untuk mencegah perubahan tertimpa, belum mendapat nomor tiket, dan tidak masuk KPI/statistik.
+
+Daftar laporan/draft/notifikasi memakai cursor pagination (20 per halaman). Index mendukung pemilik/tanggal, antrean pengelola/status, kategori/periode, lokasi aktif, penyelesaian, dan notifikasi belum dibaca. KPI dihitung lewat agregasi SQL, bukan mengambil seluruh laporan ke browser. Presisi timestamp laporan disamakan ke milidetik agar cursor tidak kehilangan presisi. Counter dapat memiliki gap setelah pengujian/penghapusan; nomor tiket tidak harus berurutan tanpa celah.
+
+Lampiran disimpan di volume Docker `report_uploads` pada `/app/storage/reports`, di luar `public` dan di luar image/build. Database menyimpan metadata/kunci acak, bukan file. Endpoint download memeriksa session dan pemilik, menggunakan `no-store` dan `nosniff`. Maksimal 4 file, 5 MB per file, total request dibatasi 22 MB; server memeriksa signature JPG/PNG/PDF. Backup production harus mencakup database **dan** volume lampiran. Sebelum production, tetapkan kuota storage, pemindaian malware, rate limit laporan, serta pembersihan file orphan apabila proses terhenti di antara penulisan file dan commit database. Penyimpanan filesystem dapat diganti melalui kontrak storage ketika diperlukan object storage.
+
+Password empat akun development (`pelapor@gmail.com`, `satpam@gmail.com`, `teknisi@gmail.com`, `manajemen@gmail.com`) berasal dari `DEMO_USER_PASSWORD` di `.env`. Nilai contoh adalah `AspirasiJTI-Dev-2026!`. Fixture hanya berisi identitas; password di database berupa hash. Seed tidak mengganti password akun yang telah ada. Gunakan origin/port yang cocok dengan `BETTER_AUTH_URL` (setup lokal saat ini Docker port 3001); membuka server host di port lain bisa menyebabkan penolakan origin. Tidak ada akun admin demo.
+
+Pengujian tambahan:
+
+```powershell
+npm run test:reports # Unit domain/application tanpa UI/database
+# Jalankan di container development yang memiliki volume lampiran yang sama dengan aplikasi.
+# Ganti nilai password dengan DEMO_USER_PASSWORD lokal bila diubah.
+docker compose -f compose.yaml -f compose.dev.yaml exec -T -e DEMO_USER_PASSWORD=AspirasiJTI-Dev-2026! -e REPORT_SMOKE_CONNECT_URL=http://127.0.0.1:3000 app npm run test:reports-smoke
+```
+
+Smoke test membuat akun dan laporan sementara, lalu menghapus data/file milik akun pengujian dalam `finally`. Tidak mengubah akun/laporan demo milik pengguna. Ini pengujian HTTP/database, bukan browser automation. Pemeriksaan tampilan/interaksi dilakukan manual.
 
 ## Batasan MVP
 
-- Data laporan, status, statistik, dan notifikasi masih menggunakan data demonstrasi di sisi frontend.
-- Login memakai sesi cookie dummy; belum terhubung ke SSO POLIJE.
-- Aturan otorisasi route bersifat demonstratif dan belum menggantikan policy backend.
+- Halaman Pelapor menggunakan backend nyata. Halaman operasional Satpam/Teknisi/Manajemen serta statistik lintas role masih memakai data demonstrasi dan belum membaca laporan baru dari database.
+- Login email/password sudah memakai Better Auth; SSO POLIJE belum terhubung.
+- Otorisasi halaman dan endpoint Pelapor memakai session/role database. Mutasi penanganan oleh Satpam/Teknisi/Manajemen masih demonstratif; policy backend berikutnya harus menangani transisi status, pencocokan, dan penyerahan.
 - Ekspor rekap belum menghasilkan berkas operasional nyata.
 - Agregasi prioritas fasilitas menunjukkan konsentrasi laporan aktif, bukan penilaian bahaya atau risiko teknis.
 
 ## Arah pengembangan berikutnya
 
 1. Integrasi SSO POLIJE dan pemetaan role dari sumber identitas resmi.
-2. Backend tiket, basis data, status history, dan policy akses per role.
+2. Hubungkan role operasional ke schema laporan bersama, dengan backend transisi status, pencocokan/penyerahan, serta policy akses per role.
 3. Notifikasi persisten untuk perubahan status dan tindakan pengelola.
 4. Lampiran berkas, ekspor rekap, serta audit aktivitas.
 5. Pengujian end-to-end untuk lifecycle masing-masing kategori laporan.

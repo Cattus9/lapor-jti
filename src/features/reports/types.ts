@@ -1,10 +1,12 @@
-export type ReportCategory = "kehilangan-temuan" | "fasilitas" | "layanan" | "lainnya"
-export type ReportStatus = "baru" | "diverifikasi" | "diproses" | "selesai"
+import type { ReportCategory, ReportStatus } from "./domain/report"
+export type { ReportCategory, ReportStatus } from "./domain/report"
 
 export type ReportAttachment = {
   name: string
   type: "image" | "document"
   previewUrl?: string
+  id?: string
+  downloadUrl?: string
 }
 
 export type ReportDetail = {
@@ -23,4 +25,7 @@ export type ReportSummary = {
   status: ReportStatus
   updatedAt: string
   detail: ReportDetail
+  history?: Array<{ status: ReportStatus; actor: string; note: string; createdAt: string }>
 }
+
+export type ReportListItem = Omit<ReportSummary, "detail"> & { id: string }

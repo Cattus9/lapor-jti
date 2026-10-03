@@ -2,7 +2,8 @@ import Link from "next/link"
 import { ArrowRight, CheckCircle2, CircleDotDashed, Clock3, FileSearch, Wrench } from "lucide-react"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Card } from "@/components/ui/card"
-import type { ReportSummary } from "@/features/reports/types"
+import type { ReportListItem } from "@/features/reports/types"
+import { statusLabels as statusLabel } from "../domain/report"
 
 const categoryIcon = {
   "kehilangan-temuan": FileSearch,
@@ -18,9 +19,7 @@ const categoryLabel = {
   lainnya: "Lainnya",
 }
 
-const statusLabel = { baru: "Baru", diverifikasi: "Diverifikasi", diproses: "Diproses", selesai: "Selesai" }
-
-export function ReportActivityPanel({ reports }: { reports: ReportSummary[] }) {
+export function ReportActivityPanel({ reports }: { reports: ReportListItem[] }) {
   return (
     <Card className="gap-0 rounded-2xl bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
       <div className="rounded-xl border border-border/60 bg-card p-4 shadow-2xs">
@@ -37,7 +36,7 @@ export function ReportActivityPanel({ reports }: { reports: ReportSummary[] }) {
           {reports.map((report) => {
             const Icon = categoryIcon[report.category]
             return (
-              <Link key={report.ticketNumber} href="/pelapor/laporan-saya" className="group flex items-center gap-3 rounded-lg border border-border/60 p-3 transition-colors hover:bg-muted/50">
+              <Link key={report.id} href={`/pelapor/laporan-saya?ticket=${encodeURIComponent(report.ticketNumber)}`} className="group flex items-center gap-3 rounded-lg border border-border/60 p-3 transition-colors hover:bg-muted/50">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground">
                   <Icon className="size-4" strokeWidth={1.75} />
                 </div>
@@ -49,6 +48,7 @@ export function ReportActivityPanel({ reports }: { reports: ReportSummary[] }) {
               </Link>
             )
           })}
+          {!reports.length ? <div className="rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">Belum ada laporan. Mulai dengan membuat laporan pertama Anda.</div> : null}
         </div>
       </div>
       <Link href="/pelapor/laporan-saya" className="group flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">

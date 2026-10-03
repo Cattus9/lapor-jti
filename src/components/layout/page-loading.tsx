@@ -1,4 +1,6 @@
 "use client"
+// [AUTH-ROLE] Role hanya memilih bentuk skeleton dan navigasi saat loading.
+// Skeleton tidak memvalidasi session atau memberi izin akses; pemeriksaan tetap berada pada layout/page server.
 
 import { usePathname } from "next/navigation"
 import type { ReactNode } from "react"

@@ -1,4 +1,6 @@
 "use client"
+// [AUTH-ROLE] Menu mengikuti role aplikasi untuk presentasi, bukan bukti otorisasi.
+// Login Google Workspace tetap memakai role database; akses URL diperiksa pada server.
 
 import * as React from "react"
 import Image from "next/image"

@@ -79,7 +79,7 @@ function StatusHistory({ activities }: { activities: ManagementReportActivity[] 
             <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <p className="text-sm font-medium text-foreground">{activity.status}</p>
+                <ManagementStatusBadge status={activity.status} />
                 <span className="text-xs text-muted-foreground">{activity.timestamp}</span>
               </div>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Oleh {activity.actor}. {activity.note}</p>
