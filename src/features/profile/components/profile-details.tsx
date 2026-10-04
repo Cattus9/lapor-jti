@@ -1,17 +1,13 @@
 import { ExternalLink, IdCard, Mail, ShieldCheck, UserRound, UserRoundCheck } from "lucide-react"
 // [AUTH-ROLE] CurrentUser/AppRole dipakai untuk presentasi setelah validasi pada halaman server.
 // Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { UserAvatar } from "@/components/user-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
 const roleLabel = { pelapor: "Pelapor", satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan", admin: "Admin Sistem" } as const
-
-function initials(name: string) {
-  return name.split(" ").slice(0, 2).map((part) => part[0]).join("").toUpperCase()
-}
 
 function DetailItem({ label, value, icon: Icon }: { label: string; value: string; icon: typeof UserRound }) {
   return <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/40 p-3.5"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Icon className="size-4" aria-hidden="true" /></span><div className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 truncate text-sm font-medium text-foreground">{value}</dd></div></div>
@@ -27,7 +23,7 @@ export function ProfileDetails({ user }: { user: CurrentUser }) {
       <div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs">
         <CardHeader className="gap-4 border-b border-border/60 p-5 md:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <Avatar size="lg" className="size-16"><AvatarImage src={user.avatar} alt={user.name} /><AvatarFallback className="text-lg font-semibold">{initials(user.name)}</AvatarFallback></Avatar>
+            <UserAvatar user={user} size="lg" className="size-16" fallbackClassName="text-lg" />
             <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><CardTitle className="text-xl md:text-2xl">{user.name}</CardTitle><Badge variant="secondary">{roleLabel[user.role]}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{user.email}</p><p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"><ShieldCheck className="size-3.5 text-primary" aria-hidden="true" />Data identitas dari database AspirasiJTI</p></div>
           </div>
         </CardHeader>

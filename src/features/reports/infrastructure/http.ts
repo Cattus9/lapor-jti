@@ -16,7 +16,7 @@ export async function apiResult(run: () => Promise<unknown>) {
   try { return Response.json(await run(), { headers: { "Cache-Control": "private, no-store" } }) }
   catch (error) {
     if (error instanceof ReportError) return Response.json({ error: error.message }, { status: error.status, headers: { "Cache-Control": "private, no-store" } })
-    console.error("Pelapor request failed. Check database/storage availability.")
+    console.error("Report request failed. Check database/storage availability.")
     return Response.json({ error: "Permintaan belum berhasil. Silakan coba lagi." }, { status: 500 })
   }
 }

@@ -63,3 +63,4 @@ export type DatabaseUser = typeof users.$inferSelect
 export type NewDatabaseUser = typeof users.$inferInsert
 
 export * from "./reports-schema"
+export * from "./lost-found-schema"

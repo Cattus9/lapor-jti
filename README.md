@@ -276,19 +276,56 @@ docker compose -f compose.yaml -f compose.dev.yaml exec -T -e DEMO_USER_PASSWORD
 
 Smoke test membuat akun dan laporan sementara, lalu menghapus data/file milik akun pengujian dalam `finally`. Tidak mengubah akun/laporan demo milik pengguna. Ini pengujian HTTP/database, bukan browser automation. Pemeriksaan tampilan/interaksi dilakukan manual.
 
+## Backend Satpam
+
+Dashboard, Kehilangan & Temuan, pencocokan, penyerahan, riwayat dan notifikasi Satpam sudah membaca PostgreSQL. Profil tetap memakai identitas session. Laporan Kehilangan & Temuan dari Pelapor otomatis masuk antrean Satpam dan menghasilkan notifikasi. Teknisi/Manajemen belum dihubungkan pada tahap ini.
+
+Implementasi berada di `src/features/lost-found`: `domain/` memvalidasi perintah dan filter, `application/` menangani policy melalui kontrak repository/storage, `infrastructure/` menyediakan transaksi Drizzle dan pemeriksaan HTTP, sedangkan `server.ts` merangkai adapter. Halaman/API tetap memeriksa session dan role Satpam; UI bukan sumber otorisasi.
+
+Migrasi `0005` menambah `security_officers`, `lost_found_matches`, `report_handovers`, serta index antrean pengelola/tanggal. Petugas merupakan identitas operasional, **bukan akun login tambahan**. Akun Satpam dapat tetap digunakan bersama. Nama petugas dipilih wajib hanya saat penyerahan; pencocokan dan perubahan status tetap mencatat akun session. Nama petugas dan akun pencatat disalin ke transaksi agar riwayat tidak berubah ketika nama diperbarui atau petugas dinonaktifkan. Pemilihan dropdown tidak membuktikan identitas individu yang menggunakan akun bersama.
+
+Alur utama: **Baru → Diverifikasi → Diproses → Barang teridentifikasi → Diserahkan → Selesai**. Laporan Baru dapat ditolak dengan alasan wajib. Pencocokan harus menghubungkan satu kehilangan dan satu temuan yang keduanya Diproses. Penyerahan membutuhkan petugas aktif, penerima dan lokasi. Pencocokan, penyerahan dan penyelesaian memperbarui **kedua tiket** dalam transaksi, termasuk riwayat dan notifikasi masing-masing Pelapor. Penyelesaian dari salah satu tiket menutup pasangan setelah ada penyerahan, bukan melompati tahapan.
+
+Lock baris menggunakan urutan UUID yang konsisten; constraint unik mencegah pasangan/penyerahan ganda. Permintaan yang bertabrakan dengan status terbaru ditolak dengan HTTP 409. Identitas akun/nama petugas dari browser tidak dipercaya. Lampiran Satpam hanya tersedia untuk laporan Kehilangan & Temuan yang sudah dikirim, bukan draft atau kategori lain.
+
+Pencarian/filter dikerjakan di SQL sebelum cursor pagination (20 item, dengan Muat lainnya). Cursor memakai tanggal dan UUID agar stabil ketika timestamp sama. Lampiran diambil secara batch per halaman, detail/riwayat dimuat saat modal dibuka, dan skeleton/error digunakan selama request. Riwayat dapat difilter berdasarkan petugas, pencarian dan periode penyerahan WIB; petugas nonaktif tetap dapat dipakai sebagai filter riwayat. Index bukan jaminan optimasi pencarian substring: tinjau query plan dan kebutuhan `pg_trgm` saat volume meningkat.
+
+### Petugas contoh khusus development
+
+`scripts/fixtures/security-officers.ts` menyediakan **Satpam 1 (contoh)** dan **Satpam 2 (contoh)**, sesuai kebutuhan satu akun bersama. Migrasi tidak memasukkan petugas contoh. Seed bersifat opsional, menolak environment selain development, dan tidak dijalankan otomatis oleh Dockerfile atau saat aplikasi dimulai.
+
+```powershell
+npm run db:migrate
+$env:NODE_ENV='development'
+npm run db:seed-officers # Hanya petugas contoh, tanpa mengubah akun/password
+```
+
+`npm run db:seed` juga menyediakan petugas contoh ketika menyiapkan akun demo. Seed memakai ID tetap dan tidak mengganti petugas yang sudah ada. Pada production, sediakan nama petugas resmi melalui proses provisioning database yang terkontrol; jangan jalankan seed development atau membawa volume demo. Jika belum ada petugas aktif, penyerahan diblokir. Halaman pengelolaan petugas belum dibuat.
+
+### Pengujian Satpam
+
+```powershell
+npm run test:satpam # Unit domain/application
+# Jalankan pada container development lokal yang memiliki volume lampiran aplikasi.
+# Gunakan DEMO_USER_PASSWORD lokal jika berbeda dari contoh.
+docker compose -f compose.yaml -f compose.dev.yaml exec -T -e DEMO_USER_PASSWORD=AspirasiJTI-Dev-2026! -e REPORT_SMOKE_CONNECT_URL=http://127.0.0.1:3000 app npm run test:satpam-smoke
+```
+
+Smoke test memakai akun, laporan dan petugas sementara yang dibersihkan dalam `finally`, tanpa mengubah data pengguna. Cakupan: hak akses/session/origin, isolasi draft/lampiran, transisi status, pencocokan bersamaan, penyerahan bersamaan, petugas wajib/aktif, snapshot identitas, penyelesaian pasangan, notifikasi, pencarian literal, pagination dan route Satpam. Ini pengujian HTTP/database, bukan browser automation. Tampilan dropdown, modal, skeleton dan responsivitas diuji manual oleh pengguna.
+
 ## Batasan MVP
 
-- Halaman Pelapor menggunakan backend nyata. Halaman operasional Satpam/Teknisi/Manajemen serta statistik lintas role masih memakai data demonstrasi dan belum membaca laporan baru dari database.
+- Halaman Pelapor dan operasional Satpam menggunakan backend nyata. Teknisi/Manajemen serta statistik lintas role masih memakai data demonstrasi dan belum membaca laporan baru dari database.
 - Login email/password sudah memakai Better Auth; SSO POLIJE belum terhubung.
-- Otorisasi halaman dan endpoint Pelapor memakai session/role database. Mutasi penanganan oleh Satpam/Teknisi/Manajemen masih demonstratif; policy backend berikutnya harus menangani transisi status, pencocokan, dan penyerahan.
+- Otorisasi halaman dan endpoint Pelapor/Satpam memakai session/role database. Mutasi penanganan Teknisi/Manajemen masih demonstratif; policy backend berikutnya harus menangani lifecycle kategorinya.
 - Ekspor rekap belum menghasilkan berkas operasional nyata.
 - Agregasi prioritas fasilitas menunjukkan konsentrasi laporan aktif, bukan penilaian bahaya atau risiko teknis.
 
 ## Arah pengembangan berikutnya
 
 1. Integrasi SSO POLIJE dan pemetaan role dari sumber identitas resmi.
-2. Hubungkan role operasional ke schema laporan bersama, dengan backend transisi status, pencocokan/penyerahan, serta policy akses per role.
-3. Notifikasi persisten untuk perubahan status dan tindakan pengelola.
+2. Hubungkan Teknisi/Manajemen ke schema laporan bersama, dengan transisi status dan policy akses per role.
+3. Perluas notifikasi persisten ke tindakan Teknisi/Manajemen.
 4. Lampiran berkas, ekspor rekap, serta audit aktivitas.
 5. Pengujian end-to-end untuk lifecycle masing-masing kategori laporan.
 

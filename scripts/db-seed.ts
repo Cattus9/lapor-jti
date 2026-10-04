@@ -5,8 +5,9 @@ import "dotenv/config"
 import { and, eq, sql } from "drizzle-orm"
 import { hashPassword } from "better-auth/crypto"
 import { createDatabaseClient } from "../src/db/client"
-import { accounts, users } from "../src/db/schema"
+import { accounts, users, securityOfficers } from "../src/db/schema"
 import { demoUsers } from "./fixtures/demo-users"
+import { demoSecurityOfficers } from "./fixtures/security-officers"
 
 async function main() {
   if (process.env.NODE_ENV !== "development") {
@@ -48,7 +49,8 @@ async function main() {
         newAccounts += insertedAccounts.length
       })
     }
-    console.log(`Development seed completed (${newUsers} new users, ${newAccounts} new credential accounts). Existing credentials were preserved.`)
+    await db.insert(securityOfficers).values(demoSecurityOfficers.map((officer) => ({ ...officer }))).onConflictDoNothing()
+    console.log(`Development seed completed (${newUsers} new users, ${newAccounts} new credential accounts). Existing credentials and officer records were preserved.`)
   } finally {
     await pool.end()
   }

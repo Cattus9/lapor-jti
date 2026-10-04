@@ -23,6 +23,7 @@ export const reports = pgTable("reports", {
   index("reports_reporter_date_idx").on(t.reporterId, t.submittedAt.desc(), t.id.desc()),
   index("reports_reporter_updated_idx").on(t.reporterId, t.updatedAt.desc(), t.id.desc()),
   index("reports_handler_status_date_idx").on(t.handlerRole, t.status, t.submittedAt.desc()),
+  index("reports_handler_date_idx").on(t.handlerRole, t.submittedAt.desc(), t.id.desc()),
   index("reports_category_date_idx").on(t.category, t.submittedAt),
   index("reports_location_active_idx").on(t.locationId, t.status).where(sql`${t.status} not in ('selesai', 'ditolak')`),
   index("reports_completed_at_idx").on(t.completedAt).where(sql`${t.completedAt} is not null`),

@@ -16,7 +16,7 @@ function NotificationIcon({ kind }: { kind: NotificationItem["kind"] }) {
   return <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-primary shadow-2xs"><Icon className="size-4" aria-hidden="true" /></span>
 }
 
-export function NotificationList({ initialItems, detailHref, persistRead = false, initialUnread }: { initialItems: NotificationItem[]; detailHref: string; persistRead?: boolean; initialUnread?: number }) {
+export function NotificationList({ initialItems, detailHref, persistRead = false, initialUnread, apiEndpoint = "/api/pelapor/notifications" }: { initialItems: NotificationItem[]; detailHref: string; persistRead?: boolean; initialUnread?: number; apiEndpoint?: string }) {
   const router = useRouter()
   const [items, setItems] = useState(initialItems)
   const [totalUnread, setTotalUnread] = useState(initialUnread)
@@ -30,7 +30,7 @@ export function NotificationList({ initialItems, detailHref, persistRead = false
     if (!persistRead) return true
     setPending(true); setError("")
     try {
-      const response = await fetch("/api/pelapor/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(id ? { id } : { all: true }) })
+      const response = await fetch(apiEndpoint, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(id ? { id } : { all: true }) })
       if (!response.ok) { const data = await response.json(); throw new Error(data.error || "Notifikasi belum berhasil diperbarui.") }
       return true
     } catch (error) { setError(error instanceof Error ? error.message : "Koneksi bermasalah."); return false }

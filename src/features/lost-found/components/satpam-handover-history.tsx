@@ -2,7 +2,7 @@
 // [AUTH-ROLE] CurrentUser/AppRole dipakai untuk presentasi setelah validasi pada halaman server.
 // Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import Image from "next/image"
 import { Archive, CalendarDays, Handshake, ImageIcon, Images, MapPin, Package, PackageSearch, Search, SlidersHorizontal, UserRound } from "lucide-react"
 import { ContentShell } from "@/components/layout/content-shell"
@@ -18,7 +18,10 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { satpamHandoverHistory, type SatpamHandoverHistoryItem } from "@/features/lost-found/mock/satpam-history"
+import type { SatpamHandoverHistoryItem, SecurityOfficer } from "../types"
+import { useSatpamPage, useDebouncedSatpamQuery } from "./use-satpam-data"
+import { SatpamPageFeedback } from "./satpam-page-feedback"
+import { getTodayInWib } from "../../reports/domain/report-date"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
 function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
@@ -36,10 +39,10 @@ function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
             <span>Riwayat penyerahan</span>
             <span aria-hidden="true">·</span>
             <span>{item.completedAt}</span>
-            <StatusBadge className="ml-auto" status="Selesai" />
+            <StatusBadge className="ml-auto" status={item.status} />
           </div>
           <DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">{item.title}</DialogTitle>
-          <DialogDescription className="mt-2">Laporan kehilangan dan temuan telah ditangani satpam, lalu barang diserahkan.</DialogDescription>
+          <DialogDescription className="mt-2">Barang telah diserahkan. Catatan petugas diambil dari transaksi penyerahan.</DialogDescription>
         </div>
         <div className="space-y-6 p-5 md:p-6">
           <section>
@@ -85,10 +88,14 @@ function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
                 <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><UserRound className="size-3.5" aria-hidden="true" />Penanggung jawab</dt>
                 <dd className="mt-1.5 text-sm font-medium text-foreground">{item.handler}</dd>
               </div>
+              <div className="border-t border-border/60 p-4 sm:col-span-2">
+                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><UserRound className="size-3.5" aria-hidden="true" />Dicatat melalui akun</dt>
+                <dd className="mt-1.5 text-sm font-medium text-foreground">{item.actor}</dd>
+              </div>
             </dl>
             <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-4">
               <p className="text-xs text-muted-foreground">Catatan penyerahan</p>
-              <p className="mt-1.5 text-sm leading-relaxed text-foreground">{item.handoverNote}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-foreground">{item.handoverNote || "Tidak ada catatan tambahan."}</p>
             </div>
           </section>
           <section className="border-t border-border/60 pt-6">
@@ -212,7 +219,7 @@ function HistoryRow({ item }: { item: SatpamHandoverHistoryItem }) {
             <p className="mt-1 text-xs text-muted-foreground">Penerima: {item.recipient}</p>
           </div>
         </div>
-        <StatusBadge className="shrink-0" status="Selesai" />
+        <StatusBadge className="shrink-0" status={item.status} />
       </div>
       <div className="mt-4 border-t border-border/60 pt-4">
         <p className="text-xs font-medium text-muted-foreground">Ciri barang</p>
@@ -248,21 +255,7 @@ const datePresets: { value: DatePreset; label: string }[] = [
   { value: "custom", label: "Atur tanggal" },
 ]
 
-const handlers = [...new Set(satpamHandoverHistory.map((item) => item.handler))].sort((a, b) => a.localeCompare(b, "id"))
 
-function localIsoDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-function recentStartDate(days: number) {
-  const date = new Date()
-  date.setHours(0, 0, 0, 0)
-  date.setDate(date.getDate() - days + 1)
-  return localIsoDate(date)
-}
 
 function shortDate(value: string) {
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`))
@@ -315,7 +308,9 @@ function DateFilterControls({ preset, from, to, onPresetChange, onFromChange, on
   )
 }
 
-export function SatpamHandoverHistory({ user }: { user: CurrentUser }) {
+export function SatpamHandoverHistory({ user, officers }: { user: CurrentUser; officers: SecurityOfficer[] }) {
+  const handlers = officers.map((officer) => officer.id)
+  const officerName = (id: string) => officers.find((officer) => officer.id === id)?.name ?? id
   const [query, setQuery] = useState("")
   const [datePreset, setDatePreset] = useState<DatePreset>("all")
   const [dateFrom, setDateFrom] = useState("")
@@ -324,21 +319,15 @@ export function SatpamHandoverHistory({ user }: { user: CurrentUser }) {
   const hasDateFilter = datePreset === "7d" || datePreset === "30d" || (datePreset === "custom" && Boolean(dateFrom || dateTo))
   const activeFilterCount = Number(hasDateFilter) + Number(handlerFilter !== "all")
   const activeDateLabel = dateFilterLabel(datePreset, dateFrom, dateTo)
-  const items = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("id-ID")
-    const recentFrom = datePreset === "7d" ? recentStartDate(7) : datePreset === "30d" ? recentStartDate(30) : ""
-    const today = localIsoDate(new Date())
-
-    return satpamHandoverHistory.filter((item) => {
-      const searchText = `${item.title} ${item.itemCategory} ${item.itemDescription} ${item.lostTicket} ${item.foundTicket} ${item.recipient} ${item.handler}`.toLocaleLowerCase("id-ID")
-      const handoverDate = item.handedOverAtIso.slice(0, 10)
-      if (normalizedQuery && !searchText.includes(normalizedQuery)) return false
-      if (handlerFilter !== "all" && item.handler !== handlerFilter) return false
-      if (recentFrom && (handoverDate < recentFrom || handoverDate > today)) return false
-      if (datePreset === "custom" && ((dateFrom && handoverDate < dateFrom) || (dateTo && handoverDate > dateTo))) return false
-      return true
-    }).sort((a, b) => b.handedOverAtIso.localeCompare(a.handedOverAtIso))
-  }, [query, datePreset, dateFrom, dateTo, handlerFilter])
+  const search = useDebouncedSatpamQuery(query)
+  const from = datePreset === "7d" ? getTodayInWib(new Date(new Date().getTime() - 6 * 86400000)) : datePreset === "30d" ? getTodayInWib(new Date(new Date().getTime() - 29 * 86400000)) : datePreset === "custom" ? dateFrom : ""
+  const to = datePreset === "7d" || datePreset === "30d" ? getTodayInWib() : datePreset === "custom" ? dateTo : ""
+  const params = new URLSearchParams({ q: search })
+  if (from) params.set("from", from)
+  if (to) params.set("to", to)
+  if (handlerFilter !== "all") params.set("officerId", handlerFilter)
+  const page = useSatpamPage<SatpamHandoverHistoryItem>(`/api/satpam/history?${params}`)
+  const items = page.items
 
   const resetFilters = () => {
     setDatePreset("all")
@@ -355,18 +344,18 @@ export function SatpamHandoverHistory({ user }: { user: CurrentUser }) {
   return (
     <DashboardLayout role="satpam">
       <ContentShell>
-        <PageHeader title="Riwayat" description={`Arsip penyerahan barang yang telah selesai, ${user.name}.`} />
+        <PageHeader title="Riwayat" description={`Arsip penyerahan barang yang telah dicatat, ${user.name}.`} />
         <Card className="shrink-0 gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
           <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">
             <Archive className="size-4 text-primary" aria-hidden="true" />
             Riwayat penyerahan
-            <span className="ml-auto rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">{satpamHandoverHistory.length} selesai</span>
+            <span className="ml-auto rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">{page.total} penyerahan</span>
           </div>
           <div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs">
             <CardContent className="space-y-4 p-4 md:p-5">
               <div className="border-b border-border/60 pb-4">
-                <h2 className="text-base font-semibold text-foreground">Penyerahan selesai</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Pasangan laporan kehilangan dan temuan yang telah ditutup.</p>
+                <h2 className="text-base font-semibold text-foreground">Riwayat penyerahan</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Catatan penyerahan beserta penerima dan petugas penanggung jawab.</p>
                 <div className="mt-4 flex items-end gap-2">
                   <div className="grid min-w-0 flex-1 gap-1 lg:max-w-sm">
                     <label htmlFor="history-search" className="text-xs font-medium text-muted-foreground">Cari riwayat</label>
@@ -390,14 +379,14 @@ export function SatpamHandoverHistory({ user }: { user: CurrentUser }) {
                     </div>
                     <div className="grid gap-1">
                       <span className="text-xs font-medium text-muted-foreground">Penanggung jawab</span>
-                      <Select value={handlerFilter} onValueChange={(value) => setHandlerFilter(value ?? "all")}>
+                      <Select items={[{ value: "all", label: "Semua satpam" }, ...officers.map((o) => ({ value: o.id, label: o.name }))]} value={handlerFilter} onValueChange={(value) => setHandlerFilter(value ?? "all")}>
                         <SelectTrigger className="h-9 w-48 bg-background" aria-label="Filter Satpam penanggung jawab">
                           <UserRound className="size-4" aria-hidden="true" />
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">Semua satpam</SelectItem>
-                          {handlers.map((handler) => <SelectItem key={handler} value={handler}>{handler}</SelectItem>)}
+                          {handlers.map((handler) => <SelectItem key={handler} value={handler}>{officerName(handler)}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -420,7 +409,7 @@ export function SatpamHandoverHistory({ user }: { user: CurrentUser }) {
                           <div className="flex flex-wrap gap-2" role="group" aria-label="Filter Satpam penanggung jawab">
                             {["all", ...handlers].map((handler) => (
                               <Button key={handler} type="button" size="sm" variant={handlerFilter === handler ? "secondary" : "outline"} aria-pressed={handlerFilter === handler} onClick={() => setHandlerFilter(handler)}>
-                                {handler === "all" ? "Semua satpam" : handler}
+                                {handler === "all" ? "Semua satpam" : officerName(handler)}
                               </Button>
                             ))}
                           </div>
@@ -436,22 +425,22 @@ export function SatpamHandoverHistory({ user }: { user: CurrentUser }) {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2" aria-live="polite">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xs text-muted-foreground">{items.length} arsip ditemukan</p>
+                  <p className="text-xs text-muted-foreground">{page.total} arsip ditemukan</p>
                   {hasDateFilter && <Badge variant="outline" tone="neutral">{activeDateLabel}</Badge>}
-                  {handlerFilter !== "all" && <Badge variant="outline" tone="neutral">Satpam: {handlerFilter}</Badge>}
+                  {handlerFilter !== "all" && <Badge variant="outline" tone="neutral">Satpam: {officerName(handlerFilter)}</Badge>}
                 </div>
-                {activeFilterCount > 0 && <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={resetFilters}>Reset filter</Button>}
               </div>
+              <SatpamPageFeedback loading={page.loading} error={page.error} nextCursor={page.nextCursor} loadMore={page.loadMore} />
               {items.length ? (
                 <div className="space-y-3">{items.map((item) => <HistoryRow key={item.id} item={item} />)}</div>
-              ) : (
+              ) : !page.loading && !page.error ? (
                 <div className="flex min-h-52 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center">
                   <Search className="size-6 text-muted-foreground" aria-hidden="true" />
                   <p className="mt-3 text-sm font-medium text-foreground">Tidak ada riwayat yang sesuai</p>
                   <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">Ubah kata kunci atau filter untuk menemukan arsip lain.</p>
-                  {(query || activeFilterCount > 0) && <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { setQuery(""); resetFilters() }}>Hapus pencarian dan filter</Button>}
+                  {(query || activeFilterCount > 0) && <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { setQuery(""); resetFilters() }}>Reset filter</Button>}
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </div>
         </Card>
