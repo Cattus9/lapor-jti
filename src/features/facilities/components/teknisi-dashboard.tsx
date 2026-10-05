@@ -10,10 +10,16 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TechnicianPriorityAnalysis } from "@/features/facilities/components/technician-priority-analysis"
-import { technicianOverview, technicianRepairQueue, technicianTasks } from "@/features/facilities/mock/teknisi-dashboard"
+import type { TechnicianDashboardData } from "@/features/facilities/types"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
-export function TeknisiDashboard({ user }: { user: CurrentUser }) {
+export function TeknisiDashboard({ user, data: technicianOverview }: { user: CurrentUser; data: TechnicianDashboardData }) {
+  const technicianRepairQueue = technicianOverview.queue
+  const technicianTasks = [
+    { title: "Verifikasi laporan baru", count: technicianOverview.newReports, description: "Pastikan detail kerusakan dan lokasi sebelum ditindaklanjuti." },
+    { title: "Mulai pekerjaan terverifikasi", count: technicianOverview.verifiedReports, description: "Laporan yang sudah diverifikasi dan menunggu penanganan." },
+    { title: "Lanjutkan perbaikan", count: technicianOverview.processingReports, description: "Catat hasil pekerjaan setelah kondisi fasilitas diperiksa." },
+  ]
   return (
     <DashboardLayout role="teknisi">
       <ContentShell>
@@ -21,7 +27,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
           title="Dashboard Teknisi"
           description={`Selamat datang, ${user.name}. Tinjau prioritas ruang dan kelola antrean fasilitas JTI.`}
           action={
-            <Button render={<Link href="/teknisi/laporan-fasilitas" />} size="sm" className="shrink-0">
+            <Button nativeButton={false} render={<Link href="/teknisi/laporan-fasilitas" />} size="sm" className="shrink-0">
               <ClipboardList />
               Kelola laporan
             </Button>
@@ -70,7 +76,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
           />
         </div>
 
-        <TechnicianPriorityAnalysis />
+        <TechnicianPriorityAnalysis rooms={technicianOverview.priorities} unclassifiedReports={technicianOverview.unclassifiedReports} />
 
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
           <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
@@ -91,7 +97,7 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
               </CardHeader>
               <CardContent className="space-y-2 p-4 md:p-5">
                 {technicianRepairQueue.map((item) => (
-                  <article key={item.ticket} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <article key={item.id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground">
                         <Wrench className="size-4" aria-hidden="true" />
@@ -104,13 +110,15 @@ export function TeknisiDashboard({ user }: { user: CurrentUser }) {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                       <span className="text-xs text-muted-foreground">{item.updatedAt}</span>
                       <StatusBadge status={item.status} />
+                      <Button nativeButton={false} render={<Link href={`/teknisi/laporan-fasilitas?ticket=${encodeURIComponent(item.ticket)}`} />} variant="outline" size="xs" className="bg-primary/5 text-primary hover:bg-primary/10">Detail<ArrowRight className="size-3.5" /></Button>
                     </div>
                   </article>
                 ))}
-                <Button render={<Link href="/teknisi/laporan-fasilitas" />} variant="outline" className="mt-2 w-full bg-card">
+                {!technicianRepairQueue.length ? <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Tidak ada laporan fasilitas yang menunggu penanganan.</p> : <p className="px-1 text-xs text-muted-foreground">Maksimal 5 laporan aktif terbaru.</p>}
+                <Button nativeButton={false} render={<Link href="/teknisi/laporan-fasilitas?view=all" />} variant="outline" className="mt-2 w-full bg-card">
                   Lihat semua laporan fasilitas
                   <ArrowRight />
                 </Button>

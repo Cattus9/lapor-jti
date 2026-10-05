@@ -3,6 +3,7 @@ import { test } from "node:test"
 import { assertTransition, emptyReportPayload, handlerByCategory, parsePayload, ReportError, requireReporter, validateUploads } from "../src/features/reports/domain/report"
 import { ReportService } from "../src/features/reports/application/report-service"
 import type { AttachmentStorage, ReportRepository } from "../src/features/reports/application/ports"
+import { formatCalendarDate, getTodayInWib } from "../src/features/reports/domain/report-date"
 
 const actor = { id: "55aaae7e-029c-4aee-a072-33c974ce573c", role: "pelapor" }
 const id = "3a2e2715-a970-4a5f-9e27-86f9ce51a9ed"
@@ -14,6 +15,34 @@ test("draft accepts partial data; submission requires complete category fields",
 })
 test("reject malformed dates, time, category, field types, and excessive lengths", () => {
   for (const invalid of [{ incidentDate: "2026-02-30" }, { incidentTime: "25:01" }, { category: "admin" }, { title: 123 }, { title: "x".repeat(201) }]) assert.throws(() => parsePayload({ ...complete, ...invalid }, true), ReportError)
+})
+
+test("incident dates allow today and past dates, but reject tomorrow and later in drafts and submissions", () => {
+  const now = new Date("2026-10-03T18:00:00Z") // 4 October in WIB, still 3 October in UTC.
+  for (const submit of [false, true]) {
+    for (const incidentDate of ["2026-10-04", "2026-10-03", "2024-02-29"]) assert.equal(parsePayload({ ...complete, incidentDate }, submit, now).incidentDate, incidentDate)
+    for (const incidentDate of ["2026-10-05", "2026-10-11", "2026-11-01", "2027-01-01"]) assert.throws(() => parsePayload({ ...complete, incidentDate }, submit, now), /Tanggal kejadian tidak boleh melebihi hari ini \(WIB\)/)
+  }
+  assert.equal(parsePayload({ category: "lainnya", incidentDate: "" }, false, now).incidentDate, "")
+})
+
+test("the date limit rolls over exactly at midnight WIB across months, years, and leap days", () => {
+  for (const [before, after, yesterday, today] of [
+    ["2026-10-03T16:59:59.999Z", "2026-10-03T17:00:00Z", "2026-10-03", "2026-10-04"],
+    ["2026-12-31T16:59:59.999Z", "2026-12-31T17:00:00Z", "2026-12-31", "2027-01-01"],
+    ["2028-02-28T16:59:59.999Z", "2028-02-28T17:00:00Z", "2028-02-28", "2028-02-29"],
+    ["2028-02-29T16:59:59.999Z", "2028-02-29T17:00:00Z", "2028-02-29", "2028-03-01"],
+  ]) {
+    assert.equal(getTodayInWib(new Date(before)), yesterday)
+    assert.equal(getTodayInWib(new Date(after)), today)
+    assert.throws(() => parsePayload({ ...complete, incidentDate: today }, true, new Date(before)), ReportError)
+    assert.equal(parsePayload({ ...complete, incidentDate: today }, true, new Date(after)).incidentDate, today)
+  }
+})
+
+test("calendar serialization preserves the selected day rather than shifting local midnight to UTC", () => {
+  assert.equal(formatCalendarDate(new Date(2026, 9, 4)), "2026-10-04")
+  assert.equal(formatCalendarDate(new Date(2028, 1, 29)), "2028-02-29")
 })
 test("category details must be complete; hidden data is discarded", () => {
   assert.throws(() => parsePayload({ ...complete, category: "fasilitas", facilities: ["Lainnya"] }, true), ReportError)
@@ -52,6 +81,7 @@ test("application checks role and payload before persistence", async () => {
   await assert.rejects(service.write({ ...actor, role: "admin" }, {}, [], true), ReportError)
   await assert.rejects(service.write(actor, { id: "invalid", revision: 0 }, [], true), ReportError)
   await assert.rejects(service.write(actor, { id, revision: 0, payload: complete, retainedAttachmentIds: [id, id] }, [], true), ReportError)
+  for (const submit of [false, true]) await assert.rejects(service.write(actor, { id, revision: 0, payload: { ...complete, incidentDate: "9999-12-31" } }, [], submit), /Tanggal kejadian tidak boleh melebihi hari ini/)
   assert.equal(calls(), 0)
 })
 test("application cleans staged files after a database failure", async () => {

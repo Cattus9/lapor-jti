@@ -16,15 +16,30 @@ function NotificationIcon({ kind }: { kind: NotificationItem["kind"] }) {
   return <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-primary shadow-2xs"><Icon className="size-4" aria-hidden="true" /></span>
 }
 
-export function NotificationList({ initialItems, detailHref, persistRead = false, initialUnread, apiEndpoint = "/api/pelapor/notifications" }: { initialItems: NotificationItem[]; detailHref: string; persistRead?: boolean; initialUnread?: number; apiEndpoint?: string }) {
+export function NotificationList({ initialItems, detailHref, persistRead = false, initialUnread, initialNextCursor = null, apiEndpoint = "/api/pelapor/notifications" }: { initialItems: NotificationItem[]; detailHref: string; persistRead?: boolean; initialUnread?: number; initialNextCursor?: string | null; apiEndpoint?: string }) {
   const router = useRouter()
   const [items, setItems] = useState(initialItems)
   const [totalUnread, setTotalUnread] = useState(initialUnread)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   const [filter, setFilter] = useState<"all" | "unread">("all")
+  const [nextCursor, setNextCursor] = useState(initialNextCursor)
+  const [loadingMore, setLoadingMore] = useState(false)
   const unreadCount = totalUnread ?? items.filter((item) => !item.read).length
   const visibleItems = useMemo(() => filter === "unread" ? items.filter((item) => !item.read) : items, [filter, items])
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore || pending) return
+    setLoadingMore(true); setError("")
+    try {
+      const response = await fetch(`${apiEndpoint}?cursor=${encodeURIComponent(nextCursor)}`, { cache: "no-store" })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Notifikasi belum berhasil dimuat.")
+      setItems((current) => [...new Map([...current, ...data.items as NotificationItem[]].map((item) => [item.id, item])).values()])
+      setNextCursor(data.nextCursor); setTotalUnread(data.unread)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Koneksi bermasalah.") }
+    finally { setLoadingMore(false) }
+  }
 
   async function persist(id?: string) {
     if (!persistRead) return true
@@ -37,12 +52,14 @@ export function NotificationList({ initialItems, detailHref, persistRead = false
     finally { setPending(false) }
   }
   async function markAllRead() {
+    if (loadingMore || pending) return
     if (!await persist()) return
     setItems((current) => current.map((item) => ({ ...item, read: true })))
     setTotalUnread(0)
   }
 
   async function markRead(id: string) {
+    if (loadingMore || pending) return false
     if (items.find((item) => item.id === id)?.read) return true
     if (!await persist(id)) return false
     setItems((current) => current.map((item) => item.id === id ? { ...item, read: true } : item))
@@ -62,7 +79,7 @@ export function NotificationList({ initialItems, detailHref, persistRead = false
             <p className="text-base font-semibold text-foreground">Pemberitahuan</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{unreadCount ? `${unreadCount} belum dibaca` : "Semua sudah dibaca"}</p>
           </div>
-          <Button type="button" variant="outline" size="sm" className="w-full bg-card md:w-auto" onClick={markAllRead} disabled={!unreadCount || pending}><CheckCheck />Tandai semua dibaca</Button>
+          <Button type="button" variant="outline" size="sm" className="w-full bg-card md:w-auto" onClick={markAllRead} disabled={!unreadCount || pending || loadingMore}><CheckCheck />Tandai semua dibaca</Button>
         </div>
         <CardContent className="p-4 md:p-5">
           {error ? <FieldError className="mb-3">{error}</FieldError> : null}
@@ -78,6 +95,7 @@ export function NotificationList({ initialItems, detailHref, persistRead = false
             })}
             {!visibleItems.length ? <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center"><CheckCheck className="size-6 text-muted-foreground" aria-hidden="true" /><p className="mt-3 text-sm font-medium text-foreground">Tidak ada notifikasi baru</p><p className="mt-1 text-xs text-muted-foreground">Semua pembaruan laporan sudah Anda baca.</p></div> : null}
           </div>
+          {nextCursor ? <Button type="button" variant="outline" className="mt-4 w-full bg-card" disabled={loadingMore || pending} onClick={() => void loadMore()}>{loadingMore ? "Memuat…" : "Muat notifikasi berikutnya"}</Button> : null}
         </CardContent>
       </div>
     </Card>

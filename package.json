@@ -21,6 +21,8 @@
     "test:reports-smoke": "tsx scripts/report-smoke.ts",
     "test:satpam": "tsx --test scripts/satpam-domain.test.ts",
     "test:satpam-smoke": "tsx scripts/satpam-smoke.ts",
+    "test:teknisi": "tsx --test scripts/technician-*.test.ts",
+    "test:teknisi-smoke": "tsx scripts/technician-smoke.ts",
     "docker:dev": "docker compose -f compose.yaml -f compose.dev.yaml up --build --watch",
     "docker:down": "docker compose -f compose.yaml -f compose.dev.yaml down",
     "docker:prod": "docker compose --env-file .env.production -p aspirasijti-production -f compose.yaml up --build -d"

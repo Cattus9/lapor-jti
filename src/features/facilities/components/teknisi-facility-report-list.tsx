@@ -1,210 +1,122 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { Armchair, Check, CheckCheck, ClipboardList, Clock3, FileText, ImageIcon, LampCeiling, Layers3, MapPin, Monitor, Paperclip, SlidersHorizontal, Snowflake, Table2, Tv, Wrench, type LucideIcon } from "lucide-react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import { Armchair, ChevronDown, ClipboardList, LampCeiling, Layers3, MapPin, Monitor, Search, Snowflake, Table2, Tv, Wrench, type LucideIcon } from "lucide-react"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
+import { OperationalRefreshContext, useDebouncedOperationalQuery, useOperationalPage, useOperationalResource } from "@/components/reports/use-operational-data"
 import { Badge } from "@/components/ui/badge"
-import { StatusBadge as SharedStatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { FieldError } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { aggregateTechnicianRoomPriorities, technicianFacilityReports, type TechnicianFacilityReport, type TechnicianReportStatus, type TechnicianRoomPriority } from "@/features/facilities/mock/teknisi-dashboard"
+import { Skeleton } from "@/components/ui/skeleton"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { technicianStatuses, type TechnicianCommand } from "../domain/technician"
+import { reportPeriods } from "../../reports/domain/report-list-filters"
+import { statusLabels } from "../../reports/domain/report"
+import { TechnicianReportDetailDialog } from "./technician-report-detail-dialog"
+import type { TechnicianDetail, TechnicianFacilityReport, TechnicianRoomPriority } from "../types"
 import { cn } from "cn"
 
-export type ReportActivity = {
-  status: TechnicianReportStatus
-  actor: string
-  timestamp: string
-  note: string
-}
-
-const lifecycle = ["Baru", "Diverifikasi", "Diproses", "Selesai"] as const
-const statuses: Array<TechnicianReportStatus | "Semua"> = ["Semua", ...lifecycle]
-
-const nextAction: Partial<Record<TechnicianReportStatus, { label: string; nextStatus: TechnicianReportStatus; description: string }>> = {
-  Baru: { label: "Verifikasi laporan", nextStatus: "Diverifikasi", description: "Pastikan detail kerusakan dan lokasi dapat ditindaklanjuti." },
-  Diverifikasi: { label: "Mulai penanganan", nextStatus: "Diproses", description: "Tandai laporan setelah pekerjaan perbaikan mulai dilakukan." },
-  Diproses: { label: "Selesaikan perbaikan", nextStatus: "Selesai", description: "Tambahkan catatan pekerjaan sebelum laporan dinyatakan selesai." },
-}
-
-function StatusBadge({ status }: { status: TechnicianReportStatus }) {
-  return <SharedStatusBadge status={status} />
-}
-
-function createInitialActivity(report: TechnicianFacilityReport): ReportActivity[] {
-  if (report.status === "Selesai") {
-    return [
-      { status: "Baru", actor: "Pelapor", timestamp: report.submittedAt, note: "Laporan fasilitas dibuat." },
-      { status: "Diverifikasi", actor: "Rizky Pratama", timestamp: "16 September 2026, 14.00", note: "Detail laporan telah diverifikasi." },
-      { status: "Diproses", actor: "Rizky Pratama", timestamp: "16 September 2026, 14.25", note: "Perbaikan fasilitas dimulai." },
-      { status: "Selesai", actor: "Rizky Pratama", timestamp: report.updatedAt, note: "Pekerjaan perbaikan telah diselesaikan dan dicatat." },
-    ]
-  }
-
-  return [{ status: report.status, actor: report.status === "Baru" ? "Pelapor" : "Rizky Pratama", timestamp: report.status === "Baru" ? report.submittedAt : report.updatedAt, note: report.status === "Baru" ? "Laporan fasilitas dibuat." : `Laporan berada pada tahap ${report.status}.` }]
-}
-
-function ReportStepper({ status }: { status: TechnicianReportStatus }) {
-  const activeStep = lifecycle.indexOf(status)
-
-  return <div className="overflow-x-auto pb-1" aria-label="Tahapan penanganan laporan"><div className="flex min-w-[24rem] items-start">{lifecycle.map((step, index) => { const completed = index < activeStep; const current = index === activeStep; return <div key={step} className="flex min-w-0 flex-1 items-start"><div className="flex min-w-0 flex-1 flex-col items-center gap-2"><span className={cn("flex size-7 items-center justify-center rounded-full border text-xs", completed || current ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground", current && "ring-3 ring-primary/15")}>{completed ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span><span className={cn("text-center text-[11px] leading-tight", current ? "font-semibold text-foreground" : "text-muted-foreground")}>{step}</span></div>{index < lifecycle.length - 1 ? <span className={cn("mt-3.5 h-px flex-1", index < activeStep ? "bg-primary" : "bg-border")} aria-hidden="true" /> : null}</div> })}</div></div>
-}
-
-function StatusActivity({ activities }: { activities: ReportActivity[] }) {
-  return <section className="border-t border-border/60 pt-6"><h3 className="text-sm font-semibold text-foreground">Riwayat status</h3><div className="mt-3 space-y-2">{[...activities].reverse().map((activity, index) => <div key={`${activity.status}-${activity.timestamp}-${index}`} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/60 p-3"><span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><div className="min-w-0"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><StatusBadge status={activity.status} /><span className="text-xs text-muted-foreground">{activity.timestamp}</span></div><p className="mt-1 text-xs text-muted-foreground">Oleh {activity.actor} · {activity.note}</p></div></div>)}</div></section>
-}
-
-function StatusActionPanel({ report, onStatusChange, onOpenCompletion }: { report: TechnicianFacilityReport; onStatusChange?: (ticket: string, status: TechnicianReportStatus, note: string) => void; onOpenCompletion: () => void }) {
-  const action = nextAction[report.status]
-
-  if (report.status === "Selesai") return <div className="rounded-xl border border-border/60 bg-muted/50 p-4"><p className="text-sm font-medium text-foreground">Laporan selesai</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">Tiket telah ditutup dan dapat dilihat kembali pada Riwayat Perbaikan.</p></div>
-  if (!action || !onStatusChange) return null
-
-  return <div className="rounded-xl border border-border/60 bg-muted/50 p-4"><p className="text-sm font-medium text-foreground">Aksi penanganan</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">{action.description}</p><div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button type="button" onClick={() => report.status === "Diproses" ? onOpenCompletion() : onStatusChange(report.ticket, action.nextStatus, action.description)}>{action.label}</Button></div></div>
-}
-
-export function ReportDetailDialog({ report, activity, onStatusChange }: { report: TechnicianFacilityReport; activity: ReportActivity[]; onStatusChange?: (ticket: string, status: TechnicianReportStatus, note: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const [completionOpen, setCompletionOpen] = useState(false)
-  const [workNote, setWorkNote] = useState("")
-
-  function completeRepair() {
-    if (!onStatusChange) return
-    onStatusChange(report.ticket, "Selesai", workNote.trim())
-    setCompletionOpen(false)
-    setWorkNote("")
-  }
-
-  return <><Dialog open={open} onOpenChange={setOpen}><DialogTrigger render={<Button type="button" variant="outline" size="sm" className="shrink-0 bg-card hover:bg-muted" />}>Lihat detail</DialogTrigger><DialogContent><div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16"><div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><Wrench className="size-4" aria-hidden="true" /></span><span>Laporan fasilitas</span><span aria-hidden="true">·</span><span>{report.ticket}</span><StatusBadge status={report.status} /></div><DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">{report.title}</DialogTitle><DialogDescription className="mt-2">Diperbarui {report.updatedAt}. Tinjau informasi sebelum melanjutkan penanganan.</DialogDescription></div><div className="space-y-6 p-5 md:p-6"><section><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">Progres penanganan</p><p className="mt-1 text-xs text-muted-foreground">Tahap {lifecycle.indexOf(report.status) + 1} dari {lifecycle.length}</p></div><StatusBadge status={report.status} /></div><div className="mt-5"><ReportStepper status={report.status} /></div></section><StatusActionPanel report={report} onStatusChange={onStatusChange} onOpenCompletion={() => setCompletionOpen(true)} /><section className="border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><FileText className="size-4" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold text-foreground">Detail laporan</h3><p className="mt-0.5 text-xs text-muted-foreground">Informasi yang dikirimkan oleh pelapor.</p></div></div><dl className="mt-4 grid overflow-hidden rounded-xl border border-border/60 sm:grid-cols-2"><div className="border-b border-border/60 p-4 sm:border-r"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><ClipboardList className="size-3.5" aria-hidden="true" />Pelapor</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.reporter}</dd></div><div className="border-b border-border/60 p-4"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><Wrench className="size-3.5" aria-hidden="true" />Fasilitas</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.facility}</dd></div><div className="border-b border-border/60 p-4 sm:border-b-0 sm:border-r"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3.5" aria-hidden="true" />Lokasi</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.location}</dd></div><div className="p-4"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 className="size-3.5" aria-hidden="true" />Waktu laporan</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.submittedAt}</dd></div></dl><div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-4"><p className="text-xs text-muted-foreground">Deskripsi kerusakan</p><p className="mt-1.5 text-sm leading-relaxed text-foreground">{report.description}</p></div></section><section className="border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><Paperclip className="size-4" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold text-foreground">Lampiran</h3><p className="mt-0.5 text-xs text-muted-foreground">Foto atau dokumen pendukung.</p></div></div><div className="mt-4 flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground"><ImageIcon className="size-5" aria-hidden="true" /></span><div><p className="text-sm font-medium text-foreground">{report.attachments ? `${report.attachments} lampiran tersedia` : "Tidak ada lampiran"}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{report.attachments ? "Pratinjau file akan tersedia setelah integrasi penyimpanan lampiran." : "Pelapor tidak menambahkan foto atau dokumen pendukung."}</p></div></div></section><StatusActivity activities={activity} /></div></DialogContent></Dialog><Dialog open={completionOpen} onOpenChange={setCompletionOpen}><DialogContent className="max-w-lg p-5 md:p-6"><DialogTitle>Selesaikan perbaikan</DialogTitle><DialogDescription className="mt-1.5">Catatan pekerjaan akan dicatat pada riwayat laporan dan dilihat oleh pelapor.</DialogDescription><div className="mt-4 space-y-2"><Label htmlFor={`work-note-${report.ticket}`}>Catatan pekerjaan</Label><Textarea id={`work-note-${report.ticket}`} value={workNote} onChange={(event) => setWorkNote(event.target.value)} placeholder="Contoh: Lampu diganti dan sudah diuji menyala dengan baik." /><p className="text-xs text-muted-foreground">Jelaskan tindakan yang sudah dilakukan dan kondisi akhir fasilitas.</p></div><div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="bg-card" onClick={() => setCompletionOpen(false)}>Batal</Button><Button type="button" disabled={!workNote.trim()} onClick={completeRepair}><CheckCheck />Simpan dan selesaikan</Button></div></DialogContent></Dialog></>
-}
-
 type ReportView = "all" | "priority"
+type OpenReport = (report: TechnicianFacilityReport, trigger: HTMLButtonElement) => void
+const ReportContext = createContext<OpenReport | null>(null)
+const RetryContext = createContext(() => {})
 
-function FacilityReportRow({ report, activity, onStatusChange }: { report: TechnicianFacilityReport; activity: ReportActivity[]; onStatusChange: (ticket: string, status: TechnicianReportStatus, note: string) => void }) {
-  return (
-    <article className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{report.title}</p>
-          <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="truncate">{report.ticket} · {report.facility} · {report.location}</span></p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
-        <span className="text-xs text-muted-foreground">{report.updatedAt}</span>
-        <StatusBadge status={report.status} />
-        <ReportDetailDialog report={report} activity={activity} onStatusChange={onStatusChange} />
-      </div>
-    </article>
-  )
+function Feedback({ loading, error }: { loading: boolean; error: string }) {
+  const retry = useContext(RetryContext)
+  return <>{error ? <div className="space-y-2"><FieldError>{error}</FieldError><Button type="button" size="sm" variant="outline" onClick={retry}>Coba lagi</Button></div> : null}{loading ? <div className="space-y-2" role="status" aria-label="Memuat laporan"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : null}</>
 }
 
-function priorityLabel(index: number, reportCount: number) {
-  if (index === 0) return "Prioritas utama"
-  if (reportCount >= 3) return "Prioritas tinggi"
-  return "Prioritas sedang"
+function FacilityReportRow({ report }: { report: TechnicianFacilityReport }) {
+  const openReport = useContext(ReportContext)
+  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.ticket} · {report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : `Dikirim ${report.submittedAt}`}</span><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
 }
 
-const facilityIcons: Record<string, LucideIcon> = {
-  AC: Snowflake,
-  Komputer: Monitor,
-  Kursi: Armchair,
-  Lampu: LampCeiling,
-  LCD: Monitor,
-  Meja: Table2,
-  TV: Tv,
+function ReportPage({ url }: { url: string }) {
+  const page = useOperationalPage<TechnicianFacilityReport>(url)
+  return <div className="space-y-2"><p className="text-xs text-muted-foreground" aria-live="polite">{!page.loading && !page.error ? `${page.total} laporan ditemukan` : ""}</p>{page.items.map((report) => <FacilityReportRow key={report.id} report={report} />)}<Feedback loading={page.loading} error={page.error} />{!page.loading && !page.error && !page.items.length ? <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-4 text-center"><ClipboardList className="size-6 text-muted-foreground" aria-hidden="true" /><p className="mt-3 text-sm font-medium">Tidak ada laporan yang sesuai</p><p className="mt-1 text-xs text-muted-foreground">Ubah pencarian atau filter untuk menampilkan laporan lain.</p></div> : null}{page.nextCursor ? <Button type="button" variant="outline" className="w-full bg-card" disabled={page.loading} onClick={page.loadMore}>Muat laporan berikutnya</Button> : null}</div>
 }
 
-function FacilityPriorityStrip({ facilities }: { facilities: TechnicianRoomPriority["facilities"] }) {
-  const highestCount = facilities[0]?.activeReports ?? 0
-  const hasSharedPriority = facilities.filter((facility) => facility.activeReports === highestCount).length > 1
-
-  return (
-    <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Prioritas fasilitas di ruang ini">
-      {facilities.map((facility) => {
-        const Icon = facilityIcons[facility.facility] ?? Wrench
-        const isHighest = facility.activeReports === highestCount
-        const priorityDescription = isHighest ? hasSharedPriority ? "prioritas setara" : "fokus utama" : "prioritas berikutnya"
-
-        return <span key={facility.facility} className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs", isHighest ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-background/70 text-muted-foreground")} title={`${facility.facility}: ${facility.activeReports} laporan, ${priorityDescription}`}>
-          <Icon className="size-3.5" aria-hidden="true" />
-          <span className={cn("font-medium", isHighest && "text-foreground")}>{facility.facility}</span>
-          <span className={cn("rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums", isHighest ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")}>{facility.activeReports}<span className="sr-only"> laporan</span></span>
-        </span>
-      })}
-    </div>
-  )
+const facilityIcons: Record<string, LucideIcon> = { AC: Snowflake, Komputer: Monitor, Kursi: Armchair, Lampu: LampCeiling, LCD: Monitor, Meja: Table2, TV: Tv }
+function PriorityRoomCard({ room, highest, status }: { room: TechnicianRoomPriority; highest: number; status: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const maxObject = room.facilities[0]?.activeReports
+  const query = new URLSearchParams({ locationId: room.id, active: "1", classified: "1", status })
+  return <Collapsible open={expanded} onOpenChange={setExpanded} className="overflow-hidden rounded-xl border border-border/60 bg-background/30"><div className="flex flex-col gap-3 bg-muted/30 p-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-primary"><MapPin className="size-4" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold">{room.room}</h3><div className="mt-3 flex flex-wrap gap-1.5" aria-label="Jumlah laporan per fasilitas">{room.facilities.map((facility) => { const Icon = facilityIcons[facility.facility] ?? Wrench; return <Badge key={facility.facility} variant="outline" tone={facility.activeReports === maxObject ? "primary" : "neutral"}><Icon className="size-3.5" aria-hidden="true" />{facility.facility} · {facility.activeReports}</Badge> })}</div></div></div><div className="flex shrink-0 flex-wrap items-center gap-2"><Badge variant="outline" tone={room.activeReports === highest ? "destructive" : "primary"}>{room.activeReports === highest ? "Prioritas utama" : "Prioritas berikutnya"} · {room.activeReports} aktif</Badge><CollapsibleTrigger render={<Button type="button" variant="outline" size="sm" className="bg-card" />}>{expanded ? "Tutup tiket" : "Lihat tiket"}<ChevronDown className={cn("size-3.5", expanded && "rotate-180")} aria-hidden="true" /></CollapsibleTrigger></div></div><CollapsibleContent><div className="border-t border-border/60 p-3">{expanded ? <ReportPage url={`/api/teknisi/reports?${query}`} /> : null}</div></CollapsibleContent></Collapsible>
+}
+function Priorities({ status, showAll }: { status: string; showAll: () => void }) {
+  const rooms = useOperationalResource<{ items: TechnicianRoomPriority[] }>(`/api/teknisi/priorities?status=${status}`)
+  return <div className="space-y-4"><p className="text-xs leading-relaxed text-muted-foreground">Prioritas berdasarkan jumlah tiket aktif pada lokasi dan objek yang terdaftar, bukan tingkat risiko. Laporan dengan isian lainnya tetap tersedia di semua laporan.</p><Feedback loading={rooms.loading} error={rooms.error} />{rooms.data?.items.map((room) => <PriorityRoomCard key={room.id} room={room} highest={rooms.data!.items[0]?.activeReports ?? 0} status={status} />)}{rooms.data && !rooms.data.items.length ? <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Tidak ada prioritas ruang aktif pada status ini.</p> : null}<Button type="button" variant="outline" size="sm" onClick={showAll}>Lihat semua laporan, termasuk isian lainnya</Button></div>
 }
 
-function PriorityRoomCard({ room, rank, reports, activities, onStatusChange }: { room: TechnicianRoomPriority; rank: number; reports: readonly TechnicianFacilityReport[]; activities: Record<string, ReportActivity[]>; onStatusChange: (ticket: string, status: TechnicianReportStatus, note: string) => void }) {
-  const roomReports = reports.filter((report) => report.room === room.room && report.status !== "Selesai")
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-background/30">
-      <div className="flex flex-col gap-3 border-b border-border/60 bg-muted/30 p-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-primary"><MapPin className="size-4" aria-hidden="true" /></span>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">{room.room}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{room.location}</p>
-            <FacilityPriorityStrip facilities={room.facilities} />
-          </div>
-        </div>
-        <Badge className="w-fit" tone={rank === 0 ? "destructive" : "primary"} variant="outline">{priorityLabel(rank, room.activeReports)} · {room.activeReports} aktif</Badge>
-      </div>
-
-      <div className="space-y-2 p-3">
-        <div className="flex items-center justify-between gap-3 px-1 pt-0.5"><p className="text-xs font-medium text-muted-foreground">Tiket aktif</p><span className="text-xs text-muted-foreground">{roomReports.length} tiket</span></div>
-        {roomReports.map((report) => <FacilityReportRow key={report.ticket} report={report} activity={activities[report.ticket] ?? []} onStatusChange={onStatusChange} />)}
-      </div>
-    </section>
-  )
+function NotificationReport({ ticket }: { ticket: string }) {
+  const detail = useOperationalResource<TechnicianDetail>(`/api/teknisi/reports/${encodeURIComponent(ticket)}`)
+  const openReport = useContext(ReportContext)
+  const container = useRef<HTMLDivElement>(null)
+  const opened = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!detail.data || opened.current === ticket || detail.data.report.ticket !== ticket) return
+    const trigger = container.current?.querySelector<HTMLButtonElement>("[data-report-detail]")
+    if (trigger && openReport) { opened.current = ticket; openReport(detail.data.report, trigger) }
+  }, [detail.data, openReport, ticket])
+  return <div ref={container} className="space-y-2"><Feedback loading={detail.loading} error={detail.error} />{detail.data ? <FacilityReportRow report={detail.data.report} /> : null}</div>
 }
 
-export function TeknisiFacilityReportList({ initialView = "priority" }: { initialView?: ReportView }) {
+export function TeknisiFacilityReportList({ initialView = "priority", ticket, history = false }: { initialView?: ReportView; ticket?: string; history?: boolean }) {
+  const router = useRouter()
   const { notify } = useActivityNotifications()
-  const [reports, setReports] = useState<readonly TechnicianFacilityReport[]>(technicianFacilityReports)
-  const [activeStatus, setActiveStatus] = useState<TechnicianReportStatus | "Semua">("Semua")
-  const [activeView, setActiveView] = useState<ReportView>(initialView)
-  const [activities, setActivities] = useState<Record<string, ReportActivity[]>>(() => Object.fromEntries(technicianFacilityReports.map((report) => [report.ticket, createInitialActivity(report)])))
-  const counts = useMemo(() => Object.fromEntries(statuses.map((status) => [status, status === "Semua" ? reports.length : reports.filter((item) => item.status === status).length])), [reports])
-  const visibleReports = activeStatus === "Semua" ? reports : reports.filter((item) => item.status === activeStatus)
-  const priorityRooms = useMemo(() => aggregateTechnicianRoomPriorities(visibleReports), [visibleReports])
-
-  function updateStatus(ticket: string, status: TechnicianReportStatus, note: string) {
-    const report = reports.find((item) => item.ticket === ticket)
-    setReports((current) => current.map((item) => item.ticket === ticket ? { ...item, status, updatedAt: "Baru saja" } : item))
-    setActivities((current) => ({ ...current, [ticket]: [...(current[ticket] ?? []), { status, actor: "Rizky Pratama", timestamp: "Baru saja", note }] }))
-    notify({ title: "Status laporan diperbarui", description: `${report?.ticket ?? ticket} kini berstatus ${status}.`, tone: "success" })
+  const [revision, setRevision] = useState(0)
+  const [view, setView] = useState<ReportView>(initialView)
+  const [status, setStatus] = useState("semua")
+  const [query, setQuery] = useState("")
+  const [period, setPeriod] = useState("semua")
+  const [sort, setSort] = useState("terbaru")
+  const [selectedReport, setSelectedReport] = useState<TechnicianFacilityReport | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [openCycle, setOpenCycle] = useState(0)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState("")
+  const busy = useRef(false)
+  const trigger = useRef<HTMLButtonElement | null>(null)
+  const workspace = useRef<HTMLDivElement>(null)
+  const search = useDebouncedOperationalQuery(query)
+  const params = new URLSearchParams({ q: search, status, period, sort })
+  const allView = history || view === "all"
+  function retry() { setRevision((value) => value + 1) }
+  function openReport(report: TechnicianFacilityReport, element: HTMLButtonElement) { trigger.current = element; setSelectedReport(report); setError(""); setOpenCycle((value) => value + 1); setDetailOpen(true) }
+  function restoreFocus() { return trigger.current?.isConnected ? trigger.current : workspace.current?.querySelector<HTMLButtonElement>(`[data-report-detail="${selectedReport?.id}"]`) ?? workspace.current ?? true }
+  async function execute(command: TechnicianCommand) {
+    if (busy.current) return false
+    busy.current = true; setPending(true); setError("")
+    try {
+      const response = await fetch("/api/teknisi/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Perubahan belum berhasil disimpan.")
+      retry(); router.refresh()
+      notify({ title: "Status laporan diperbarui", description: `${command.ticket}: perubahan tersimpan dan pelapor diberi notifikasi.`, tone: "success" })
+      return true
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Koneksi bermasalah."
+      setError(message); retry()
+      notify({ title: "Perubahan belum terkonfirmasi", description: message, tone: "warning" })
+      return false
+    } finally { busy.current = false; setPending(false) }
   }
-
-  const reportRows = visibleReports.map((report) => <FacilityReportRow key={report.ticket} report={report} activity={activities[report.ticket] ?? []} onStatusChange={updateStatus} />)
-
-  return (
-    <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
-      <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><ClipboardList className="size-4 text-primary" aria-hidden="true" /><span>Manajemen laporan fasilitas</span></div>
-      <div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs">
-        <CardContent className="space-y-4 p-4 md:p-5">
-          <div className="flex flex-col gap-3 border-b border-border/60 pb-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-foreground">Antrean perbaikan</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Atur cara melihat laporan sebelum menindaklanjuti tiket.</p>
-            </div>
-            <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto">
-              <label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Tampilan</span><Select value={activeView} onValueChange={(value) => setActiveView(value as ReportView)}><SelectTrigger className="w-full bg-background sm:w-48"><Layers3 className="size-3.5" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua laporan</SelectItem><SelectItem value="priority">Prioritas ruang</SelectItem></SelectContent></Select></label>
-              <label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Status</span><Select value={activeStatus} onValueChange={(value) => setActiveStatus(value as TechnicianReportStatus | "Semua")}><SelectTrigger className="w-full bg-background sm:w-44"><SlidersHorizontal className="size-3.5" /><SelectValue /></SelectTrigger><SelectContent>{statuses.map((status) => <SelectItem key={status} value={status}>{status} ({counts[status]})</SelectItem>)}</SelectContent></Select></label>
-            </div>
-          </div>
-
-          {activeView === "all" ? <div className="space-y-2">{reportRows}</div> : <div className="space-y-4">{priorityRooms.map((room, index) => <PriorityRoomCard key={room.room} room={room} rank={index} reports={visibleReports} activities={activities} onStatusChange={updateStatus} />)}</div>}
-
-          {!visibleReports.length ? <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center"><ClipboardList className="size-6 text-muted-foreground" aria-hidden="true" /><p className="mt-3 text-sm font-medium text-foreground">Tidak ada laporan {activeStatus.toLowerCase()}</p><p className="mt-1 text-xs text-muted-foreground">Laporan pada status ini akan muncul saat tersedia.</p></div> : null}
-          {activeView === "priority" && visibleReports.length > 0 && !priorityRooms.length ? <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center"><Layers3 className="size-6 text-muted-foreground" aria-hidden="true" /><p className="mt-3 text-sm font-medium text-foreground">Tidak ada prioritas ruang aktif</p><p className="mt-1 text-xs text-muted-foreground">Laporan selesai tidak dihitung sebagai prioritas tinjauan.</p></div> : null}
-        </CardContent>
-      </div>
-    </Card>
-  )
+  return <OperationalRefreshContext.Provider value={revision}><RetryContext.Provider value={retry}><ReportContext.Provider value={openReport}><div ref={workspace} tabIndex={-1} className="space-y-4">
+    {ticket ? <NotificationReport ticket={ticket} /> : null}
+    <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><ClipboardList className="size-4 text-primary" aria-hidden="true" />{history ? "Arsip perbaikan" : "Manajemen laporan fasilitas"}</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="space-y-4 p-4 md:p-5">
+      <div className="flex flex-col gap-3 border-b border-border/60 pb-4 lg:flex-row lg:items-center"><div className="min-w-0 flex-1">{allView ? <div className="relative"><Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" aria-hidden="true" /><Input className="pl-9" aria-label="Cari tiket, fasilitas, atau lokasi" placeholder="Cari tiket, fasilitas, atau lokasi" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} /></div> : <div><h2 className="text-base font-semibold">Prioritas ruang</h2><p className="mt-1 text-xs text-muted-foreground">Tinjau konsentrasi keluhan fasilitas.</p></div>}</div><div className="flex flex-wrap gap-2">
+        {!history ? <Select value={view} onValueChange={(value) => setView(value as ReportView)}><SelectTrigger className="w-full bg-background sm:w-44" aria-label="Tampilan laporan"><Layers3 className="size-3.5" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="priority">Prioritas ruang</SelectItem><SelectItem value="all">Semua laporan</SelectItem></SelectContent></Select> : null}
+        {!history ? <Select value={status} onValueChange={(value) => setStatus(value as string)}><SelectTrigger className="w-full bg-background sm:w-40" aria-label="Status laporan"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="semua">Semua status</SelectItem>{technicianStatuses.map((value) => <SelectItem key={value} value={value}>{statusLabels[value]}</SelectItem>)}</SelectContent></Select> : null}
+        {allView ? <><Select value={period} onValueChange={(value) => setPeriod(value as string)}><SelectTrigger className="w-full bg-background sm:w-40" aria-label={history ? "Periode penyelesaian" : "Periode pengiriman"}><SelectValue /></SelectTrigger><SelectContent>{Object.entries(reportPeriods).filter(([value]) => value !== "rentang").map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select><Select value={sort} onValueChange={(value) => setSort(value as string)}><SelectTrigger className="w-full bg-background sm:w-32" aria-label="Urutan laporan"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="terbaru">Terbaru</SelectItem><SelectItem value="terlama">Terlama</SelectItem></SelectContent></Select></> : null}
+      </div></div>
+      {allView ? <ReportPage url={`/api/teknisi/${history ? "history" : "reports"}?${params}`} /> : <Priorities status={status} showAll={() => setView("all")} />}
+    </CardContent></div></Card>
+    {/* Workspace owns the only detail modal, so list refreshes cannot unmount it. */}
+    {selectedReport ? <TechnicianReportDetailDialog key={`${selectedReport.id}:${openCycle}`} report={selectedReport} open={detailOpen} onOpenChange={setDetailOpen} finalFocus={restoreFocus} onCommand={execute} pending={pending} error={error} onRetry={retry} /> : null}
+  </div></ReportContext.Provider></RetryContext.Provider></OperationalRefreshContext.Provider>
 }

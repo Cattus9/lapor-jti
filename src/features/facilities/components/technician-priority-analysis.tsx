@@ -9,22 +9,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { technicianRoomPriorities } from "@/features/facilities/mock/teknisi-dashboard"
+import type { TechnicianRoomPriority } from "@/features/facilities/types"
 import { cn } from "cn"
 
 const roomColors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
-
-const roomChartData = technicianRoomPriorities.map((room, index) => ({
-  key: `room-${index + 1}`,
-  room: room.room,
-  activeReports: room.activeReports,
-  fill: roomColors[index % roomColors.length],
-}))
-
-const roomChartConfig = {
-  activeReports: { label: "Laporan aktif" },
-  ...Object.fromEntries(roomChartData.map((room) => [room.key, { label: room.room, color: room.fill }])),
-} satisfies ChartConfig
 
 const facilityChartConfig = {
   activeReports: {
@@ -33,13 +21,15 @@ const facilityChartConfig = {
   },
 } satisfies ChartConfig
 
-function getPriority(rank: number, reportCount: number) {
-  if (rank === 0) return { label: "Prioritas utama", tone: "utama" as const }
+function getPriority(highest: number, reportCount: number) {
+  if (reportCount === highest) return { label: "Prioritas utama", tone: "utama" as const }
   if (reportCount >= 3) return { label: "Prioritas tinggi", tone: "tinggi" as const }
   return { label: "Prioritas sedang", tone: "sedang" as const }
 }
 
-export function TechnicianPriorityAnalysis() {
+export function TechnicianPriorityAnalysis({ rooms: technicianRoomPriorities, unclassifiedReports = 0 }: { rooms: TechnicianRoomPriority[]; unclassifiedReports?: number }) {
+  const roomChartData = technicianRoomPriorities.map((room, index) => ({ key: `room-${index + 1}`, room: room.room, activeReports: room.activeReports, fill: roomColors[index % roomColors.length] }))
+  const roomChartConfig = { activeReports: { label: "Laporan aktif" }, ...Object.fromEntries(roomChartData.map((room) => [room.key, { label: room.room, color: room.fill }])) } satisfies ChartConfig
   const [selectedRoomName, setSelectedRoomName] = useState(technicianRoomPriorities[0]?.room ?? "")
   const selectedRoom = technicianRoomPriorities.find((room) => room.room === selectedRoomName) ?? technicianRoomPriorities[0]
   const totalActiveReports = technicianRoomPriorities.reduce((total, room) => total + room.activeReports, 0)
@@ -51,7 +41,7 @@ export function TechnicianPriorityAnalysis() {
   const leadingFacilities = selectedRoom?.facilities.filter((facility) => facility.activeReports === primaryFacility?.activeReports) ?? []
   const hasSharedFacilityPriority = leadingFacilities.length > 1
 
-  if (!selectedRoom) return null
+  if (!selectedRoom) return <Card className="gap-0 rounded-2xl border-border bg-sidebar p-1.5"><CardContent className="rounded-xl border border-border/60 bg-card p-6 text-sm text-muted-foreground">Belum ada prioritas ruang aktif.{unclassifiedReports ? ` ${unclassifiedReports} laporan dengan lokasi atau objek lainnya tetap tersedia di antrean.` : ""}</CardContent></Card>
 
   return (
     <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
@@ -108,7 +98,7 @@ export function TechnicianPriorityAnalysis() {
 
                 <div className="space-y-2">
                   {technicianRoomPriorities.map((room, index) => {
-                    const priority = getPriority(index, room.activeReports)
+                    const priority = getPriority(technicianRoomPriorities[0]?.activeReports ?? 0, room.activeReports)
                     const selected = room.room === selectedRoom.room
 
                     return (
@@ -118,6 +108,7 @@ export function TechnicianPriorityAnalysis() {
                         variant={selected ? "secondary" : "ghost"}
                         className={cn("h-auto w-full justify-start gap-3 px-3 py-2.5 text-left", selected && "ring-1 ring-primary/20")}
                         onClick={() => setSelectedRoomName(room.room)}
+                        aria-pressed={selected}
                       >
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs font-semibold text-foreground">{index + 1}</span>
                         <span className="min-w-0 flex-1">
@@ -170,7 +161,7 @@ export function TechnicianPriorityAnalysis() {
 
           <div className="flex items-start gap-2 border-t border-border/60 bg-muted/30 px-5 py-3.5 text-xs leading-relaxed text-muted-foreground md:px-6">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-            <p>Prioritas ini adalah indikator konsentrasi laporan aktif. Tingkat risiko keselamatan, usia tiket, dan SLA belum menjadi bobot perhitungan.</p>
+            <p>Prioritas ini adalah indikator konsentrasi laporan aktif. Tingkat risiko keselamatan, usia tiket, dan SLA belum menjadi bobot perhitungan. Satu tiket dapat memuat beberapa objek, sehingga jumlah per objek tidak dijumlahkan sebagai jumlah tiket.{unclassifiedReports ? ` ${unclassifiedReports} laporan dengan lokasi atau objek lainnya tidak masuk analisis ini dan tetap tersedia di antrean.` : ""}</p>
           </div>
         </CardContent>
       </div>

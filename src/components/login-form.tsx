@@ -6,7 +6,7 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import Image from "next/image"
-import { ArrowRight, LogIn } from "lucide-react"
+import { ArrowRight, Eye, EyeOff, LogIn } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -18,6 +18,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState("")
 
@@ -59,16 +60,31 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               </div>
               <Field>
                 <FieldLabel htmlFor="email">Email akun</FieldLabel>
-                <Input id="email" name="email" type="email" value={email} onChange={(event) => { setEmail(event.target.value); setError("") }} placeholder="Email akun Anda" autoComplete="username" required disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
+                <Input id="email" name="email" type="email" className="h-12 px-3.5" value={email} onChange={(event) => { setEmail(event.target.value); setError("") }} placeholder="Email akun Anda" autoComplete="username" required disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
                 <FieldDescription>Gunakan email akun yang terdaftar di AspirasiJTI.</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="password">Password</FieldLabel>
-                <Input id="password" name="password" type="password" value={password} onChange={(event) => { setPassword(event.target.value); setError("") }} autoComplete="current-password" required maxLength={128} disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
+                <div className="relative">
+                  <Input id="password" name="password" type={showPassword ? "text" : "password"} className="h-12 pl-3.5 pr-14" value={password} onChange={(event) => { setPassword(event.target.value); setError("") }} autoComplete="current-password" required maxLength={128} disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute inset-y-0 right-0.5 my-auto size-11 text-muted-foreground"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    disabled={isPending}
+                    aria-controls="password"
+                    aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                    title={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                  >
+                    {showPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+                  </Button>
+                </div>
               </Field>
               <div>
                 {error ? <p id="login-error" className="mb-3 text-sm text-destructive" role="alert">{error}</p> : null}
-                <Button type="submit" size="lg" className="w-full" disabled={isPending}><LogIn />{isPending ? "Memproses..." : "Masuk"}<ArrowRight className="ml-1" /></Button>
+                <Button type="submit" size="lg" className="h-12 w-full" disabled={isPending}><LogIn />{isPending ? "Memproses..." : "Masuk"}<ArrowRight className="ml-1" /></Button>
               </div>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">Dengan melanjutkan, Anda menyetujui penggunaan AspirasiJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</p>

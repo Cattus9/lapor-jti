@@ -1,19 +1,21 @@
 import "server-only"
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
+import { and, desc, eq, gte, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { users } from "@/db/schema"
 import { facilityObjects, locations, notifications, reportAttachments, reportDrafts, reportFacilityObjects, reportLostFoundDetails, reportOtherDetails, reports, reportServiceDetails, reportStatusHistory, reportTicketCounters, services } from "@/db/reports-schema"
 import { handlerByCategory, isUuid, ReportError, type ReportActor, type StoredAttachment } from "../domain/report"
 import type { DraftView, ReportRepository, ReportWrite } from "../application/ports"
 import type { ReportListItem, ReportSummary } from "../types"
+import { defaultReportFilters, reportDateBounds, type ReportListFilters } from "../domain/report-list-filters"
 
 const pageSize = 20
-const dateLabel = (date: Date) => new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(date)
+const reportDateFormatter = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })
+const dateLabel = (date: Date) => reportDateFormatter.format(date)
 type ReportRow = typeof reports.$inferSelect
 type DraftRow = typeof reportDrafts.$inferSelect
 const listColumns = { id: reports.id, ticketNumber: reports.ticketNumber, title: reports.title, category: reports.category, status: reports.status, updatedAt: reports.updatedAt, submittedAt: reports.submittedAt }
 type ListRow = Pick<ReportRow, keyof typeof listColumns>
-const listItem = (row: ListRow): ReportListItem => ({ id: row.id, ticketNumber: row.ticketNumber, title: row.title, category: row.category, status: row.status, updatedAt: dateLabel(row.updatedAt) })
+const listItem = (row: ListRow): ReportListItem => ({ id: row.id, ticketNumber: row.ticketNumber, title: row.title, category: row.category, status: row.status, updatedAt: dateLabel(row.updatedAt), submittedAt: dateLabel(row.submittedAt), submittedAtIso: row.submittedAt.toISOString() })
 function cursorValue(value?: string) {
   if (!value) return null
   if (value.length > 160) throw new ReportError("Pagination tidak valid.")
@@ -88,15 +90,32 @@ export class DrizzleReportRepository implements ReportRepository {
       if (files.length) await tx.insert(reportAttachments).values(files.map((file) => ({ ...file, ownerId: actor.id, reportId: report.id })))
       await tx.insert(reportStatusHistory).values({ reportId: report.id, actorId: actor.id, actorName: user.name, toStatus: "baru", note: "Laporan dikirim oleh Pelapor.", createdAt: now })
       await tx.insert(notifications).values({ recipientId: actor.id, reportId: report.id, kind: "status", title: "Laporan berhasil dikirim", description: `${report.ticketNumber} telah diteruskan ke pengelola sesuai kategorinya.`, createdAt: now })
+      if (payload.category === "kehilangan-temuan" || payload.category === "fasilitas") {
+        const recipients = await tx.select({ id: users.id }).from(users).where(and(eq(users.role, handlerByCategory[payload.category]), eq(users.isActive, true)))
+        const title = payload.category === "fasilitas" ? "Laporan fasilitas baru" : "Laporan kehilangan/temuan baru"
+        if (recipients.length) await tx.insert(notifications).values(recipients.map((user) => ({ recipientId: user.id, reportId: report.id, kind: "status", title, description: `${report.ticketNumber}: ${payload.title}`, createdAt: now })))
+      }
       await tx.update(reportDrafts).set({ payload, submittedReportId: report.id, revision: draft.revision + 1, updatedAt: now }).where(eq(reportDrafts.id, draft.id))
       return { created: true, report, removed }
     })
   }
-  async list(ownerId: string, cursor?: string, ticket?: string, draftCursor?: string) {
+  async list(ownerId: string, cursor?: string, ticket?: string, draftCursor?: string, filters: ReportListFilters = defaultReportFilters) {
     const after = cursorValue(cursor)
     const draftAfter = cursorValue(draftCursor)
+    const bounds = reportDateBounds(filters)
+    // Parameterized literal search: '%' and '_' in user input must not become SQL wildcards.
+    const search = `%${filters.q.replace(/[\\%_]/g, (character) => `\\${character}`)}%`
+    const conditions = and(
+      eq(reports.reporterId, ownerId),
+      filters.q ? or(ilike(reports.title, search), ilike(reports.ticketNumber, search)) : undefined,
+      filters.category !== "semua" ? eq(reports.category, filters.category) : undefined,
+      filters.status === "belum-selesai" ? notInArray(reports.status, ["selesai", "ditolak"]) : filters.status !== "semua" ? eq(reports.status, filters.status) : undefined,
+      bounds.from ? gte(reports.submittedAt, bounds.from) : undefined,
+      bounds.until ? lt(reports.submittedAt, bounds.until) : undefined,
+      after ? or(lt(reports.submittedAt, after.date), and(eq(reports.submittedAt, after.date), lt(reports.id, after.id))) : undefined,
+    )
     const [rows, drafts, selected] = await Promise.all([
-      this.db.select(listColumns).from(reports).where(and(eq(reports.reporterId, ownerId), after ? or(lt(reports.submittedAt, after.date), and(eq(reports.submittedAt, after.date), lt(reports.id, after.id))) : undefined)).orderBy(desc(reports.submittedAt), desc(reports.id)).limit(pageSize + 1),
+      this.db.select(listColumns).from(reports).where(conditions).orderBy(desc(reports.submittedAt), desc(reports.id)).limit(pageSize + 1),
       this.db.select({ id: reportDrafts.id, payload: reportDrafts.payload, updatedAt: reportDrafts.updatedAt }).from(reportDrafts).where(and(eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId), draftAfter ? or(lt(reportDrafts.updatedAt, draftAfter.date), and(eq(reportDrafts.updatedAt, draftAfter.date), lt(reportDrafts.id, draftAfter.id))) : undefined)).orderBy(desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(pageSize + 1),
       ticket ? this.db.select(listColumns).from(reports).where(and(eq(reports.reporterId, ownerId), eq(reports.ticketNumber, ticket))).limit(1) : Promise.resolve([]),
     ])

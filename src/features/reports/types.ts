@@ -28,4 +28,4 @@ export type ReportSummary = {
   history?: Array<{ status: ReportStatus; actor: string; note: string; createdAt: string }>
 }
 
-export type ReportListItem = Omit<ReportSummary, "detail"> & { id: string }
+export type ReportListItem = Omit<ReportSummary, "detail"> & { id: string; submittedAt: string; submittedAtIso: string }

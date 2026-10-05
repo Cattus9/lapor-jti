@@ -1,4 +1,6 @@
 // Domain values are independent of Next.js, React, Drizzle, and the login provider.
+import { getTodayInWib } from "./report-date"
+
 export const reportCategories = ["kehilangan-temuan", "fasilitas", "layanan", "lainnya"] as const
 export const reportStatuses = ["baru", "diverifikasi", "diproses", "barang_teridentifikasi", "diserahkan", "selesai", "ditolak"] as const
 export type ReportCategory = typeof reportCategories[number]
@@ -36,7 +38,7 @@ export const emptyReportPayload: ReportPayload = {
 export function isUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
-export function parsePayload(raw: unknown, submitted: boolean): ReportPayload {
+export function parsePayload(raw: unknown, submitted: boolean, now = new Date()): ReportPayload {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new ReportError("Isian laporan tidak valid.")
   const value = raw as Record<string, unknown>
   if (!reportCategories.includes(value.category as ReportCategory)) throw new ReportError("Pilih kategori laporan yang valid.")
@@ -52,6 +54,7 @@ export function parsePayload(raw: unknown, submitted: boolean): ReportPayload {
   if (!Array.isArray(objects) || objects.length > 20 || objects.some((item) => typeof item !== "string" || item.length > 100)) throw new ReportError("Pilihan objek fasilitas tidak valid.")
   payload.facilities = [...new Set(objects)]
   if (payload.incidentDate && (!/^\d{4}-\d{2}-\d{2}$/.test(payload.incidentDate) || !Number.isFinite(Date.parse(payload.incidentDate + "T00:00:00Z")) || new Date(payload.incidentDate + "T00:00:00Z").toISOString().slice(0, 10) !== payload.incidentDate)) throw new ReportError("Tanggal kejadian tidak valid.")
+  if (payload.incidentDate && payload.incidentDate > getTodayInWib(now)) throw new ReportError("Tanggal kejadian tidak boleh melebihi hari ini (WIB).")
   if (payload.incidentTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(payload.incidentTime)) throw new ReportError("Waktu kejadian tidak valid.")
   if (submitted) {
     const required: (keyof ReportPayload)[] = ["title", "description", "incidentDate", "incidentTime", "location"]

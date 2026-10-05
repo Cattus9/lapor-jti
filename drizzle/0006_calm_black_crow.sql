@@ -1,0 +1,3 @@
+DROP INDEX "reports_handler_status_date_idx";--> statement-breakpoint
+CREATE INDEX "reports_handler_completed_idx" ON "reports" USING btree ("handler_role","completed_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "reports"."completed_at" is not null;--> statement-breakpoint
+CREATE INDEX "reports_handler_status_date_idx" ON "reports" USING btree ("handler_role","status","submitted_at" DESC NULLS LAST,"id" DESC NULLS LAST);

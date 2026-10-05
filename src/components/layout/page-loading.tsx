@@ -141,6 +141,24 @@ function ListLoading() {
   )
 }
 
+function PelaporReportListLoading() {
+  return <LoadingPanel>
+    <LoadingPanelHeading />
+    <div className="@container mb-4 space-y-3 border-b border-border/60 pb-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 @5xl:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <div className="min-w-0 space-y-2"><Skeleton className="h-3 w-16" /><Skeleton className="h-9 w-full rounded-lg" /></div>
+        <div className="hidden gap-2 md:col-span-2 md:grid md:max-w-[33rem] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.2fr)] @5xl:col-span-1 @5xl:w-[33rem]">{Array.from({ length: 3 }, (_, index) => <div key={index} className="min-w-0 space-y-2"><Skeleton className="h-3 w-16" /><Skeleton className="h-9 rounded-lg" /></div>)}</div>
+        <Skeleton className="col-start-2 row-start-1 h-9 w-20 rounded-lg md:hidden" />
+        <Skeleton className="col-span-2 h-9 w-20 rounded-lg md:col-span-1 md:col-start-2 md:row-start-1 @5xl:col-start-auto @5xl:row-auto" />
+      </div>
+    </div>
+    <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="rounded-xl border border-border p-4 md:p-5">
+      <div className="flex items-start gap-3"><Skeleton className="size-10 shrink-0 rounded-xl" /><div className="min-w-0 flex-1 space-y-2"><Skeleton className="h-5 w-44 max-w-full" /><div className="flex gap-3"><Skeleton className="h-4 w-24" /><Skeleton className="h-5 w-28 rounded-full" /></div><Skeleton className="h-3 w-48 max-w-full" /></div><Skeleton className="h-5 w-12 rounded-full" /></div>
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4"><Skeleton className="h-3 w-64 max-w-full" /><Skeleton className="h-8 w-24 shrink-0 rounded-lg" /></div>
+    </div>)}</div>
+  </LoadingPanel>
+}
+
 export function PageLoading({ role }: { role: AppRole }) {
   const section = usePathname().split("/")[2] ?? "dashboard"
 
@@ -154,6 +172,7 @@ export function PageLoading({ role }: { role: AppRole }) {
             : section === "statistik" ? <StatisticsLoading />
             : section === "profil" ? <ProfileLoading />
             : section === "buat-laporan" ? <FormLoading />
+            : section === "laporan-saya" && role === "pelapor" ? <PelaporReportListLoading />
             : <ListLoading />}
         </div>
       </ContentShell>

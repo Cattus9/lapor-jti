@@ -1,6 +1,6 @@
 import { NotificationList } from "@/features/notifications/components/pelapor-notification-list"
-import { technicianNotifications } from "@/features/notifications/mock/teknisi-notifications"
+import type { TechnicianNotifications } from "@/features/facilities/types"
 
-export function TeknisiNotificationList() {
-  return <NotificationList initialItems={technicianNotifications} detailHref="/teknisi/laporan-fasilitas" />
+export function TeknisiNotificationList({ data }: { data: TechnicianNotifications }) {
+  return <NotificationList initialItems={data.items} initialUnread={data.unread} initialNextCursor={data.nextCursor} persistRead apiEndpoint="/api/teknisi/notifications" detailHref="/teknisi/laporan-fasilitas" />
 }

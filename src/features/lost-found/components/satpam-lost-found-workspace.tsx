@@ -3,7 +3,8 @@
 // Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 
 import Image from "next/image"
-import { createContext, useContext, useId, useRef, useState } from "react"
+import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeftRight,
@@ -194,7 +195,7 @@ function StatusActivity({ activities }: { activities: StatusHistoryItem[] }) {
   return <section className="border-t border-border/60 pt-6"><h3 className="text-sm font-semibold text-foreground">Riwayat status</h3><div className="mt-3 space-y-2">{[...activities].reverse().map((activity, index) => <div key={`${activity.status}-${activity.timestamp}-${index}`} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/60 p-3"><span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><div className="min-w-0"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><StatusBadge status={activity.status} /><span className="text-xs text-muted-foreground">{activity.timestamp}</span></div><p className="mt-1 text-xs text-muted-foreground">Oleh {activity.actor}{activity.note ? ` · ${activity.note}` : ""}</p></div></div>)}</div></section>
 }
 
-const ReportDetailContext = createContext<((report: SatpamLostFoundReport, trigger: HTMLButtonElement) => void) | null>(null)
+const ReportDetailContext = createContext<((report: SatpamLostFoundReport, trigger: HTMLButtonElement, selectTab?: boolean) => void) | null>(null)
 
 function ReportDetailTrigger({ report, compact = false }: { report: SatpamLostFoundReport; compact?: boolean }) {
   const openReport = useContext(ReportDetailContext)
@@ -225,22 +226,7 @@ function ReportDetailDialog({
   const report = detail.data?.report ?? sourceReport
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent finalFocus={finalFocus}>
-        <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary">
-              {isFound ? <Inbox className="size-4" aria-hidden="true" /> : <PackageSearch className="size-4" aria-hidden="true" />}
-            </span>
-            <span>{tabMeta[report.kind].label}</span>
-            <span aria-hidden="true">·</span>
-            <span>{report.ticket}</span>
-            <StatusBadge status={report.status} />
-          </div>
-          <DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">{report.title}</DialogTitle>
-          <DialogDescription className="mt-2">Diperbarui {report.updatedAt}. Tinjau informasi sebelum melanjutkan penanganan.</DialogDescription>
-        </div>
-        <div className="space-y-6 p-5 md:p-6">
+    <OperationalReportDialog open={open} onOpenChange={onOpenChange} finalFocus={finalFocus} icon={isFound ? Inbox : PackageSearch} category={tabMeta[report.kind].label} ticket={report.ticket} status={report.status} title={report.title} updatedAt={report.updatedAt}>
           <section>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -275,9 +261,7 @@ function ReportDetailDialog({
           {detail.data?.files.length ? <div className="mt-3 flex flex-wrap gap-2">{detail.data.files.map((file) => <Button key={file.id} variant="outline" size="sm" nativeButton={false} render={<a href={file.url} target="_blank" rel="noopener noreferrer" />}><Paperclip />{file.name}</Button>)}</div> : null}
           </section>
           <StatusActivity activities={detail.data?.history ?? []} />
-        </div>
-      </DialogContent>
-    </Dialog>
+    </OperationalReportDialog>
   )
 }
 
@@ -556,7 +540,7 @@ function MatchingReportList({ title, reports, selectedTicket, onSelect }: { titl
   )
 }
 
-function SatpamLostFoundContent({ user, data, ticket }: { user: CurrentUser; data: SatpamWorkspaceData; ticket?: string }) {
+function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { user: CurrentUser; data: SatpamWorkspaceData; ticket?: string; openDetail?: boolean }) {
   const { notify } = useActivityNotifications()
   const router = useRouter()
   const [revision, setRevision] = useState(0)
@@ -569,7 +553,8 @@ function SatpamLostFoundContent({ user, data, ticket }: { user: CurrentUser; dat
   const [detailOpenCycle, setDetailOpenCycle] = useState(0)
   const detailTrigger = useRef<HTMLButtonElement | null>(null)
   const workspace = useRef<HTMLDivElement | null>(null)
-  const openReport = (report: SatpamLostFoundReport, trigger: HTMLButtonElement) => {
+  const openReport = (report: SatpamLostFoundReport, trigger: HTMLButtonElement, selectTab = false) => {
+    if (selectTab) setActiveTab(report.kind)
     detailTrigger.current = trigger
     setSelectedReport(report)
     setDetailOpenCycle((value) => value + 1)
@@ -604,7 +589,7 @@ function SatpamLostFoundContent({ user, data, ticket }: { user: CurrentUser; dat
   return <SatpamRefreshContext.Provider value={revision}><ReportDetailContext.Provider value={openReport}><div ref={workspace} tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-1 flex-col"><ContentShell>
     <PageHeader title="Kehilangan & Temuan" description={`Kelola laporan, pencocokan, dan penyerahan barang, ${user.name}.`} />
     {error ? <FieldError>{error}<Button type="button" variant="link" size="sm" onClick={() => { setRevision((value) => value + 1); router.refresh() }}>Muat ulang data</Button></FieldError> : null}
-    {ticket ? <NotificationReport ticket={ticket} /> : null}
+    {ticket ? <NotificationReport ticket={ticket} openDetail={openDetail} /> : null}
     <Card className="shrink-0 gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
       <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><Inbox className="size-4 text-primary" aria-hidden="true" />Kehilangan & Temuan</div>
       <div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-4 md:p-5">
@@ -626,11 +611,22 @@ function SatpamLostFoundContent({ user, data, ticket }: { user: CurrentUser; dat
   </ContentShell></div></ReportDetailContext.Provider></SatpamRefreshContext.Provider>
 }
 
-function NotificationReport({ ticket }: { ticket: string }) {
+function NotificationReport({ ticket, openDetail }: { ticket: string; openDetail: boolean }) {
   const detail = useSatpamResource<SatpamDetail>(`/api/satpam/reports/${encodeURIComponent(ticket)}`)
-  return <div className="space-y-3"><SatpamPageFeedback loading={detail.loading} error={detail.error} />{detail.data ? <ReportRow report={detail.data.report} /> : null}</div>
+  const openReport = useContext(ReportDetailContext)
+  const reportContainer = useRef<HTMLDivElement>(null)
+  const openedTicket = useRef<string | undefined>(undefined)
+  // Deep links use the same operational modal and never reopen it after a status refresh.
+  useEffect(() => {
+    if (!openDetail || !detail.data || detail.data.report.ticket !== ticket || openedTicket.current === ticket) return
+    const trigger = reportContainer.current?.querySelector<HTMLButtonElement>("[data-report-detail]")
+    if (!trigger || !openReport) return
+    openedTicket.current = ticket
+    openReport(detail.data.report, trigger, true)
+  }, [openDetail, detail.data, openReport, ticket])
+  return <div ref={reportContainer} className="space-y-3"><SatpamPageFeedback loading={detail.loading} error={detail.error} />{detail.data ? <ReportRow report={detail.data.report} /> : null}</div>
 }
 
-export function SatpamLostFoundWorkspace({ user, data, ticket }: { user: CurrentUser; data: SatpamWorkspaceData; ticket?: string }) {
-  return <DashboardLayout role="satpam"><SatpamLostFoundContent user={user} data={data} ticket={ticket} /></DashboardLayout>
+export function SatpamLostFoundWorkspace({ user, data, ticket, openDetail = false }: { user: CurrentUser; data: SatpamWorkspaceData; ticket?: string; openDetail?: boolean }) {
+  return <DashboardLayout role="satpam"><SatpamLostFoundContent user={user} data={data} ticket={ticket} openDetail={openDetail} /></DashboardLayout>
 }

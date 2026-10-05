@@ -259,7 +259,13 @@ Struktur fitur laporan:
 
 Satu laporan dipakai lintas role; kategori menentukan Satpam/Teknisi/Manajemen di server. Pelapor hanya boleh membaca laporan, draft, lampiran, dan notifikasinya sendiri. Identitas/role/status dari request tidak dipercaya. Pengiriman membuat laporan, detail kategori, pemindahan lampiran draft, riwayat awal, dan notifikasi dalam transaksi. Counter tiket tahunan dibuat atomik; retry dengan submission key yang sama tidak menggandakan laporan. Draft memiliki revision untuk mencegah perubahan tertimpa, belum mendapat nomor tiket, dan tidak masuk KPI/statistik.
 
+Tanggal kejadian harus berupa tanggal kalender valid dan maksimal hari ini berdasarkan WIB (UTC+7), bukan zona waktu laptop/server. Kalender Buat Laporan menonaktifkan tanggal mendatang dan membatasi navigasi bulan. Backend mengulang validasi sebelum penyimpanan untuk kirim laporan maupun simpan draft, termasuk request langsung. Draft boleh belum memiliki tanggal; draft lama dengan tanggal mendatang harus diperbaiki sebelum disimpan atau dikirim.
+
 Daftar laporan/draft/notifikasi memakai cursor pagination (20 per halaman). Index mendukung pemilik/tanggal, antrean pengelola/status, kategori/periode, lokasi aktif, penyelesaian, dan notifikasi belum dibaca. KPI dihitung lewat agregasi SQL, bukan mengambil seluruh laporan ke browser. Presisi timestamp laporan disamakan ke milidetik agar cursor tidak kehilangan presisi. Counter dapat memiliki gap setelah pengujian/penghapusan; nomor tiket tidak harus berurutan tanpa celah.
+
+Laporan Saya menampilkan badge kategori dan tanggal **Dikirim** terpisah dari waktu pembaruan. Pencarian judul/nomor tiket serta filter kategori, status, dan periode diterapkan di SQL sebelum pagination, selalu dibatasi pemilik. Filter otomatis memuat hasil tanpa tombol Terapkan: pilihan langsung diterapkan, pencarian menunggu 350 ms setelah mengetik, dan rentang menunggu kedua tanggal lengkap dan valid. Pilihan tersimpan di URL menggunakan replace agar pencarian tidak memenuhi riwayat browser; pagination tetap membawa filter, sedangkan perubahan kriteria kembali ke laporan terbaru yang sesuai. Periode memakai hari kalender WIB berdasarkan `submitted_at`, bukan tanggal kejadian atau waktu draft dibuat. Rentang tanggal mencakup seluruh hari terakhir. Draft tetap terpisah dan tidak mengikuti filter laporan terkirim. Query memakai index pemilik/tanggal yang sudah tersedia dan mengambil maksimal 21 baris; pencarian substring tidak dianggap sudah dioptimalkan dengan index teks. Evaluasi `pg_trgm`/index gabungan melalui query plan jika volume per pengguna meningkat.
+
+Filter Proses hanya menampilkan **Semua / Belum selesai / Selesai**, sama untuk semua jenis laporan. Belum selesai mencakup status baru dan tahapan penanganan, bukan ditolak; Selesai hanya status `selesai`. Laporan ditolak tetap tersedia di Semua dengan badge status aslinya. URL lama dengan tahapan tertentu dinormalisasi ke kelompok Belum selesai, sedangkan `ditolak` kembali ke Semua. Toolbar memakai label ringkas, pencarian fleksibel, dan dropdown dengan lebar terbatas; pada area konten sempit filter berpindah ke baris kedua, dan pada mobile tetap menggunakan tombol Filter. Skeleton mengikuti komposisi yang sama.
 
 Lampiran disimpan di volume Docker `report_uploads` pada `/app/storage/reports`, di luar `public` dan di luar image/build. Database menyimpan metadata/kunci acak, bukan file. Endpoint download memeriksa session dan pemilik, menggunakan `no-store` dan `nosniff`. Maksimal 4 file, 5 MB per file, total request dibatasi 22 MB; server memeriksa signature JPG/PNG/PDF. Backup production harus mencakup database **dan** volume lampiran. Sebelum production, tetapkan kuota storage, pemindaian malware, rate limit laporan, serta pembersihan file orphan apabila proses terhenti di antara penulisan file dan commit database. Penyimpanan filesystem dapat diganti melalui kontrak storage ketika diperlukan object storage.
 
@@ -269,6 +275,7 @@ Pengujian tambahan:
 
 ```powershell
 npm run test:reports # Unit domain/application tanpa UI/database
+npx tsx --test scripts/report-list-filters.test.ts # Validasi filter, hari WIB, dan URL pagination
 # Jalankan di container development yang memiliki volume lampiran yang sama dengan aplikasi.
 # Ganti nilai password dengan DEMO_USER_PASSWORD lokal bila diubah.
 docker compose -f compose.yaml -f compose.dev.yaml exec -T -e DEMO_USER_PASSWORD=AspirasiJTI-Dev-2026! -e REPORT_SMOKE_CONNECT_URL=http://127.0.0.1:3000 app npm run test:reports-smoke
@@ -278,7 +285,7 @@ Smoke test membuat akun dan laporan sementara, lalu menghapus data/file milik ak
 
 ## Backend Satpam
 
-Dashboard, Kehilangan & Temuan, pencocokan, penyerahan, riwayat dan notifikasi Satpam sudah membaca PostgreSQL. Profil tetap memakai identitas session. Laporan Kehilangan & Temuan dari Pelapor otomatis masuk antrean Satpam dan menghasilkan notifikasi. Teknisi/Manajemen belum dihubungkan pada tahap ini.
+Dashboard, Kehilangan & Temuan, pencocokan, penyerahan, riwayat dan notifikasi Satpam sudah membaca PostgreSQL. Profil tetap memakai identitas session. Laporan Kehilangan & Temuan dari Pelapor otomatis masuk antrean Satpam dan menghasilkan notifikasi. Backend Teknisi dijelaskan di bagian berikut; Manajemen belum dihubungkan.
 
 Implementasi berada di `src/features/lost-found`: `domain/` memvalidasi perintah dan filter, `application/` menangani policy melalui kontrak repository/storage, `infrastructure/` menyediakan transaksi Drizzle dan pemeriksaan HTTP, sedangkan `server.ts` merangkai adapter. Halaman/API tetap memeriksa session dan role Satpam; UI bukan sumber otorisasi.
 
@@ -313,19 +320,41 @@ docker compose -f compose.yaml -f compose.dev.yaml exec -T -e DEMO_USER_PASSWORD
 
 Smoke test memakai akun, laporan dan petugas sementara yang dibersihkan dalam `finally`, tanpa mengubah data pengguna. Cakupan: hak akses/session/origin, isolasi draft/lampiran, transisi status, pencocokan bersamaan, penyerahan bersamaan, petugas wajib/aktif, snapshot identitas, penyelesaian pasangan, notifikasi, pencarian literal, pagination dan route Satpam. Ini pengujian HTTP/database, bukan browser automation. Tampilan dropdown, modal, skeleton dan responsivitas diuji manual oleh pengguna.
 
+## Backend Teknisi
+
+Dashboard, antrean Laporan Fasilitas, prioritas ruang/objek, detail, riwayat perbaikan, lampiran privat dan notifikasi Teknisi memakai PostgreSQL. Tidak ada data laporan demonstrasi yang disisipkan. Pelapor dan Teknisi membaca tiket yang sama, bukan salinan laporan per role; Manajemen nantinya memakai schema bersama ini untuk monitoring.
+
+Implementasi `src/features/facilities` memisahkan `domain/` (validasi/lifecycle), `application/` (service dan kontrak), `infrastructure/` (Drizzle, transaksi, HTTP/session), dan `components/` (Shadcn). Halaman/API tipis memanggil service melalui `server.ts`. Guard memeriksa session, akun aktif, role database, kategori fasilitas dan pengelola Teknisi. Role tetap berada di aplikasi, tidak tergantung provider login/SSO.
+
+Alur **Baru → Diverifikasi → Diproses → Selesai** tidak boleh dilompati. Baru dapat ditolak dengan alasan wajib. Penyelesaian membutuhkan catatan pekerjaan maksimal 2.000 karakter. Mutasi mengunci tiket, mengecek akun aktif lagi, lalu menyimpan status, `completed_at`, riwayat dengan identitas akun server dan notifikasi Pelapor dalam satu transaksi. Dua operator yang mengubah tahap yang sama menghasilkan satu pemenang dan HTTP 409 untuk permintaan yang tertinggal. Akun Teknisi aktif mendapatkan notifikasi saat Pelapor mengirim laporan fasilitas baru.
+
+Daftar memakai keyset pagination **20 tiket** dengan tanggal dan UUID; filter status, pencarian literal, periode WIB dan urutan diterapkan di SQL sebelum pagination. Periode antrean mengikuti tanggal dikirim, sementara riwayat mengikuti tanggal selesai. Objek, jumlah lampiran dan catatan selesai dimuat dalam batch per halaman, bukan query per baris. Dashboard menampilkan maksimal **5 tiket aktif terbaru**. Detail dan lampiran hanya dimuat sesuai kebutuhan; modal dimiliki workspace sehingga tetap terbuka saat baris berganti status atau daftar refresh. Shell modal dan hook resource dibagikan dengan Satpam untuk mempertahankan hierarki/penanganan refresh yang sama.
+
+Prioritas dihitung lewat agregasi SQL seluruh laporan aktif, bukan hanya 20 tiket yang terlihat. Satu tiket multi-objek dihitung sekali untuk ruang, tetapi bisa masuk hitungan beberapa objek. Ruang/objek dengan jumlah sama memiliki prioritas setara. Isian lokasi atau objek lainnya yang tidak terdaftar tidak menjadi kelompok prioritas; tiketnya tetap tersedia di semua laporan. Ini ukuran konsentrasi laporan, **bukan skor risiko, usia tiket atau SLA**. Belum ada penugasan per individu, biaya perbaikan atau inventaris aset.
+
+Migrasi **0006** menambah index pengelola/tanggal selesai/UUID dan memperkuat index pengelola/status/tanggal kirim dengan UUID untuk urutan stabil. Schema laporan yang ada cukup; tidak membuat tabel laporan Teknisi terpisah dan tidak menjalankan seed. Pencarian substring `ILIKE` belum memiliki index teks; evaluasi `pg_trgm` melalui query plan saat volume bertambah. Index dan EXPLAIN telah diperiksa dengan data pengujian lokal, bukan benchmark beban production.
+
+```powershell
+npm run db:migrate # Terapkan 0006, tanpa seed/reset
+npm run test:teknisi # Unit domain/application dan regresi arsitektur
+npx tsx --test scripts/*.test.ts # Seluruh regresi statis
+```
+
+`npm run test:teknisi-smoke` adalah pengujian HTTP/database, bukan browser automation. Jalankan hanya pada development loopback dengan konfigurasi database migration, `DEMO_USER_PASSWORD`, origin yang sesuai dan volume lampiran yang sama dengan aplikasi. Jika pengujian berada di container aplikasi, `REPORT_SMOKE_CONNECT_URL=http://127.0.0.1:3000` mengarah ke port internal; `BETTER_AUTH_URL` tetap origin pengguna, misalnya port host 3001. Kirim kredensial migration hanya ke proses tes, bukan ubah kredensial runtime aplikasi. Tes membuat akun/tiket/file sementara dan membersihkan hanya ID miliknya dalam `finally`; tidak mengubah laporan pengguna. Cakupannya: akses lintas role, draft/kategori/lampiran, fanout notifikasi, tiket multi-objek, konflik bersamaan, lifecycle dan catatan, pagination timestamp sama, periode kirim/selesai, penerima notifikasi dan akun nonaktif. Validasi visual/interaksi tetap dilakukan manual oleh pengguna.
+
 ## Batasan MVP
 
-- Halaman Pelapor dan operasional Satpam menggunakan backend nyata. Teknisi/Manajemen serta statistik lintas role masih memakai data demonstrasi dan belum membaca laporan baru dari database.
+- Halaman Pelapor, operasional Satpam dan Teknisi menggunakan backend nyata. Manajemen serta statistik lintas role masih memakai data demonstrasi dan belum membaca laporan baru dari database.
 - Login email/password sudah memakai Better Auth; SSO POLIJE belum terhubung.
-- Otorisasi halaman dan endpoint Pelapor/Satpam memakai session/role database. Mutasi penanganan Teknisi/Manajemen masih demonstratif; policy backend berikutnya harus menangani lifecycle kategorinya.
+- Otorisasi halaman dan endpoint Pelapor/Satpam/Teknisi memakai session/role database. Mutasi penanganan Manajemen masih demonstratif; policy backend berikutnya harus menangani lifecycle kategorinya.
 - Ekspor rekap belum menghasilkan berkas operasional nyata.
 - Agregasi prioritas fasilitas menunjukkan konsentrasi laporan aktif, bukan penilaian bahaya atau risiko teknis.
 
 ## Arah pengembangan berikutnya
 
 1. Integrasi SSO POLIJE dan pemetaan role dari sumber identitas resmi.
-2. Hubungkan Teknisi/Manajemen ke schema laporan bersama, dengan transisi status dan policy akses per role.
-3. Perluas notifikasi persisten ke tindakan Teknisi/Manajemen.
+2. Hubungkan Manajemen ke schema laporan bersama, dengan transisi status dan policy akses per role.
+3. Perluas notifikasi persisten ke tindakan Manajemen.
 4. Lampiran berkas, ekspor rekap, serta audit aktivitas.
 5. Pengujian end-to-end untuk lifecycle masing-masing kategori laporan.
 
