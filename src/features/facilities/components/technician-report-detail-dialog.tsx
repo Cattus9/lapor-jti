@@ -2,7 +2,7 @@
 
 import { useId, useState, type ComponentProps } from "react"
 import Image from "next/image"
-import { CalendarDays, Check, CheckCheck, Clock3, ImageIcon, MapPin, Paperclip, ScrollText, UserRound, Wrench } from "lucide-react"
+import { CalendarDays, Check, ImageIcon, MapPin, Paperclip, ScrollText, UserRound, Wrench } from "lucide-react"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Textarea } from "@/components/ui/textarea"
 import type { TechnicianCommand } from "../domain/technician"
 import type { TechnicianDetail, TechnicianFacilityReport } from "../types"
+import { TechnicianReportTimingCells } from "./technician-report-timing-cells"
 import { cn } from "cn"
 
 const lifecycle = ["Baru", "Diverifikasi", "Diproses", "Selesai"] as const
@@ -63,12 +64,27 @@ export function TechnicianReportDetailDialog({ report: initialReport, open, onOp
         <dl className="mt-4 grid overflow-hidden rounded-xl border border-border/60 sm:grid-cols-2">{[
           { icon: UserRound, label: "Pelapor", value: report.reporter }, { icon: Wrench, label: "Fasilitas", value: report.facility },
           { icon: MapPin, label: "Lokasi", value: report.location }, { icon: CalendarDays, label: "Waktu kejadian", value: `${report.eventDate}, ${report.eventTime} WIB` },
-          { icon: Clock3, label: "Dikirim", value: report.submittedAt }, { icon: CheckCheck, label: "Selesai", value: report.completedAt ?? "Belum selesai" },
-        ].map(({ icon: Icon, label, value }, index) => <div key={label} className={cn("p-4", index < 4 && "border-b border-border/60", index % 2 === 0 && "sm:border-r sm:border-border/60", index === 4 && "border-b border-border/60 sm:border-b-0")}><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><Icon className="size-3.5" aria-hidden="true" />{label}</dt><dd className="mt-1.5 break-words text-sm font-medium">{value}</dd></div>)}<div className="border-t border-border/60 p-4 sm:col-span-2"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><ScrollText className="size-3.5" aria-hidden="true" />Deskripsi kerusakan</dt><dd className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed">{report.description}</dd></div></dl>
+        ].map(({ icon: Icon, label, value }, index) => <div key={label} className={cn("border-b border-border/60 p-4", index % 2 === 0 && "sm:border-r")}><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><Icon className="size-3.5" aria-hidden="true" />{label}</dt><dd className="mt-1.5 break-words text-sm font-medium">{value}</dd></div>)}<TechnicianReportTimingCells report={report} timing={detail.data.timing} /><div className="border-t border-border/60 p-4 sm:col-span-2"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><ScrollText className="size-3.5" aria-hidden="true" />Deskripsi kerusakan</dt><dd className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed">{report.description}</dd></div></dl>
       </section>
       <section className="border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><Paperclip className="size-4" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold">Lampiran</h3><p className="mt-0.5 text-xs text-muted-foreground">Foto atau dokumen pendukung.</p></div></div><div className="mt-4 space-y-2">{detail.data.files.length ? detail.data.files.map((file) => <div key={file.id} className="rounded-xl border border-border/60 p-3">{file.previewUrl ? /* Private authenticated previews cannot pass through the public Next image optimizer. */ <Image unoptimized width={800} height={600} src={file.previewUrl} alt={file.name} className="mb-3 h-auto max-h-64 w-full rounded-lg object-contain" loading="lazy" /> : null}<Button nativeButton={false} render={<a href={file.url} target="_blank" rel="noopener noreferrer" />} variant="outline" size="sm" className="max-w-full"><Paperclip /><span className="truncate">{file.name}</span></Button></div>) : <div className="flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4"><ImageIcon className="size-5 text-muted-foreground" aria-hidden="true" /><p className="text-sm text-muted-foreground">Pelapor tidak menambahkan lampiran.</p></div>}</div></section>
       <section className="border-t border-border/60 pt-6"><h3 className="text-sm font-semibold">Riwayat status</h3><div className="mt-3 space-y-2">{[...detail.data.history].reverse().map((entry, index) => <div key={`${entry.status}-${entry.timestamp}-${index}`} className="rounded-xl border border-border/60 bg-background/60 p-3"><div className="flex flex-wrap items-center gap-2"><StatusBadge status={entry.status} /><span className="text-xs text-muted-foreground">{entry.timestamp}</span></div><p className="mt-1 text-xs text-muted-foreground">Oleh {entry.actor}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{entry.note}</p></div>)}</div></section>
     </>}
-    <Dialog open={Boolean(decision)} onOpenChange={(value) => { if (!value && !pending) setDecision(null) }}><DialogContent className="max-w-lg p-5 md:p-6"><DialogTitle>{decision === "selesai" ? "Selesaikan perbaikan" : "Tolak laporan"}</DialogTitle><DialogDescription className="mt-1.5">Catatan ini disimpan pada riwayat dan dapat dilihat oleh pelapor.</DialogDescription><Field className="mt-4"><FieldLabel htmlFor={noteId}>{decision === "selesai" ? "Catatan pekerjaan" : "Alasan penolakan"}</FieldLabel><Textarea id={noteId} value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} disabled={pending} /><FieldDescription>{decision === "selesai" ? "Jelaskan tindakan yang dilakukan dan kondisi akhir fasilitas." : "Jelaskan mengapa laporan tidak dapat diverifikasi."} Maksimal 2.000 karakter.</FieldDescription>{!validDecision ? <FieldError>Status telah berubah. Tutup konfirmasi untuk melihat status terbaru.</FieldError> : error ? <FieldError>{error}</FieldError> : null}</Field><div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" disabled={pending} onClick={() => setDecision(null)}>Batal</Button><Button type="button" disabled={!ready || !validDecision || !note.trim()} onClick={() => void confirm()}>{pending ? "Menyimpan…" : "Simpan dan konfirmasi"}</Button></div></DialogContent></Dialog>
+    <Dialog open={Boolean(decision)} onOpenChange={(value) => { if (!value && !pending) setDecision(null) }}>
+      {/* Match Satpam's nested layers: blur the report below, never the confirmation form. */}
+      <DialogContent className="z-[80] max-w-lg p-5 md:p-6" overlayClassName="z-[70] bg-foreground/30 backdrop-blur-sm dark:bg-background/65 [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none" showNestedBackdrop>
+        <DialogTitle>{decision === "selesai" ? "Selesaikan perbaikan" : "Tolak laporan"}</DialogTitle>
+        <DialogDescription className="mt-1.5">Catatan ini disimpan pada riwayat dan dapat dilihat oleh pelapor.</DialogDescription>
+        <Field className="mt-4">
+          <FieldLabel htmlFor={noteId}>{decision === "selesai" ? "Catatan pekerjaan" : "Alasan penolakan"}</FieldLabel>
+          <Textarea id={noteId} value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} disabled={pending} />
+          <FieldDescription>{decision === "selesai" ? "Jelaskan tindakan yang dilakukan dan kondisi akhir fasilitas." : "Jelaskan mengapa laporan tidak dapat diverifikasi."} Maksimal 2.000 karakter.</FieldDescription>
+          {!validDecision ? <FieldError>Status telah berubah. Tutup konfirmasi untuk melihat status terbaru.</FieldError> : error ? <FieldError>{error}</FieldError> : null}
+        </Field>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" disabled={pending} onClick={() => setDecision(null)}>Batal</Button>
+          <Button type="button" disabled={!ready || !validDecision || !note.trim()} onClick={() => void confirm()}>{pending ? "Menyimpan…" : "Simpan dan konfirmasi"}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </OperationalReportDialog>
 }

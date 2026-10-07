@@ -26,6 +26,8 @@
   --foreground: #0c121a;
   --card: #ffffff;
   --card-foreground: #0c121a;
+  /* Quiet inset surfaces for empty states; existing card/background tokens stay unchanged. */
+  --empty-surface: #fafbfb;
   --popover: #ffffff;
   --popover-foreground: #0c121a;
   --primary: #297cef;
@@ -90,6 +92,7 @@
   --foreground: #f0f2f4;
   --card: #13161b;
   --card-foreground: #f0f2f4;
+  --empty-surface: #181b1f;
   --popover: #1a1d22;
   --popover-foreground: #f0f2f4;
   --primary: #3a8cff;
@@ -148,6 +151,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-empty-surface: var(--empty-surface);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -214,5 +218,25 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Scoped to the Teknisi room disclosure; the panel releases its measured height after opening. */
+.technician-room-panel {
+  height: var(--collapsible-panel-height);
+  overflow: hidden;
+  opacity: 1;
+  transition: height 200ms ease-out, opacity 200ms ease-out;
+}
+
+.technician-room-panel[data-starting-style],
+.technician-room-panel[data-ending-style] {
+  height: 0;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .technician-room-panel {
+    transition: none;
   }
 }

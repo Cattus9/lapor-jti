@@ -68,7 +68,7 @@ export function ReportSubmissionPreview({ snapshot, uploadUrls, pending, error, 
       </div>
       <div className="shrink-0 space-y-3 border-t border-border/60 bg-background/60 p-5 md:px-6" aria-busy={pending}>
         {error ? <FieldError>{error} Isian dan lampiran tetap tersedia; Anda dapat mencoba lagi atau kembali mengedit.</FieldError> : null}
-        <p className="text-xs leading-relaxed text-muted-foreground">Setelah dikirim, laporan masuk antrean pengelola dan tidak dapat diedit melalui formulir ini.</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">Setelah dikirim, pantau laporan melalui Laporan Saya. Formulir akan dikosongkan untuk laporan baru; laporan yang sudah terkirim tidak diubah.</p>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <DialogClose render={<Button ref={backButton} type="button" variant="outline" disabled={pending} />}>Kembali edit</DialogClose>
           <Button type="button" className="!h-9" disabled={pending} onClick={onConfirm}><Send aria-hidden="true" />{pending ? "Mengirim..." : "Konfirmasi kirim"}</Button>

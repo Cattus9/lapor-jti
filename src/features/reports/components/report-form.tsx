@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import type { DraftView, PublicAttachment } from "../application/ports"
 import type { ReportPayload } from "../domain/report"
@@ -9,6 +8,7 @@ import { parsePayload } from "../domain/report"
 import { createReportSubmissionSnapshot, reportSubmissionBody, type ReportSubmissionSnapshot } from "./report-submission-state"
 import { ReportSubmissionPreview } from "./report-submission-preview"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
+import { useReportSubmissionFeedback } from "@/components/report-submission-feedback-provider"
 import { formatCalendarDate, getTodayInWib } from "../domain/report-date"
 import { facilityLocationGroups, facilityObjectGroups, serviceNames as services, studyPrograms } from "../domain/catalog"
 import {
@@ -284,18 +284,18 @@ function ReportGuidance({ category }: { category: string }) {
 export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   const router = useRouter()
   const { notify } = useActivityNotifications()
+  const { submissionSucceeded } = useReportSubmissionFeedback()
   const formRef = useRef<HTMLFormElement>(null)
   const submitButtonRef = useRef<HTMLButtonElement>(null)
-  const successLinkRef = useRef<HTMLAnchorElement>(null)
   const previewUrls = useRef<string[]>([])
   const busy = useRef(false)
-  const [draftId] = useState(() => initialDraft?.id ?? crypto.randomUUID())
+  const [draftId, setDraftId] = useState(() => initialDraft?.id ?? crypto.randomUUID())
+  const [sourceDraft, setSourceDraft] = useState(initialDraft)
   const [revision, setRevision] = useState(initialDraft?.revision ?? 0)
   const [retained, setRetained] = useState<PublicAttachment[]>(initialDraft?.attachments ?? [])
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   const [preview, setPreview] = useState<(ReportSubmissionSnapshot & { uploadUrls: string[] }) | null>(null)
-  const [ticket, setTicket] = useState("")
   const [category, setCategory] = useState(initialDraft?.payload.category ?? "")
   const [reportType, setReportType] = useState(initialDraft?.payload.reportType ?? "")
   const [location, setLocation] = useState(initialDraft?.payload.location ?? "")
@@ -308,7 +308,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   const [incidentDate, setIncidentDate] = useState<Date | undefined>(() => initialDraft?.payload.incidentDate ? new Date(initialDraft.payload.incidentDate + "T00:00:00") : undefined)
   const [incidentTime, setIncidentTime] = useState(initialDraft?.payload.incidentTime ?? "")
   const [datePickerOpen, setDatePickerOpen] = useState(false)
-  const [savedState, setSavedState] = useState<"idle" | "draft" | "submitted">(initialDraft ? "draft" : "idle")
+  const [savedState, setSavedState] = useState<"idle" | "draft">(initialDraft ? "draft" : "idle")
   const today = new Date(`${getTodayInWib()}T00:00:00`)
   const incidentDateError = incidentDate && formatCalendarDate(incidentDate) > getTodayInWib() ? "Tanggal kejadian tidak boleh melebihi hari ini (WIB)." : ""
   // Blob URLs belong to this form, never to a persisted report or API payload.
@@ -324,7 +324,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   }
   async function save(submit: boolean, confirmed?: ReportSubmissionSnapshot) {
     // Only the preview's explicit confirmation can initiate a report submission.
-    if (!formRef.current || busy.current || savedState === "submitted" || (submit && (!confirmed || confirmed !== preview))) return
+    if (!formRef.current || busy.current || (submit && (!confirmed || confirmed !== preview))) return
     busy.current = true; setPending(true); setError("")
     try {
       const snapshot = confirmed ?? { payload: parsePayload(currentPayload(), false), retained, files: attachments }
@@ -336,8 +336,16 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
       if (!response.ok || !result) throw new Error(result?.error || "Permintaan belum dapat dipastikan berhasil. Coba lagi; sistem mencegah laporan ganda.")
       if (submit) {
         if (typeof result.report?.ticketNumber !== "string") throw new Error("Nomor tiket belum diterima. Coba lagi; sistem mencegah laporan ganda.")
-        setTicket(result.report.ticketNumber); setSavedState("submitted"); releasePreview(); setPreview(null)
+        const source = submitButtonRef.current?.getBoundingClientRect()
+        // Reset only after confirmed success. Failed/ambiguous requests retain the same id for safe retries.
+        setDraftId(crypto.randomUUID()); setRevision(0); setSourceDraft(undefined)
+        resetCategory(category); setDatePickerOpen(false); releasePreview(); setPreview(null)
+        // A submitted draft cannot be resumed; keep refresh from requesting its old URL.
+        const url = new URL(window.location.href)
+        url.searchParams.delete("draft")
+        window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
         notify({ title: "Laporan berhasil dikirim", description: `Tiket ${result.report.ticketNumber} telah diterima. Pantau perkembangannya di Laporan Saya.`, tone: "success" })
+        submissionSucceeded(source)
       }
       else { setRevision(result.draft.revision); setRetained(result.draft.attachments); setAttachments([]); setSavedState("draft"); router.replace(`/pelapor/buat-laporan?draft=${draftId}`, { scroll: false }) }
       if (!submit) router.refresh()
@@ -351,7 +359,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   function handleDraft() { void save(false) }
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy.current || preview || savedState === "submitted" || !event.currentTarget.reportValidity()) return
+    if (busy.current || preview || !event.currentTarget.reportValidity()) return
     try {
       const snapshot = createReportSubmissionSnapshot(currentPayload(), retained, attachments)
       for (const file of snapshot.files) previewUrls.current.push(URL.createObjectURL(file))
@@ -381,15 +389,15 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
       <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><FileText className="size-4 text-primary" aria-hidden="true" />Formulir laporan</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-5 md:p-6">
         <form ref={formRef} tabIndex={-1} className="space-y-7" onSubmit={handleSubmit} aria-busy={pending}>
-          <fieldset disabled={pending || Boolean(preview) || savedState === "submitted"} className="space-y-7">
+          <fieldset disabled={pending || Boolean(preview)} className="space-y-7">
           <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih satu kategori untuk menampilkan kolom yang relevan.</FieldDescription><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} onSelect={() => resetCategory(item.value)} />)}</div></Field>
-          {category ? <div className="space-y-5 border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">1</span><h2 className="text-sm font-semibold">Informasi laporan</h2></div><FieldGroup>
+          {category ? <div key={draftId} className="space-y-5 border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">1</span><h2 className="text-sm font-semibold">Informasi laporan</h2></div><FieldGroup>
             {category === "kehilangan-temuan" ? <SelectField id="report-type" label="Jenis laporan" placeholder="Pilih jenis laporan" value={reportType} onValueChange={setReportType} options={["Kehilangan", "Temuan"]} /> : null}
-            <Field><FieldLabel htmlFor="title">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={initialDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
-            {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={initialDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field><Field><FieldLabel htmlFor="item-details">Ciri-ciri barang</FieldLabel><Textarea id="item-details" name="item-details" defaultValue={initialDraft?.payload.itemDetails} placeholder="Tuliskan ciri khas, isi, atau tanda pengenal barang." required /></Field></> : null}
+            <Field><FieldLabel htmlFor="title">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
+            {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field><Field><FieldLabel htmlFor="item-details">Ciri-ciri barang</FieldLabel><Textarea id="item-details" name="item-details" defaultValue={sourceDraft?.payload.itemDetails} placeholder="Tuliskan ciri khas, isi, atau tanda pengenal barang." required /></Field></> : null}
             {category === "fasilitas" ? <div className="grid gap-5 sm:grid-cols-2"><FacilityLocationSelectField value={location} onValueChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} /><FacilityMultiSelectField value={selectedFacilities} onValueChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /></div> : null}
             {category === "layanan" ? <div className="grid gap-5 sm:grid-cols-2"><SelectField id="service" label="Jenis layanan" placeholder="Pilih layanan" value={service} onValueChange={setService} options={services} /><SelectField id="program" label="Unit atau program studi" placeholder="Pilih unit terkait" value={program} onValueChange={setProgram} options={studyPrograms} /></div> : null}
-            {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={initialDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
+            {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <Field data-invalid={Boolean(incidentDateError)}>
                 <FieldLabel htmlFor="incident-date">Tanggal kejadian</FieldLabel>
@@ -410,18 +418,32 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
               <TimePickerField value={incidentTime} onValueChange={setIncidentTime} />
               {category !== "fasilitas" ? <Field><FieldLabel htmlFor="location">Lokasi kejadian</FieldLabel><Input id="location" name="location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Gedung JTI, Ruang 3.4" required /></Field> : <div className="flex items-end text-sm text-muted-foreground"><div className="flex items-start gap-2 rounded-lg bg-muted/60 p-3"><MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>Lokasi fasilitas dipilih dari daftar lokasi JTI di atas.</span></div></div>}
             </div>
-            <Field><FieldLabel htmlFor="description">Deskripsi laporan</FieldLabel><Textarea id="description" name="description" defaultValue={initialDraft?.payload.description} placeholder="Jelaskan kronologi, kondisi, atau kendala secara singkat dan jelas." required /><FieldDescription>Hindari data pribadi yang tidak diperlukan dalam laporan.</FieldDescription></Field>
+            <Field><FieldLabel htmlFor="description">Deskripsi laporan</FieldLabel><Textarea id="description" name="description" defaultValue={sourceDraft?.payload.description} placeholder="Jelaskan kronologi, kondisi, atau kendala secara singkat dan jelas." required /><FieldDescription>Hindari data pribadi yang tidak diperlukan dalam laporan.</FieldDescription></Field>
           </FieldGroup></div> : null}
-          {category ? <div className="space-y-5 border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">2</span><h2 className="text-sm font-semibold">Lampiran dan pengiriman</h2></div><Field><FieldLabel htmlFor="attachment">Lampiran pendukung <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel>{retained.length ? <div className="space-y-2">{retained.map((file) => <div key={file.id} className="flex items-center justify-between gap-3 rounded-lg border p-3"><a href={`/api/pelapor/attachments/${file.id}`} className="truncate text-sm text-primary">{file.name}</a><Button type="button" variant="ghost" size="sm" onClick={() => setRetained((items) => items.filter((item) => item.id !== file.id))}>Hapus</Button></div>)}</div> : null}<FileDropzone id="attachment" value={attachments} onChange={setAttachments} maxFiles={Math.max(0, 4 - retained.length)} /><FieldDescription>Foto atau dokumen pendukung membantu pengelola memahami laporan Anda.</FieldDescription></Field><div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Data laporan hanya digunakan untuk penanganan internal JTI.</span></div><div className="flex flex-col-reverse gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={handleDraft} disabled={savedState === "submitted"}><Save />Simpan draft</Button><Button ref={submitButtonRef} type="submit" aria-haspopup="dialog" disabled={!canSubmit || savedState === "submitted"}><Send />Kirim laporan<ArrowRight className="ml-0.5" /></Button></div></div></div> : <div className="rounded-lg border border-dashed border-border bg-muted/30 p-5 text-center text-sm text-muted-foreground">Pilih kategori laporan untuk mulai mengisi formulir.</div>}
+          {category ? <div className="space-y-5 border-t border-border/60 pt-6">
+            <div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">2</span><h2 className="text-sm font-semibold">Lampiran dan pengiriman</h2></div>
+            <Field>
+              <FieldLabel htmlFor="attachment">Lampiran pendukung <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel>
+              {retained.length ? <div className="space-y-2">{retained.map((file) => <div key={file.id} className="flex items-center justify-between gap-3 rounded-lg border p-3"><a href={`/api/pelapor/attachments/${file.id}`} className="truncate text-sm text-primary">{file.name}</a><Button type="button" variant="ghost" size="sm" onClick={() => setRetained((items) => items.filter((item) => item.id !== file.id))}>Hapus</Button></div>)}</div> : null}
+              <FileDropzone id="attachment" value={attachments} onChange={setAttachments} maxFiles={Math.max(0, 4 - retained.length)} />
+              <FieldDescription>Foto atau dokumen pendukung membantu pengelola memahami laporan Anda.</FieldDescription>
+            </Field>
+            <div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Data laporan hanya digunakan untuk penanganan internal JTI.</span></div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button type="button" variant="outline" onClick={handleDraft}><Save />Simpan draft</Button>
+                <Button ref={submitButtonRef} type="submit" aria-haspopup="dialog" disabled={!canSubmit}><Send />Kirim laporan<ArrowRight className="ml-0.5" /></Button>
+              </div>
+            </div>
+          </div> : <div className="rounded-lg border border-dashed border-border bg-muted/30 p-5 text-center text-sm text-muted-foreground">Pilih kategori laporan untuk mulai mengisi formulir.</div>}
           </fieldset>
           {pending ? <p className="text-sm text-muted-foreground" role="status">Menyimpan laporan...</p> : null}
           {error ? <FieldError>{error}</FieldError> : null}
           {savedState === "draft" ? <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><CheckCircle2 className="size-4 text-primary" />Draft terakhir tersimpan. Simpan lagi setelah melakukan perubahan.</p> : null}
-          {savedState === "submitted" ? <div className="space-y-3" role="status"><p className="flex items-center gap-2 text-sm"><CheckCircle2 className="size-4 text-primary" />Laporan {ticket} berhasil dikirim.</p><Button nativeButton={false} render={<Link ref={successLinkRef} href={`/pelapor/laporan-saya?ticket=${encodeURIComponent(ticket)}`} />}>Lihat laporan<ArrowRight /></Button></div> : null}
         </form>
       </CardContent></div></Card>
       <ReportGuidance category={category} />
-      {preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} onClose={() => { if (!busy.current) { releasePreview(); setPreview(null); setError("") } }} onConfirm={() => { void save(true, preview) }} finalFocus={() => successLinkRef.current ?? (submitButtonRef.current?.disabled ? formRef.current : submitButtonRef.current)} /> : null}
+      {preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} onClose={() => { if (!busy.current) { releasePreview(); setPreview(null); setError("") } }} onConfirm={() => { void save(true, preview) }} finalFocus={() => submitButtonRef.current?.disabled ? formRef.current : submitButtonRef.current} /> : null}
     </div>
   )
 }

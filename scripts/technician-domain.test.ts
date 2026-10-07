@@ -63,3 +63,19 @@ test("Details and downloads require valid identifiers and never read storage on 
   await assert.rejects(service.download({ ...actor, role: "pelapor" }, actor.id), ReportError)
   assert.equal(reads, 0)
 })
+test("Active queue cannot include terminal reports; rejected reports remain in their archive", async () => {
+  const reads: { status: string; activeOnly: boolean; history: boolean; sort: string; period: string }[] = []
+  const repository = {
+    list: (filter: ReturnType<typeof parseTechnicianFilter>, history = false) => {
+      reads.push({ status: filter.status, activeOnly: filter.activeOnly, history, sort: filter.sort, period: filter.period })
+      return Promise.resolve({ items: [], total: 0, nextCursor: null })
+    },
+  } as unknown as TechnicianRepository
+  const service = new TechnicianService(repository, {} as AttachmentStorage)
+  await service.list(actor, { active: "0" })
+  await service.history(actor, { status: "ditolak", active: "1", sort: "terlama", period: "hari-ini" })
+  assert.deepEqual(reads, [
+    { status: "semua", activeOnly: true, history: false, sort: "terbaru", period: "semua" },
+    { status: "ditolak", activeOnly: false, history: true, sort: "terlama", period: "hari-ini" },
+  ])
+})

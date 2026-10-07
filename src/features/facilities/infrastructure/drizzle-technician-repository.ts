@@ -6,6 +6,7 @@ import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor }
 import { defaultReportFilters, reportDateBounds } from "../../reports/domain/report-list-filters"
 import { DrizzleReportRepository } from "../../reports/infrastructure/drizzle-report-repository"
 import { technicianExpectedStatus, type TechnicianCommand } from "../domain/technician"
+import { getTechnicianReportTiming } from "../domain/technician-report-timing"
 import type { TechnicianRepository } from "../application/ports"
 import type { TechnicianFacilityReport, TechnicianFilter, TechnicianPage, TechnicianReportStatus, TechnicianRoomPriority } from "../types"
 
@@ -51,11 +52,12 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
   }
   async list(filter: TechnicianFilter, history = false): Promise<TechnicianPage<TechnicianFacilityReport>> {
     const after = cursorValue(filter.cursor), bounds = reportDateBounds({ ...defaultReportFilters, period: filter.period, from: filter.from, to: filter.to })
-    const date = history ? reports.completedAt : reports.submittedAt
+    const rejectedHistory = history && filter.status === "ditolak"
+    const date = history ? rejectedHistory ? reports.updatedAt : reports.completedAt : reports.submittedAt
     const compare = filter.sort === "terlama" ? gt : lt, order = filter.sort === "terlama" ? asc : desc
     const criteria = and(scope,
-      history ? eq(reports.status, "selesai") : filter.status !== "semua" ? eq(reports.status, filter.status) : undefined,
-      history ? isNotNull(reports.completedAt) : undefined,
+      history ? eq(reports.status, rejectedHistory ? "ditolak" : "selesai") : filter.status !== "semua" ? eq(reports.status, filter.status) : undefined,
+      history && !rejectedHistory ? isNotNull(reports.completedAt) : undefined,
       filter.activeOnly ? active : undefined,
       filter.classifiedOnly ? and(isNotNull(reports.locationId), sql`exists (select 1 from ${reportFacilityObjects} where ${reportFacilityObjects.reportId} = ${reports.id} and ${reportFacilityObjects.objectId} is not null)`) : undefined,
       filter.locationId ? eq(reports.locationId, filter.locationId) : undefined,
@@ -70,7 +72,7 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
       this.db.select({ count: sql<number>`count(*)::integer` }).from(reports).where(criteria),
     ])
     const page = rows.slice(0, pageSize), last = page.at(-1)
-    return { items: await this.hydrate(page), total: totals[0].count, nextCursor: rows.length > pageSize && last ? cursorFor(history ? last.report.completedAt! : last.report.submittedAt, last.report.id) : null }
+    return { items: await this.hydrate(page), total: totals[0].count, nextCursor: rows.length > pageSize && last ? cursorFor(history ? rejectedHistory ? last.report.updatedAt : last.report.completedAt! : last.report.submittedAt, last.report.id) : null }
   }
   async detail(ticket: string) {
     const rows = await this.db.select({ report: reports, reporter: users.name }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(scope, eq(reports.ticketNumber, ticket))).limit(1)
@@ -81,7 +83,9 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
       this.db.select().from(reportStatusHistory).where(eq(reportStatusHistory.reportId, id)).orderBy(asc(reportStatusHistory.createdAt), asc(reportStatusHistory.id)),
       this.db.select().from(reportAttachments).where(eq(reportAttachments.reportId, id)).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)),
     ])
-    return { report, history: history.map((entry) => ({ status: statusLabels[entry.toStatus] as TechnicianReportStatus, actor: entry.actorName, timestamp: dateLabel(entry.createdAt), note: entry.note })),
+    // Reuse the indexed history read above; never infer a start time from updatedAt.
+    const processingStartedAt = history.find((entry) => entry.toStatus === "diproses")?.createdAt ?? null
+    return { report, timing: getTechnicianReportTiming(rows[0].report, processingStartedAt), history: history.map((entry) => ({ status: statusLabels[entry.toStatus] as TechnicianReportStatus, actor: entry.actorName, timestamp: dateLabel(entry.createdAt), note: entry.note })),
       files: files.map((file) => ({ id: file.id, name: file.name, mimeType: file.mimeType, url: `/api/teknisi/attachments/${file.id}`, previewUrl: file.mimeType.startsWith("image/") ? `/api/teknisi/attachments/${file.id}?preview=1` : undefined })) }
   }
   async priorities(status: TechnicianFilter["status"] = "semua"): Promise<TechnicianRoomPriority[]> {

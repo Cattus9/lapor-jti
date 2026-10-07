@@ -354,9 +354,7 @@ export function SatpamHandoverHistory({ user, officers }: { user: CurrentUser; o
           <div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs">
             <CardContent className="space-y-4 p-4 md:p-5">
               <div className="border-b border-border/60 pb-4">
-                <h2 className="text-base font-semibold text-foreground">Riwayat penyerahan</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Catatan penyerahan beserta penerima dan petugas penanggung jawab.</p>
-                <div className="mt-4 flex items-end gap-2">
+                <div className="flex items-end gap-2">
                   <div className="grid min-w-0 flex-1 gap-1 lg:max-w-sm">
                     <label htmlFor="history-search" className="text-xs font-medium text-muted-foreground">Cari riwayat</label>
                     <div className="relative">

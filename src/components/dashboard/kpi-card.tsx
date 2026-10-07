@@ -3,20 +3,29 @@ import { ArrowRight, type LucideIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
 
 const toneClasses = {
-  blue: "bg-primary/10 text-primary",
-  green: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  red: "bg-destructive/10 text-destructive",
+  blue: {
+    surface: "border-primary/20 bg-primary/10",
+    foreground: "text-primary-action-hover dark:text-primary",
+    indicator: "bg-primary/20 dark:bg-primary/30",
+  },
+  green: {
+    surface: "border-emerald-500/20 bg-emerald-500/10",
+    foreground: "text-emerald-700 dark:text-emerald-400",
+    indicator: "bg-emerald-500/20 dark:bg-emerald-400/30",
+  },
+  amber: {
+    surface: "border-amber-500/20 bg-amber-500/10",
+    foreground: "text-amber-700 dark:text-amber-400",
+    indicator: "bg-amber-500/20 dark:bg-amber-400/30",
+  },
+  red: {
+    surface: "border-destructive/20 bg-destructive/10",
+    foreground: "text-destructive",
+    indicator: "bg-destructive/20 dark:bg-destructive/30",
+  },
 } as const
 
 type KpiTone = keyof typeof toneClasses
-
-const iconToneClasses: Record<KpiTone, string> = {
-  blue: "border-primary/20 bg-primary/10 text-primary",
-  green: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  amber: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  red: "border-destructive/20 bg-destructive/10 text-destructive",
-}
 
 export function KpiCard({
   label,
@@ -25,7 +34,7 @@ export function KpiCard({
   iconTone = "blue",
   detail,
   detailValue,
-  detailTone = "blue",
+  detailTone = iconTone,
   href,
 }: {
   label: string
@@ -37,15 +46,15 @@ export function KpiCard({
   detailTone?: KpiTone
   href?: string
 }) {
-  const tone = toneClasses[detailTone]
-  const [indicatorColor, valueColor] = tone.split(" ")
+  const iconToneClass = toneClasses[iconTone]
+  const detailToneClass = toneClasses[detailTone]
 
   return (
     <Card className="flex min-h-44 flex-col justify-between gap-1 overflow-hidden rounded-2xl border border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
       {/* KPI inner layer: floating content surface. */}
       <div className="flex-1 space-y-3 rounded-xl border border-border/60 bg-card p-4 text-card-foreground shadow-2xs">
         <div className="flex items-center gap-3.5">
-          <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs ${iconToneClasses[iconTone]}`}>
+          <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs ${iconToneClass.surface} ${iconToneClass.foreground}`}>
             <Icon className="size-5" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div className="flex flex-col">
@@ -56,10 +65,10 @@ export function KpiCard({
         {detail && detailValue !== undefined ? (
           <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2.5 text-xs">
             <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
-              <span className={`size-2 rounded-full ${indicatorColor}`} />
+              <span className={`size-2 shrink-0 rounded-full ${detailToneClass.indicator}`} aria-hidden="true" />
               <span>{detail}</span>
             </div>
-            <span className={`font-semibold ${valueColor}`}>{detailValue}</span>
+            <span className={`font-semibold ${detailToneClass.foreground}`}>{detailValue}</span>
           </div>
         ) : null}
       </div>

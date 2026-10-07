@@ -71,6 +71,23 @@ function DashboardLoading({ role }: { role: AppRole }) {
     return <Skeleton className="h-4 w-56 max-w-full" />
   }
 
+  if (role === "teknisi") {
+    return <>
+      <LoadingKpiCards count={4} />
+      <LoadingPanel>
+        <LoadingPanelHeading />
+        <div className="grid gap-5 xl:grid-cols-2">
+          <Skeleton className="h-56 w-full rounded-xl" />
+          <Skeleton className="h-56 w-full rounded-xl" />
+        </div>
+      </LoadingPanel>
+      <LoadingPanel>
+        <LoadingPanelHeading />
+        <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-16 w-full rounded-xl" />)}</div>
+      </LoadingPanel>
+    </>
+  }
+
   return (
     <>
       <LoadingKpiCards count={role === "satpam" || role === "pelapor" ? 3 : 4} />

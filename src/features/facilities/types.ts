@@ -1,6 +1,7 @@
 import type { ReportStatus } from "../reports/domain/report"
 import type { NotificationItem } from "../notifications/types"
 import type { reportPeriods } from "../reports/domain/report-list-filters"
+import type { TechnicianReportTiming } from "./domain/technician-report-timing"
 
 export type TechnicianStatus = Extract<ReportStatus, "baru" | "diverifikasi" | "diproses" | "selesai" | "ditolak">
 export type TechnicianReportStatus = "Baru" | "Diverifikasi" | "Diproses" | "Selesai" | "Ditolak"
@@ -21,6 +22,7 @@ export type TechnicianFilter = {
 export type TechnicianPage<T> = { items: T[]; total: number; nextCursor: string | null }
 export type TechnicianDetail = {
   report: TechnicianFacilityReport
+  timing: TechnicianReportTiming
   history: Array<{ status: TechnicianReportStatus; actor: string; timestamp: string; note: string }>
   files: Array<{ id: string; name: string; mimeType: string; url: string; previewUrl?: string }>
 }

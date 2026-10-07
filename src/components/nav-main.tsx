@@ -13,7 +13,7 @@ import { cn } from "cn"
 const menuButtonClass = "h-11 gap-2.5 rounded-lg border border-transparent px-3 text-[15px] font-medium text-sidebar-foreground/70 transition-colors data-active:border-sidebar-border data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-[18px] [&_svg]:stroke-[1.75] group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:[&_svg]:translate-x-1"
 const activeMenuClass = "border-sidebar-border bg-sidebar-accent text-sidebar-accent-foreground"
 
-export function NavMain({ items }: { items: { title: string; url: string; icon?: React.ReactNode; isActive?: boolean; items?: { title: string; url: string }[] }[] }) {
+export function NavMain({ items }: { items: { title: string; url: string; icon?: React.ReactNode; isActive?: boolean; indicator?: React.ReactNode; accessibleLabel?: string; items?: { title: string; url: string }[] }[] }) {
   const pathname = usePathname()
   return (
     <SidebarGroup className="px-1.5 py-2 group-data-[collapsible=icon]:px-0">
@@ -33,7 +33,7 @@ export function NavMain({ items }: { items: { title: string; url: string; icon?:
             </CollapsibleContent>
           </Collapsible>
         ) : (
-          <SidebarMenuItem key={item.title}><SidebarMenuButton isActive={isActive} tooltip={item.title} className={cn(menuButtonClass, isActive && activeMenuClass, "group-data-[collapsible=icon]:mx-auto")} render={<Link href={item.url} />}>{item.icon}<span>{item.title}</span></SidebarMenuButton></SidebarMenuItem>
+          <SidebarMenuItem key={item.title}><SidebarMenuButton isActive={isActive} tooltip={item.accessibleLabel ?? item.title} aria-label={item.accessibleLabel} className={cn(menuButtonClass, isActive && activeMenuClass, "group-data-[collapsible=icon]:mx-auto")} render={<Link href={item.url} />}>{item.icon}<span>{item.title}</span></SidebarMenuButton>{item.indicator}</SidebarMenuItem>
         )
         })}
       </SidebarMenu>

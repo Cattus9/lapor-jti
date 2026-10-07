@@ -9,7 +9,8 @@ export default async function TeknisiFacilityReportsPage({ searchParams }: { sea
   // Pertahankan guard ini saat beralih ke Google Workspace; adaptasi session ada di server-session.ts.
   const user = await requireRole("teknisi")
   const { view, ticket } = await searchParams
-  const initialView = view === "all" ? "all" : "priority"
+  // Preserve existing links while naming the active-ticket view explicitly.
+  const initialView = view === "queue" || view === "all" ? "queue" : "priority"
 
   return <DashboardLayout role="teknisi"><ContentShell><PageHeader title="Laporan Fasilitas" description={`Kelola antrean kerusakan fasilitas JTI, ${user.name}.`} /><TeknisiFacilityReportList initialView={initialView} ticket={typeof ticket === "string" ? ticket : undefined} /></ContentShell></DashboardLayout>
 }

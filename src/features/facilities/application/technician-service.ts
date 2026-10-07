@@ -6,8 +6,8 @@ import type { TechnicianRepository } from "./ports"
 
 export class TechnicianService {
   constructor(private readonly repository: TechnicianRepository, private readonly storage: AttachmentStorage) {}
-  list(actor: ReportActor, raw: Record<string, unknown>) { requireTechnician(actor); return this.repository.list(parseTechnicianFilter(raw)) }
-  history(actor: ReportActor, raw: Record<string, unknown>) { requireTechnician(actor); return this.repository.list(parseTechnicianFilter({ ...raw, status: "selesai", active: "0" }), true) }
+  list(actor: ReportActor, raw: Record<string, unknown>) { requireTechnician(actor); return this.repository.list(parseTechnicianFilter({ ...raw, active: "1" })) }
+  history(actor: ReportActor, raw: Record<string, unknown>) { requireTechnician(actor); return this.repository.list(parseTechnicianFilter({ ...raw, status: raw.status === "ditolak" ? "ditolak" : "selesai", active: "0" }), true) }
   priorities(actor: ReportActor, raw: Record<string, unknown> = {}) { requireTechnician(actor); return this.repository.priorities(parseTechnicianFilter(raw).status) }
   dashboard(actor: ReportActor) { requireTechnician(actor); return this.repository.dashboard() }
   async detail(actor: ReportActor, ticket: string) {
