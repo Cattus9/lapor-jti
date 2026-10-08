@@ -10,7 +10,10 @@ import { ReportSubmissionPreview } from "./report-submission-preview"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
 import { useReportSubmissionFeedback } from "@/components/report-submission-feedback-provider"
 import { formatCalendarDate, getTodayInWib } from "../domain/report-date"
-import { facilityLocationGroups, facilityObjectGroups, serviceNames as services, studyPrograms } from "../domain/catalog"
+import { studyPrograms } from "../domain/catalog"
+import { FacilityMappingFields } from "./facility-mapping-fields"
+import { availableFacilities, type OperationalCatalog } from "@/features/operations/domain/operations"
+import { useOperationalResource } from "@/components/reports/use-operational-data"
 import {
   ArrowRight,
   Building2,
@@ -33,13 +36,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
-import { Checkbox } from "@/components/ui/checkbox"
 import { FileDropzone } from "@/components/ui/file-dropzone"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "cn"
 
@@ -50,124 +51,15 @@ const categories = [
   { value: "lainnya", label: "Laporan Lainnya", icon: FileText, hint: "Laporan umum di luar kategori utama", iconClassName: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300" },
 ]
 
-const facilities = facilityObjectGroups.flatMap((group) => group.facilities)
-
 function SelectField({ id, label, placeholder, value, onValueChange, options, description }: { id: string; label: string; placeholder: string; value: string; onValueChange: (value: string) => void; options: string[]; description?: string }) {
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
       {description ? <FieldDescription>{description}</FieldDescription> : null}
-      <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue ?? "")}>
+      <Select value={value} items={[...new Set([...options, ...(value ? [value] : [])])].map((name) => ({ value: name, label: name }))} onValueChange={(nextValue) => onValueChange(nextValue ?? "")}>
         <SelectTrigger id={id} aria-label={label} className="!h-11 w-full bg-background/70"><SelectValue placeholder={placeholder} /></SelectTrigger>
         <SelectContent>{options.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
       </Select>
-    </Field>
-  )
-}
-
-function FacilityLocationSelectField({ value, onValueChange, otherLocation, onOtherLocationChange }: { value: string; onValueChange: (value: string) => void; otherLocation: string; onOtherLocationChange: (value: string) => void }) {
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [activeLocationGroup, setActiveLocationGroup] = useState(facilityLocationGroups[0].label)
-  const selectedLocationGroup = facilityLocationGroups.find((group) => group.locations.includes(value))?.label
-  const activeLocationOptions = facilityLocationGroups.find((group) => group.label === activeLocationGroup) ?? facilityLocationGroups[0]
-
-  function selectLocation(nextLocation: string) {
-    onValueChange(nextLocation)
-    if (nextLocation !== "Lainnya") onOtherLocationChange("")
-    setMobileOpen(false)
-  }
-
-  function handleMobileOpenChange(nextOpen: boolean) {
-    if (nextOpen) setActiveLocationGroup(selectedLocationGroup ?? facilityLocationGroups[0].label)
-    setMobileOpen(nextOpen)
-  }
-
-  return (
-    <Field>
-      <FieldLabel>Lokasi fasilitas</FieldLabel>
-      <input type="hidden" name="facility-location" value={value} />
-      <Button type="button" variant="outline" aria-label="Pilih lokasi fasilitas" className="h-11 w-full justify-between bg-background/70 text-left font-normal sm:hidden" onClick={() => handleMobileOpenChange(true)}><span className={value ? "truncate text-foreground" : "truncate text-muted-foreground/70"}>{value || "Pilih lokasi fasilitas"}</span><ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></Button>
-      <Sheet open={mobileOpen} onOpenChange={handleMobileOpenChange}>
-        <SheetContent side="bottom" className="h-[66.6667dvh] overflow-hidden gap-0 rounded-t-2xl p-0 sm:hidden">
-          <SheetHeader className="border-b border-border/60 px-5 py-4 pr-12"><SheetTitle>Pilih lokasi fasilitas</SheetTitle><SheetDescription>Pilih ruang, area bersama, sanitasi, atau area luar yang terdampak.</SheetDescription></SheetHeader>
-          <div className="border-b border-border/60 px-5 py-3"><div className="flex touch-pan-x gap-2 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Kategori lokasi">{facilityLocationGroups.map((group) => <Button key={group.label} type="button" size="sm" variant="outline" aria-pressed={activeLocationGroup === group.label} className={cn("h-8 shrink-0 rounded-full px-3 text-xs font-medium", activeLocationGroup === group.label ? "border-primary/35 bg-primary/10 text-primary hover:bg-primary/10" : "bg-card text-muted-foreground")} onClick={() => setActiveLocationGroup(group.label)}>{group.label}</Button>)}</div></div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4"><section className="space-y-3"><h3 className="text-sm font-semibold text-foreground">{activeLocationOptions.label}</h3><div className="grid gap-2">{activeLocationOptions.locations.map((location) => { const selected = value === location; return <Button key={location} type="button" variant="outline" aria-pressed={selected} className={cn("h-auto min-h-11 justify-between px-3 py-2.5 text-left font-normal", selected ? "border-primary/35 bg-primary/5 text-foreground" : "bg-card text-foreground")} onClick={() => selectLocation(location)}><span className="min-w-0 flex-1 truncate">{location}</span>{selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}</Button> })}</div></section></div>
-        </SheetContent>
-      </Sheet>
-      <div className="hidden sm:block"><Select value={value} onValueChange={(nextValue) => selectLocation(nextValue ?? "")}>
-        <SelectTrigger id="facility-location" aria-label="Lokasi fasilitas" className="!h-11 w-full bg-background/70"><SelectValue placeholder="Pilih lokasi fasilitas" /></SelectTrigger>
-        <SelectContent matchTriggerWidth={false} className="w-[min(44rem,calc(100vw-2rem))] p-2" listClassName="grid max-h-[min(30rem,calc(100dvh-10rem))] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-3">
-          {facilityLocationGroups.map((group) => (
-            <SelectGroup key={group.label} className="rounded-lg border border-border/60 bg-muted/30 p-1.5">
-              <SelectLabel className="px-1.5 pt-1.5 pb-2 font-medium text-foreground">{group.label}</SelectLabel>
-              {group.locations.map((location) => <SelectItem key={location} value={location}>{location}</SelectItem>)}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select></div>
-      <FieldDescription>Pilih ruang, area bersama, sanitasi, atau area luar yang terdampak.</FieldDescription>
-      {value === "Lainnya" ? <div className="space-y-2"><FieldLabel htmlFor="facility-location-detail">Detail lokasi</FieldLabel><Input id="facility-location-detail" name="facility-location-detail" value={otherLocation} onChange={(event) => onOtherLocationChange(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Samping pintu masuk Gedung JTI" required /><FieldDescription>Jelaskan titik lokasi agar petugas dapat menemukan fasilitasnya.</FieldDescription></div> : null}
-    </Field>
-  )
-}
-
-function FacilityMultiSelectField({ value, onValueChange, otherFacility, onOtherFacilityChange }: { value: string[]; onValueChange: (value: string[]) => void; otherFacility: string; onOtherFacilityChange: (value: string) => void }) {
-  const [desktopOpen, setDesktopOpen] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [activeObjectGroup, setActiveObjectGroup] = useState(facilityObjectGroups[0].label)
-  const summary = value.length === 0 ? "Pilih satu atau lebih objek" : value.length <= 2 ? value.join(", ") : `${value.slice(0, 2).join(", ")} +${value.length - 2}`
-  const activeObjectOptions = facilityObjectGroups.find((group) => group.label === activeObjectGroup) ?? facilityObjectGroups[0]
-
-  function toggleFacility(facility: string, checked: boolean) {
-    onValueChange(checked ? [...value, facility] : value.filter((item) => item !== facility))
-    if (facility === "Lainnya" && !checked) onOtherFacilityChange("")
-  }
-
-  function clearFacilities() {
-    onValueChange([])
-    onOtherFacilityChange("")
-  }
-
-  function handleMobileOpenChange(nextOpen: boolean) {
-    if (nextOpen) setActiveObjectGroup(facilityObjectGroups.find((group) => group.facilities.some((facility) => value.includes(facility)))?.label ?? facilityObjectGroups[0].label)
-    setMobileOpen(nextOpen)
-  }
-
-  return (
-    <Field>
-      <FieldLabel>Objek fasilitas</FieldLabel>
-      <input type="hidden" name="facilities" value={value.join(",")} />
-      <Button type="button" variant="outline" aria-label="Pilih objek fasilitas" className="h-11 w-full justify-between bg-background/70 text-left font-normal sm:hidden" onClick={() => handleMobileOpenChange(true)}><span className={value.length ? "truncate text-foreground" : "truncate text-muted-foreground/70"}>{summary}</span><span className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{value.length || ""}</span><ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" /></span></Button>
-      <Sheet open={mobileOpen} onOpenChange={handleMobileOpenChange}>
-        <SheetContent side="bottom" className="h-[66.6667dvh] overflow-hidden gap-0 rounded-t-2xl p-0 sm:hidden">
-          <SheetHeader className="border-b border-border/60 px-5 py-4 pr-12"><SheetTitle>Pilih objek fasilitas</SheetTitle><SheetDescription>Centang satu atau beberapa objek yang terdampak.</SheetDescription></SheetHeader>
-          <div className="border-b border-border/60 px-5 py-3"><div className="flex touch-pan-x gap-2 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Kategori objek fasilitas">{facilityObjectGroups.map((group) => { const selectedCount = group.facilities.filter((facility) => value.includes(facility)).length; return <Button key={group.label} type="button" size="sm" variant="outline" aria-pressed={activeObjectGroup === group.label} className={cn("h-8 shrink-0 rounded-full px-3 text-xs font-medium", activeObjectGroup === group.label ? "border-primary/35 bg-primary/10 text-primary hover:bg-primary/10" : "bg-card text-muted-foreground")} onClick={() => setActiveObjectGroup(group.label)}>{group.label}{selectedCount ? ` (${selectedCount})` : ""}</Button> })}</div></div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4"><section className="space-y-3"><h3 className="text-sm font-semibold text-foreground">{activeObjectOptions.label}</h3><div className={cn("grid gap-2", activeObjectOptions.facilities.length === 1 ? "grid-cols-1" : "grid-cols-2")}>{activeObjectOptions.facilities.map((facility) => { const checked = value.includes(facility); return <Button key={facility} type="button" variant="outline" aria-pressed={checked} className={cn("h-auto min-h-14 justify-between px-3 py-2.5 text-left font-normal", checked ? "border-primary/35 bg-primary/5 text-foreground" : "bg-card text-foreground")} onClick={() => toggleFacility(facility, !checked)}><span className="min-w-0 flex-1 truncate">{facility}</span>{checked ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}</Button> })}</div></section></div>
-          <SheetFooter className="flex-row items-center justify-between border-t border-border/60 px-5 py-3"><p className="text-xs text-muted-foreground">{value.length ? `${value.length} objek dipilih` : "Belum ada objek dipilih"}</p><div className="flex items-center gap-2">{value.length ? <Button type="button" size="sm" variant="ghost" onClick={clearFacilities}>Bersihkan</Button> : null}<Button type="button" size="sm" onClick={() => setMobileOpen(false)}>Selesai</Button></div></SheetFooter>
-        </SheetContent>
-      </Sheet>
-      <div className="hidden sm:block"><Popover open={desktopOpen} onOpenChange={setDesktopOpen}>
-        <PopoverTrigger render={<Button id="facility-type" type="button" variant="outline" aria-label="Objek fasilitas" className="h-11 w-full justify-between bg-background/70 text-left font-normal" />}>
-          <span className={value.length ? "truncate text-foreground" : "truncate text-muted-foreground/70"}>{summary}</span>
-          <span className="flex items-center gap-2"><span className="text-xs text-muted-foreground">{value.length || ""}</span><ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" /></span>
-        </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={6} className="w-[min(24rem,calc(100vw-2rem))] p-0">
-          <div className="border-b border-border/60 px-4 py-3"><p className="text-sm font-semibold text-foreground">Pilih objek fasilitas</p><p className="mt-0.5 text-xs text-muted-foreground">Centang satu atau beberapa objek yang terdampak.</p></div>
-          <div className="grid gap-1.5 p-3 sm:grid-cols-2">
-            {facilities.map((facility) => {
-              const checked = value.includes(facility)
-
-              return <label key={facility} htmlFor={`facility-${facility}`} className={cn("flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-colors", checked ? "border-primary/25 bg-primary/5 text-foreground" : "border-transparent hover:bg-muted/60")}>
-                <Checkbox id={`facility-${facility}`} checked={checked} onCheckedChange={(nextChecked) => toggleFacility(facility, nextChecked)} />
-                <span className="font-medium">{facility}</span>
-              </label>
-            })}
-          </div>
-          <div className="flex items-center justify-between border-t border-border/60 px-4 py-3"><p className="text-xs text-muted-foreground">{value.length ? `${value.length} objek dipilih` : "Belum ada objek dipilih"}</p><div className="flex items-center gap-2">{value.length ? <Button type="button" size="sm" variant="ghost" onClick={clearFacilities}>Bersihkan</Button> : null}<Button type="button" size="sm" onClick={() => setDesktopOpen(false)}>Selesai</Button></div></div>
-        </PopoverContent>
-      </Popover></div>
-      <FieldDescription>Pilih seluruh objek yang terdampak pada laporan ini.</FieldDescription>
-      {value.includes("Lainnya") ? <div className="space-y-2"><FieldLabel htmlFor="other-facility">Objek lainnya</FieldLabel><Input id="other-facility" name="other-facility" value={otherFacility} onChange={(event) => onOtherFacilityChange(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Pintu, jendela, atau dispenser" required /><FieldDescription>Tuliskan nama objek yang belum tersedia pada pilihan.</FieldDescription></div> : null}
     </Field>
   )
 }
@@ -283,6 +175,10 @@ function ReportGuidance({ category }: { category: string }) {
 
 export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   const router = useRouter()
+  const [catalogRevision, setCatalogRevision] = useState(0)
+  const catalogResource = useOperationalResource<OperationalCatalog>(`/api/pelapor/catalog?revision=${catalogRevision}`)
+  const catalog = catalogResource.data
+  const services = catalog?.services.map((row) => row.name) ?? []
   const { notify } = useActivityNotifications()
   const { submissionSucceeded } = useReportSubmissionFeedback()
   const formRef = useRef<HTMLFormElement>(null)
@@ -352,6 +248,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
     } catch (error) {
       const message = error instanceof TypeError ? "Koneksi bermasalah. Silakan coba lagi; sistem mencegah laporan ganda." : error instanceof Error ? error.message : "Koneksi bermasalah. Silakan coba lagi."
       setError(message)
+      if (submit && (category === "fasilitas" || category === "layanan")) setCatalogRevision((value) => value + 1)
       notify({ title: submit ? "Pengiriman belum berhasil" : "Draft belum tersimpan", description: message, tone: "warning" })
     }
     finally { busy.current = false; setPending(false) }
@@ -361,6 +258,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
     event.preventDefault()
     if (busy.current || preview || !event.currentTarget.reportValidity()) return
     try {
+      if (category === "fasilitas" && !validFacilityCatalog || category === "layanan" && (!catalog || !services.includes(service))) throw new Error("Periksa pilihan lokasi, fasilitas, atau layanan yang tersedia sebelum mengirim.")
       const snapshot = createReportSubmissionSnapshot(currentPayload(), retained, attachments)
       for (const file of snapshot.files) previewUrls.current.push(URL.createObjectURL(file))
       setError(""); setPreview({ ...snapshot, uploadUrls: [...previewUrls.current] })
@@ -371,8 +269,9 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
       notify({ title: "Periksa isian laporan", description: message, tone: "warning" })
     }
   }
-  const hasCompleteFacilityDetails = Boolean(location && selectedFacilities.length && (location !== "Lainnya" || otherLocation.trim()) && (!selectedFacilities.includes("Lainnya") || otherFacility.trim()))
-  const canSubmit = Boolean(category && incidentDate && incidentTime && !incidentDateError) && (category !== "kehilangan-temuan" || Boolean(reportType)) && (category !== "fasilitas" || hasCompleteFacilityDetails) && (category !== "layanan" || Boolean(service && program))
+  const validFacilityCatalog = Boolean(catalog && (location === "Lainnya" || catalog.locations.some((row) => row.name === location)) && selectedFacilities.every((name) => name === "Lainnya" || availableFacilities(catalog, location).some((row) => row.name === name)))
+  const hasCompleteFacilityDetails = Boolean(validFacilityCatalog && location && selectedFacilities.length && (location !== "Lainnya" || otherLocation.trim()) && (!selectedFacilities.includes("Lainnya") || otherFacility.trim()))
+  const canSubmit = Boolean(category && incidentDate && incidentTime && !incidentDateError) && (category !== "kehilangan-temuan" || Boolean(reportType)) && (category !== "fasilitas" || hasCompleteFacilityDetails) && (category !== "layanan" || Boolean(catalog && services.includes(service) && program))
   const titlePlaceholder = category === "kehilangan-temuan"
     ? reportType === "Kehilangan"
       ? "Contoh: Dompet hilang di Ruang 3.4"
@@ -393,10 +292,12 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
           <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih satu kategori untuk menampilkan kolom yang relevan.</FieldDescription><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} onSelect={() => resetCategory(item.value)} />)}</div></Field>
           {category ? <div key={draftId} className="space-y-5 border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">1</span><h2 className="text-sm font-semibold">Informasi laporan</h2></div><FieldGroup>
             {category === "kehilangan-temuan" ? <SelectField id="report-type" label="Jenis laporan" placeholder="Pilih jenis laporan" value={reportType} onValueChange={setReportType} options={["Kehilangan", "Temuan"]} /> : null}
-            <Field><FieldLabel htmlFor="title">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
+            <Field><FieldLabel htmlFor="title" className="font-semibold text-foreground">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
             {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field><Field><FieldLabel htmlFor="item-details">Ciri-ciri barang</FieldLabel><Textarea id="item-details" name="item-details" defaultValue={sourceDraft?.payload.itemDetails} placeholder="Tuliskan ciri khas, isi, atau tanda pengenal barang." required /></Field></> : null}
-            {category === "fasilitas" ? <div className="grid gap-5 sm:grid-cols-2"><FacilityLocationSelectField value={location} onValueChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} /><FacilityMultiSelectField value={selectedFacilities} onValueChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /></div> : null}
+            {category === "fasilitas" && catalog ? <FacilityMappingFields key={draftId} disabled={pending || Boolean(preview)} catalog={catalog} location={location} onLocationChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} facilities={selectedFacilities} onFacilitiesChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /> : null}
+            {category === "fasilitas" || category === "layanan" ? catalogResource.loading ? <p role="status" className="text-sm text-muted-foreground">Memuat katalog operasional...</p> : catalogResource.error ? <div className="space-y-2"><FieldError>{catalogResource.error}</FieldError><Button type="button" variant="outline" onClick={() => setCatalogRevision((value) => value + 1)}>Coba lagi</Button></div> : null : null}
             {category === "layanan" ? <div className="grid gap-5 sm:grid-cols-2"><SelectField id="service" label="Jenis layanan" placeholder="Pilih layanan" value={service} onValueChange={setService} options={services} /><SelectField id="program" label="Unit atau program studi" placeholder="Pilih unit terkait" value={program} onValueChange={setProgram} options={studyPrograms} /></div> : null}
+            {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak lagi tersedia. Pilih layanan yang aktif atau gunakan kategori Laporan Lainnya.</FieldError> : null}
             {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <Field data-invalid={Boolean(incidentDateError)}>

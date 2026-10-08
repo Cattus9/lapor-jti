@@ -1,4 +1,4 @@
-import { Archive, BellRing, ChartColumnIncreasing, ChartNoAxesCombined, ClipboardCheck, FileSpreadsheet, Inbox, LifeBuoy, MapPinned, Settings2, UserRoundCog, Wrench } from "lucide-react"
+import { Archive, BellRing, ChartColumnIncreasing, ChartNoAxesCombined, ClipboardCheck, FileSpreadsheet, Inbox, LifeBuoy, MapPinned, Settings2, UserRoundCog, UsersRound, Wrench } from "lucide-react"
 // [AUTH-ROLE] Pemetaan navigasi menurut role internal aplikasi, independen dari metode login.
 // Menyembunyikan menu tidak mengamankan endpoint; pertahankan pemeriksaan role di server.
 import type { AppRole } from "@/lib/auth/roles"
@@ -32,13 +32,15 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
     { title: "Profil", url: "/teknisi/profil", icon: UserRoundCog },
   ],
   manajemen: [
-    { title: "Ringkasan", url: "/manajemen/dashboard", icon: ChartNoAxesCombined },
-    { title: "Kelola Laporan", url: "/manajemen/laporan", icon: ClipboardCheck },
-    { title: "Monitoring", url: "/manajemen/monitoring", icon: MapPinned },
-    { title: "Statistik", url: "/manajemen/statistik", icon: ChartColumnIncreasing },
-    { title: "Rekap Laporan", url: "/manajemen/rekap-laporan", icon: FileSpreadsheet },
-    { title: "Notifikasi", url: "/manajemen/notifikasi", icon: BellRing },
-    { title: "Profil", url: "/manajemen/profil", icon: UserRoundCog },
+    { title: "Ringkasan", url: "/manajemen/dashboard", icon: ChartNoAxesCombined, group: "Operasional" },
+    { title: "Kelola Laporan", url: "/manajemen/laporan", icon: ClipboardCheck, group: "Operasional" },
+    { title: "Monitoring", url: "/manajemen/monitoring", icon: MapPinned, group: "Operasional" },
+    { title: "Statistik", url: "/manajemen/statistik", icon: ChartColumnIncreasing, group: "Analisis" },
+    { title: "Rekap Laporan", url: "/manajemen/rekap-laporan", icon: FileSpreadsheet, group: "Analisis" },
+    { title: "Kelola Pengguna", url: "/manajemen/pengguna", icon: UsersRound, group: "Administrasi" },
+    { title: "Pengaturan Operasional", url: "/manajemen/pengaturan", icon: Settings2, group: "Administrasi" },
+    { title: "Notifikasi", url: "/manajemen/notifikasi", icon: BellRing, group: "Akun" },
+    { title: "Profil", url: "/manajemen/profil", icon: UserRoundCog, group: "Akun" },
   ],
   admin: [
     { title: "Ringkasan", url: "/admin/dashboard", icon: ChartNoAxesCombined },

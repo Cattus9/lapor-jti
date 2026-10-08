@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm"
-import { pgTable, uuid, text, boolean, timestamp, index, check } from "drizzle-orm/pg-core"
+import { pgTable, uuid, text, boolean, timestamp, index, check, integer } from "drizzle-orm/pg-core"
 import { users } from "./schema"
 import { reports } from "./reports-schema"
 
@@ -7,6 +7,7 @@ import { reports } from "./reports-schema"
 export const securityOfficers = pgTable("security_officers", {
   id: uuid("id").defaultRandom().primaryKey(), name: text("name").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  revision: integer("revision").notNull().default(0),
 }, (t) => [check("security_officer_name_check", sql`length(trim(${t.name})) between 1 and 100`)])
 
 export const lostFoundMatches = pgTable("lost_found_matches", {

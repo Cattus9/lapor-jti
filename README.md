@@ -307,7 +307,7 @@ $env:NODE_ENV='development'
 npm run db:seed-officers # Hanya petugas contoh, tanpa mengubah akun/password
 ```
 
-`npm run db:seed` juga menyediakan petugas contoh ketika menyiapkan akun demo. Seed memakai ID tetap dan tidak mengganti petugas yang sudah ada. Pada production, sediakan nama petugas resmi melalui proses provisioning database yang terkontrol; jangan jalankan seed development atau membawa volume demo. Jika belum ada petugas aktif, penyerahan diblokir. Halaman pengelolaan petugas belum dibuat.
+`npm run db:seed` juga menyediakan petugas contoh ketika menyiapkan akun demo. Seed memakai ID tetap dan tidak mengganti petugas yang sudah ada. Pada production, nama petugas resmi dikelola melalui Pengaturan Operasional oleh Manajemen; jangan jalankan seed development atau membawa volume demo. Jika belum ada petugas aktif, penyerahan diblokir. Nama petugas tetap terpisah dari akun login Satpam.
 
 ### Pengujian Satpam
 
@@ -344,18 +344,20 @@ npx tsx --test scripts/*.test.ts # Seluruh regresi statis
 
 ## Batasan MVP
 
-- Halaman Pelapor, operasional Satpam dan Teknisi menggunakan backend nyata. Manajemen serta statistik lintas role masih memakai data demonstrasi dan belum membaca laporan baru dari database.
+Pengaturan Operasional dan Kelola Pengguna sudah memakai backend nyata. Form Pelapor memilih lokasi menurut area/lantai dan fasilitas sesuai pemetaan ruang. Panduan migrasi, batas kewenangan, dan pengujian ada di [Pengaturan Operasional](OPERATIONS.md).
+
+- Pelapor, Satpam, Teknisi, Manajemen, monitoring, serta statistik lintas role menggunakan backend nyata.
 - Login email/password sudah memakai Better Auth; SSO POLIJE belum terhubung.
-- Otorisasi halaman dan endpoint Pelapor/Satpam/Teknisi memakai session/role database. Mutasi penanganan Manajemen masih demonstratif; policy backend berikutnya harus menangani lifecycle kategorinya.
-- Ekspor rekap belum menghasilkan berkas operasional nyata.
+- Otorisasi halaman dan endpoint seluruh role operasional memakai session/role database. Manajemen hanya menangani laporan Layanan/Lainnya; monitoring lintas pengelola bersifat baca-saja.
+- Ekspor CSV mengikuti filter server dan dibatasi 5.000 laporan per permintaan.
 - Agregasi prioritas fasilitas menunjukkan konsentrasi laporan aktif, bukan penilaian bahaya atau risiko teknis.
 
 ## Arah pengembangan berikutnya
 
 1. Integrasi SSO POLIJE dan pemetaan role dari sumber identitas resmi.
-2. Hubungkan Manajemen ke schema laporan bersama, dengan transisi status dan policy akses per role.
-3. Perluas notifikasi persisten ke tindakan Manajemen.
-4. Lampiran berkas, ekspor rekap, serta audit aktivitas.
+2. Evaluasi index pencarian teks dan pagination server katalog saat volume bertambah.
+3. Undangan akun serta alur penggantian password awal yang terkontrol.
+4. Tampilan audit operasional untuk perubahan konfigurasi dan akses akun.
 5. Pengujian end-to-end untuk lifecycle masing-masing kategori laporan.
 
 ## Kontribusi

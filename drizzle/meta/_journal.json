@@ -57,6 +57,20 @@
       "when": 1791389796520,
       "tag": "0007_strong_moonstone",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791475463363,
+      "tag": "0008_magenta_fantastic_four",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791476279842,
+      "tag": "0009_chilly_maverick",
+      "breakpoints": true
     }
   ]
 }

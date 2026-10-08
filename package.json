@@ -25,6 +25,8 @@
     "test:teknisi-smoke": "tsx scripts/technician-smoke.ts",
     "test:manajemen": "tsx --test scripts/management-*.test.ts",
     "test:manajemen-db": "node --conditions=react-server --import tsx scripts/management-db-smoke.ts",
+    "test:operations": "tsx --test scripts/operations-*.test.*",
+    "test:operations-db": "node --conditions=react-server --import tsx scripts/operations-db-smoke.ts",
     "docker:dev": "docker compose -f compose.yaml -f compose.dev.yaml up --build --watch",
     "docker:down": "docker compose -f compose.yaml -f compose.dev.yaml down",
     "docker:prod": "docker compose --env-file .env.production -p aspirasijti-production -f compose.yaml up --build -d"

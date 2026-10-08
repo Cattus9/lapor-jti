@@ -4,5 +4,6 @@ export type NavigationItem = {
   title: string
   url: string
   icon: ComponentType<{ className?: string }>
+  group?: string
   items?: { title: string; url: string }[]
 }

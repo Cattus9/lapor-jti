@@ -7,9 +7,18 @@ export const reportCategory = pgEnum("report_category", reportCategories)
 export const reportStatus = pgEnum("report_status", reportStatuses)
 export const reportHandler = pgEnum("report_handler", ["satpam", "teknisi", "manajemen"])
 const auditDates = () => ({ createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true, precision: 3 }).notNull().defaultNow().$onUpdate(() => new Date()) })
-export const locations = pgTable("locations", { id: text("id").primaryKey(), name: text("name").notNull().unique(), group: text("group_name").notNull(), isActive: boolean("is_active").notNull().default(true) })
-export const facilityObjects = pgTable("facility_objects", { id: text("id").primaryKey(), name: text("name").notNull().unique(), group: text("group_name").notNull(), isActive: boolean("is_active").notNull().default(true) })
-export const services = pgTable("services", { id: text("id").primaryKey(), name: text("name").notNull().unique(), isActive: boolean("is_active").notNull().default(true) })
+const revision = () => integer("revision").notNull().default(0)
+export const locationAreas = pgTable("location_areas", {
+  id: text("id").primaryKey(), name: text("name").notNull().unique(), kind: text("kind").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0), isActive: boolean("is_active").notNull().default(true), revision: revision(),
+}, (t) => [check("location_area_kind_check", sql`${t.kind} in ('floor', 'area')`), uniqueIndex("location_areas_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
+export const locations = pgTable("locations", { id: text("id").primaryKey(), name: text("name").notNull().unique(), group: text("group_name").notNull(), areaId: text("area_id").notNull().references(() => locationAreas.id, { onDelete: "restrict" }), isActive: boolean("is_active").notNull().default(true), revision: revision() }, (t) => [index("locations_area_active_idx").on(t.areaId, t.isActive), uniqueIndex("locations_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
+export const facilityObjects = pgTable("facility_objects", { id: text("id").primaryKey(), name: text("name").notNull().unique(), group: text("group_name").notNull(), isActive: boolean("is_active").notNull().default(true), revision: revision() }, (t) => [uniqueIndex("facility_objects_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
+export const services = pgTable("services", { id: text("id").primaryKey(), name: text("name").notNull().unique(), isActive: boolean("is_active").notNull().default(true), revision: revision() }, (t) => [uniqueIndex("services_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
+export const locationFacilityObjects = pgTable("location_facility_objects", {
+  locationId: text("location_id").notNull().references(() => locations.id, { onDelete: "restrict" }),
+  objectId: text("object_id").notNull().references(() => facilityObjects.id, { onDelete: "restrict" }),
+}, (t) => [uniqueIndex("location_facility_object_unique").on(t.locationId, t.objectId), index("location_facility_object_reverse_idx").on(t.objectId)])
 export const reports = pgTable("reports", {
   id: uuid("id").defaultRandom().primaryKey(), ticketNumber: text("ticket_number").notNull().unique(),
   submissionKey: uuid("submission_key").notNull().unique(), reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "restrict" }),

@@ -2,7 +2,7 @@ import "server-only"
 import { and, desc, eq, gte, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { users } from "@/db/schema"
-import { facilityObjects, locations, notifications, reportAttachments, reportDrafts, reportFacilityObjects, reportLostFoundDetails, reportOtherDetails, reports, reportServiceDetails, reportStatusHistory, reportTicketCounters, services } from "@/db/reports-schema"
+import { facilityObjects, locationAreas, locationFacilityObjects, locations, notifications, reportAttachments, reportDrafts, reportFacilityObjects, reportLostFoundDetails, reportOtherDetails, reports, reportServiceDetails, reportStatusHistory, reportTicketCounters, services } from "@/db/reports-schema"
 import { handlerByCategory, isUuid, ReportError, type ReportActor, type StoredAttachment } from "../domain/report"
 import type { DraftView, ReportRepository, ReportWrite } from "../application/ports"
 import type { ReportListItem, ReportSummary } from "../types"
@@ -51,16 +51,25 @@ export class DrizzleReportRepository implements ReportRepository {
       const payload = input.payload
       let location: typeof locations.$inferSelect | undefined
       let service: typeof services.$inferSelect | undefined
-      const objectRows = payload.category === "fasilitas" && payload.facilities.filter((name) => name !== "Lainnya").length
+      // Serialize catalog validation with configuration writes. Old drafts remain editable;
+      // only a NEW submission must conform to the current active room/facility mapping.
+      if (submit) await tx.execute(sql`select pg_advisory_xact_lock_shared(748193)`)
+      const objectRows = submit && payload.category === "fasilitas" && payload.facilities.filter((name) => name !== "Lainnya").length
         ? await tx.select().from(facilityObjects).where(and(inArray(facilityObjects.name, payload.facilities.filter((name) => name !== "Lainnya")), eq(facilityObjects.isActive, true))) : []
-      if (payload.category === "fasilitas") {
+      if (submit && payload.category === "fasilitas") {
         if (payload.location && payload.location !== "Lainnya") {
           ;[location] = await tx.select().from(locations).where(and(eq(locations.name, payload.location), eq(locations.isActive, true))).limit(1)
           if (!location) throw new ReportError("Lokasi tidak tersedia.")
+          const [area] = await tx.select({ id: locationAreas.id }).from(locationAreas).where(and(eq(locationAreas.id, location.areaId), eq(locationAreas.isActive, true)))
+          if (!area) throw new ReportError("Area/lantai tidak tersedia. Pilih lokasi lain.")
         }
         if (objectRows.length !== payload.facilities.filter((name) => name !== "Lainnya").length) throw new ReportError("Objek fasilitas tidak tersedia.")
+        if (location && objectRows.length) {
+          const mapping = await tx.select().from(locationFacilityObjects).where(and(eq(locationFacilityObjects.locationId, location.id), inArray(locationFacilityObjects.objectId, objectRows.map((row) => row.id))))
+          if (mapping.length !== objectRows.length) throw new ReportError("Objek fasilitas tidak terdaftar di lokasi ini. Periksa pilihan atau gunakan Lainnya.")
+        }
       }
-      if (payload.category === "layanan" && payload.service) {
+      if (submit && payload.category === "layanan" && payload.service) {
         ;[service] = await tx.select().from(services).where(and(eq(services.name, payload.service), eq(services.isActive, true))).limit(1)
         if (!service) throw new ReportError("Layanan tidak tersedia.")
       }

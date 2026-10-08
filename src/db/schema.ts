@@ -21,7 +21,11 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-}, (table) => [uniqueIndex("users_email_lower_unique").on(sql`lower(${table.email})`)])
+}, (table) => [
+  uniqueIndex("users_email_lower_unique").on(sql`lower(${table.email})`),
+  index("users_name_id_idx").on(table.name, table.id),
+  index("users_role_active_name_idx").on(table.role, table.isActive, table.name, table.id),
+])
 
 export const sessions = pgTable("sessions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -64,3 +68,4 @@ export type NewDatabaseUser = typeof users.$inferInsert
 
 export * from "./reports-schema"
 export * from "./lost-found-schema"
+export * from "./operations-schema"
