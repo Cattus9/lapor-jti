@@ -50,6 +50,13 @@
       "when": 1791206437428,
       "tag": "0006_calm_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791389796520,
+      "tag": "0007_strong_moonstone",
+      "breakpoints": true
     }
   ]
 }

@@ -76,9 +76,18 @@ function DashboardLoading({ role }: { role: AppRole }) {
       <LoadingKpiCards count={4} />
       <LoadingPanel>
         <LoadingPanelHeading />
-        <div className="grid gap-5 xl:grid-cols-2">
-          <Skeleton className="h-56 w-full rounded-xl" />
-          <Skeleton className="h-56 w-full rounded-xl" />
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+          <div className="space-y-1.5">
+            <Skeleton className="mb-4 h-4 w-40" />
+            {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-14 w-full rounded-xl" />)}
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-36" />
+            <div className="grid items-center gap-5 sm:grid-cols-[180px_minmax(0,1fr)] lg:grid-cols-1 2xl:grid-cols-[180px_minmax(0,1fr)]">
+              <Skeleton className="mx-auto size-[180px] rounded-full" />
+              <div className="space-y-2">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-10 w-full rounded-lg" />)}</div>
+            </div>
+          </div>
         </div>
       </LoadingPanel>
       <LoadingPanel>

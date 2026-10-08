@@ -16,6 +16,7 @@ import {
   Monitor,
   PackageSearch,
   Search,
+  ShieldCheck,
   Snowflake,
   Table2,
   Tv,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Pie, PieChart, XAxis, YAxis } from "recharts"
 import { KpiCard } from "@/components/dashboard/kpi-card"
+import { RoomPriorityBadge } from "@/components/reports/room-priority-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,8 +34,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { aggregateTechnicianRoomPriorities, technicianFacilityReports } from "@/features/facilities/mock/teknisi-dashboard"
-import { isMonitoringReportInProgress, monitoringReports, type MonitoringReportCategory } from "@/features/management/mock/management-monitoring"
+import { useOperationalResource } from "@/components/reports/use-operational-data"
+import { getTodayInWib } from "../../reports/domain/report-date"
+import { categoryLabels, handlerLabels } from "../domain/management"
+import { ManagementFeedback } from "./management-feedback"
+import type { ManagementStatisticsData, MonitoringReportCategory } from "../types"
 import { cn } from "cn"
 
 const categoryOrder: MonitoringReportCategory[] = ["Kehilangan & Temuan", "Fasilitas", "Layanan", "Lainnya"]
@@ -55,10 +60,8 @@ const facilityIcons: Record<string, LucideIcon> = {
   TV: Tv,
 }
 
-const handlerOrder = ["Satpam", "Teknisi", "Manajemen Jurusan"] as const
-const reportDates = monitoringReports.flatMap((report) => report.completedOn ? [report.reportedOn, report.completedOn] : [report.reportedOn]).sort()
-const firstReportDate = reportDates[0]
-const lastReportDate = reportDates.at(-1)
+const firstReportDate = undefined
+const lastReportDate = getTodayInWib()
 const shortDateFormatter = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "UTC" })
 const periodDateFormatter = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
 type PeriodPreset = "all" | "7-days" | "30-days" | "month" | "custom"
@@ -74,50 +77,26 @@ function subtractDays(value: string, days: number) {
 
 function resolvePreset(preset: Exclude<PeriodPreset, "custom">): PeriodSelection {
   const latest = lastReportDate ?? ""
-  const earliest = firstReportDate ?? latest
   if (!latest) return { preset, from: "", to: "" }
-  if (preset === "all") return { preset, from: earliest, to: latest }
+  if (preset === "all") return { preset, from: "", to: "" }
   if (preset === "month") return { preset, from: latest.slice(0, 7) + "-01", to: latest }
   return { preset, from: subtractDays(latest, preset === "7-days" ? 6 : 29), to: latest }
 }
 
 function periodRangeLabel(period: PeriodSelection) {
-  if (!period.from || !period.to) return "Belum ada laporan"
+  if (!period.from || !period.to) return "Semua waktu"
   if (period.from === period.to) return formatDate(period.from)
-  return formatDate(period.from) + " – " + formatDate(period.to)
+  return formatDate(period.from) + " - " + formatDate(period.to)
 }
 
-function buildTrend(reports: readonly (typeof monitoringReports)[number][], period: PeriodSelection) {
-  if (!period.from || !period.to) return []
-  const incomingByDate = new Map<string, number>()
-  const completedByDate = new Map<string, number>()
-  reports.forEach((report) => {
-    incomingByDate.set(report.reportedOn, (incomingByDate.get(report.reportedOn) ?? 0) + 1)
-    if (report.status === "Selesai" && report.completedOn) {
-      completedByDate.set(report.completedOn, (completedByDate.get(report.completedOn) ?? 0) + 1)
-    }
-  })
-  const days = Math.round((Date.parse(period.to + "T00:00:00Z") - Date.parse(period.from + "T00:00:00Z")) / 86400000) + 1
-  return Array.from({ length: days }, (_, index) => {
-    const date = new Date(Date.parse(period.from + "T00:00:00Z") + index * 86400000).toISOString().slice(0, 10)
-    return {
-      label: shortDateFormatter.format(new Date(date + "T00:00:00Z")),
-      incoming: incomingByDate.get(date) ?? 0,
-      completed: completedByDate.get(date) ?? 0,
-    }
-  })
-}
-
-function buildCategorySummary(reports: readonly (typeof monitoringReports)[number][], period: PeriodSelection) {
+type TrendData = Array<{ label: string; incoming: number; completed: number }>
+function buildCategorySummary(categories: ManagementStatisticsData["categories"], total: number, period: PeriodSelection) {
   return categoryOrder.map((category) => {
-    const value = reports.filter((report) => report.category === category).length
-    return {
-      label: category,
-      value,
-      percentage: reports.length ? Math.round((value / reports.length) * 100) : 0,
-      href: "/manajemen/monitoring?" + new URLSearchParams({ from: period.from, to: period.to, category }).toString(),
-      ...categoryPresentation[category],
-    }
+    const key = (Object.keys(categoryLabels) as Array<keyof typeof categoryLabels>).find((key) => categoryLabels[key] === category)!
+    const value = categories.find((row) => row.category === key)?.total ?? 0
+    return { label: category, value, percentage: total ? Math.round(value / total * 100) : 0,
+      href: "/manajemen/monitoring?" + new URLSearchParams({ ...(period.from && period.to ? { from: period.from, to: period.to } : { period: "semua" }), category: key }).toString(),
+      ...categoryPresentation[category] }
   })
 }
 
@@ -137,7 +116,7 @@ const periodPresets: readonly { value: Exclude<PeriodPreset, "custom">; label: s
   { value: "all", label: "Semua data" },
   { value: "7-days", label: "7 hari" },
   { value: "30-days", label: "30 hari" },
-  { value: "month", label: "Bulan data terbaru" },
+  { value: "month", label: "Bulan ini" },
 ]
 
 function PeriodOptions({
@@ -174,7 +153,7 @@ function PeriodOptions({
         </div>
         <Button type="button" size="sm" className="mt-3 w-full" disabled={!draftFrom || !draftTo || draftFrom > draftTo} onClick={applyCustom}>Terapkan rentang</Button>
       </div>
-      {lastReportDate ? <p className="text-xs leading-relaxed text-muted-foreground">Pilihan hari dan bulan dihitung dari data terbaru: {formatDate(lastReportDate)}.</p> : null}
+      {lastReportDate ? <p className="text-xs leading-relaxed text-muted-foreground">Periode mengikuti kalender WIB. Hari ini: {formatDate(lastReportDate)}.</p> : null}
     </div>
   )
 }
@@ -184,7 +163,8 @@ function PeriodPicker({ period, onChange }: { period: PeriodSelection; onChange:
   const [mobileOpen, setMobileOpen] = useState(false)
   const [draftFrom, setDraftFrom] = useState(period.from)
   const [draftTo, setDraftTo] = useState(period.to)
-  const buttonLabel = period.preset === "all" ? "Semua data" : periodRangeLabel(period)
+  const buttonLabel = period.preset === "custom" ? "Rentang tanggal" : periodPresets.find((preset) => preset.value === period.preset)?.label ?? "Semua data"
+  const pickerLabel = "Pilih periode statistik: " + buttonLabel + " (" + periodRangeLabel(period) + ")"
 
   function closePicker() {
     setDesktopOpen(false)
@@ -213,16 +193,16 @@ function PeriodPicker({ period, onChange }: { period: PeriodSelection; onChange:
     <>
       <div className="hidden sm:block">
         <Popover open={desktopOpen} onOpenChange={setDesktopOpen}>
-          <PopoverTrigger render={<Button type="button" variant="outline" aria-label={"Pilih periode statistik: " + buttonLabel} className="max-w-72 justify-between gap-2 bg-card" />}>
-            <CalendarDays className="size-4 text-primary" aria-hidden="true" /><span className="min-w-0 truncate">{buttonLabel}</span><ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+          <PopoverTrigger render={<Button type="button" variant="default" aria-label={pickerLabel} className="min-w-36 justify-between gap-2 aria-expanded:bg-primary-action-hover" />}>
+            <span>{buttonLabel}</span><ChevronDown className="size-4" aria-hidden="true" />
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] p-4">{options("period-desktop")}</PopoverContent>
         </Popover>
       </div>
       <div className="sm:hidden">
         <Dialog open={mobileOpen} onOpenChange={setMobileOpen}>
-          <DialogTrigger render={<Button type="button" variant="outline" aria-label={"Pilih periode statistik: " + buttonLabel} className="w-full justify-between gap-2 bg-card" />}>
-            <CalendarDays className="size-4 text-primary" aria-hidden="true" /><span className="min-w-0 flex-1 truncate text-left">{buttonLabel}</span><ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+          <DialogTrigger render={<Button type="button" variant="default" aria-label={pickerLabel} className="w-full justify-between gap-2 aria-expanded:bg-primary-action-hover" />}>
+            <span className="flex-1 text-left">{buttonLabel}</span><ChevronDown className="size-4" aria-hidden="true" />
           </DialogTrigger>
           <DialogContent className="max-w-md p-0">
             <DialogHeader className="border-b border-border/60 p-5 pr-14"><DialogTitle>Pilih periode statistik</DialogTitle><DialogDescription>Semua ringkasan di halaman ini mengikuti periode yang dipilih.</DialogDescription></DialogHeader>
@@ -231,6 +211,26 @@ function PeriodPicker({ period, onChange }: { period: PeriodSelection; onChange:
         </Dialog>
       </div>
     </>
+  )
+}
+
+export function ManagementStatisticsScope({ period, onChange }: { period: PeriodSelection; onChange: (period: PeriodSelection) => void }) {
+  return (
+    <Card aria-labelledby="statistics-scope-title" className="gap-0 rounded-xl border-0 bg-accent/60 p-0 shadow-none ring-0">
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-card text-primary">
+            <CalendarDays className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 id="statistics-scope-title" className="text-sm font-semibold text-foreground">Cakupan statistik</h2>
+            <p className="mt-0.5 text-base font-semibold text-accent-foreground">{periodRangeLabel(period)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Seluruh KPI dan grafik · WIB</p>
+          </div>
+        </div>
+        <PeriodPicker period={period} onChange={onChange} />
+      </CardContent>
+    </Card>
   )
 }
 
@@ -269,10 +269,10 @@ function AnalyticsCard({
   )
 }
 
-function TrendOverview({ trend, periodLabel, missingCompletionDates }: { trend: ReturnType<typeof buildTrend>; periodLabel: string; missingCompletionDates: number }) {
+function TrendOverview({ trend, periodLabel, granularity }: { trend: TrendData; periodLabel: string; granularity: ManagementStatisticsData["granularity"] }) {
   const hasEvents = trend.some((day) => day.incoming > 0 || day.completed > 0)
   return (
-    <AnalyticsCard icon={ChartNoAxesCombined} title="Laporan masuk dan selesai" description={"Jumlah laporan masuk dan laporan selesai per hari pada " + periodLabel + "."} stretch>
+    <AnalyticsCard icon={ChartNoAxesCombined} title="Laporan masuk dan selesai" description={"Jumlah laporan masuk dan selesai per " + (granularity === "day" ? "hari" : granularity === "month" ? "bulan" : "tahun") + " pada " + periodLabel + "."} stretch>
       {hasEvents ? (
         // The sidebar width animates for 200ms; update the plot once after it settles.
         <ChartContainer config={trendChartConfig} className="h-[270px] w-full aspect-auto" resizeDebounce={240}>
@@ -290,7 +290,7 @@ function TrendOverview({ trend, periodLabel, missingCompletionDates }: { trend: 
         </ChartContainer>
       ) : <div className="flex min-h-[270px] items-center justify-center text-center text-sm text-muted-foreground">Tidak ada laporan pada periode ini.</div>}
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Masuk dihitung pada tanggal laporan dibuat. Selesai dihitung pada tanggal penanganan berakhir, termasuk untuk laporan yang masuk sebelumnya.</p>
-      {missingCompletionDates ? <p className="mt-1 text-xs text-muted-foreground">{missingCompletionDates} laporan selesai belum memiliki tanggal penyelesaian dan tidak ditampilkan pada batang selesai.</p> : null}
+
     </AnalyticsCard>
   )
 }
@@ -339,112 +339,112 @@ function CategoryComposition({ summary, totalReports, periodLabel }: { summary: 
   )
 }
 
-function HandlerOverview({ reports }: { reports: readonly (typeof monitoringReports)[number][] }) {
-  const handlerSummary = handlerOrder.map((handler) => ({
-    handler,
-    active: reports.filter((report) => report.handler === handler && report.status !== "Selesai").length,
-    total: reports.filter((report) => report.handler === handler).length,
-  })).sort((first, second) => second.active - first.active)
+const handlerIcons = { satpam: ShieldCheck, teknisi: Wrench, manajemen: Building2 }
+
+export function ManagementHandlerOverview({ handlers, total }: { handlers: ManagementStatisticsData["handlers"]; total: number }) {
+  const handlerSummary = (["satpam", "teknisi", "manajemen"] as const).map((role) => ({ role, handler: handlerLabels[role], active: handlers.find((r) => r.handler === role)?.active ?? 0, total: handlers.find((r) => r.handler === role)?.total ?? 0 })).sort((a, b) => b.active - a.active)
   const highestHandlerCount = Math.max(1, ...handlerSummary.map((item) => item.active))
-  const activeReports = reports.filter((report) => report.status !== "Selesai").length
+  const activeReports = handlerSummary.reduce((sum, item) => sum + item.active, 0)
 
   return (
     <AnalyticsCard icon={ListChecks} title="Aktif per penanggung jawab" description="Bandingkan jumlah tiket yang belum selesai di tiap peran.">
-      {reports.length ? <>
-      <div className="mb-4 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>Diurutkan dari yang terbanyak</span>
-        <span className="tabular-nums">Skala batang: 0–{highestHandlerCount} tiket</span>
-      </div>
-      <div className="space-y-4">
-        {handlerSummary.map((item) => (
-          <div key={item.handler} className="min-w-0">
-            <div className="flex items-center justify-between gap-3">
-              <p className="min-w-0 text-sm font-medium text-foreground">{item.handler}</p>
-              <p className="shrink-0 text-xs tabular-nums text-muted-foreground"><span className="text-sm font-semibold text-foreground">{item.active} aktif</span> dari {item.total} tiket</p>
+      {total ? <>
+      <dl className="grid gap-6 md:grid-cols-3">
+        {handlerSummary.map((item) => {
+          const Icon = handlerIcons[item.role]
+          return (
+            <div key={item.role} className="min-w-0">
+              <dt className="flex items-center gap-2 text-sm font-medium text-foreground"><Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{item.handler}</dt>
+              <dd className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className={cn("text-3xl font-semibold tracking-tight tabular-nums", item.active ? "text-foreground" : "text-muted-foreground")}>{item.active}</span>
+                <span className="text-sm text-muted-foreground">aktif <span className="text-xs tabular-nums">dari {item.total} tiket</span></span>
+              </dd>
+              {/* All three bars share the same ticket scale, not an individual completion percentage. */}
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                <div className="h-full rounded-full bg-primary/80" style={{ width: (item.active / highestHandlerCount) * 100 + "%" }} />
+              </div>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-              <div className="h-full rounded-full bg-primary/80" style={{ width: (item.active / highestHandlerCount) * 100 + "%" }} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="mt-4 text-xs text-muted-foreground">{activeReports} dari {reports.length} tiket masih aktif di seluruh peran.</p>
+          )
+        })}
+      </dl>
+      <p className="mt-5 text-xs text-muted-foreground">{activeReports} dari {total} tiket masih aktif di seluruh peran.</p>
       </> : <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada laporan pada periode ini.</p>}
     </AnalyticsCard>
   )
 }
 
-function FacilityOverview({ reports }: { reports: readonly (typeof monitoringReports)[number][] }) {
+export function ManagementFacilityOverview({ rooms }: { rooms: ManagementStatisticsData["rooms"] }) {
   const pieTooltip = useStablePieTooltip()
-  const [selectedRoomName, setSelectedRoomName] = useState("")
+  const [selectedRoomId, setSelectedRoomId] = useState("")
   const [locationSearch, setLocationSearch] = useState("")
   const [showAllObjects, setShowAllObjects] = useState(false)
-  const facilityTickets = new Set(reports.filter((report) => report.category === "Fasilitas").map((report) => report.ticket))
-  const scopedFacilityReports = technicianFacilityReports.filter((report) => facilityTickets.has(report.ticket))
-  const rooms = aggregateTechnicianRoomPriorities(scopedFacilityReports)
-  const matchingRooms = rooms.filter((room) => `${room.room} ${room.location}`.toLocaleLowerCase("id-ID").includes(locationSearch.trim().toLocaleLowerCase("id-ID")))
-  const selectedRoom = matchingRooms.find((room) => room.room === selectedRoomName) ?? matchingRooms[0]
-  const activeFacilityReports = rooms.reduce((total, room) => total + room.activeReports, 0)
-  const maximumRoomReports = Math.max(1, ...rooms.map((room) => room.activeReports))
-  const objectMentions = selectedRoom?.facilities.reduce((total, facility) => total + facility.activeReports, 0) ?? 0
+  const rankedRooms = [...rooms].filter((room) => room.totalReports > 0).sort((left, right) => right.totalReports - left.totalReports || left.room.localeCompare(right.room, "id") || left.id.localeCompare(right.id))
+  const matchingRooms = rankedRooms.filter((room) => `${room.room} ${room.location}`.toLocaleLowerCase("id-ID").includes(locationSearch.trim().toLocaleLowerCase("id-ID")))
+  const selectedRoom = matchingRooms.find((room) => room.id === selectedRoomId) ?? matchingRooms[0]
+  const historicalFacilityReports = rankedRooms.reduce((total, room) => total + room.totalReports, 0)
+  const maximumRoomReports = Math.max(1, ...rankedRooms.map((room) => room.totalReports))
+  const objectMentions = selectedRoom?.facilities.reduce((total, facility) => total + facility.totalReports, 0) ?? 0
   const objectChartData = selectedRoom?.facilities.map((facility, index) => ({
     key: `object-${index}`,
     name: facility.facility,
-    value: facility.activeReports,
+    value: facility.totalReports,
     fill: `var(--chart-${index % 5 + 1})`,
   })) ?? []
   const objectChartConfig: ChartConfig = Object.fromEntries(objectChartData.map((item) => [item.key, { label: item.name, color: item.fill }]))
   const manyObjects = (selectedRoom?.facilities.length ?? 0) > 5
   const displayedObjects = selectedRoom ? (showAllObjects ? selectedRoom.facilities : selectedRoom.facilities.slice(0, 5)) : []
 
-  function selectRoom(roomName: string) {
-    setSelectedRoomName(roomName)
+  function selectRoom(roomId: string) {
+    setSelectedRoomId(roomId)
     setShowAllObjects(false)
   }
 
   return (
     <AnalyticsCard
       icon={Building2}
-      title="Lokasi dengan laporan fasilitas aktif"
-      description={activeFacilityReports + " laporan belum selesai di " + rooms.length + " lokasi. Pilih lokasi untuk melihat objeknya."}
+      title="Prioritas historikal fasilitas"
+      description={historicalFacilityReports + " laporan di " + rankedRooms.length + " lokasi pada periode terpilih. Termasuk laporan selesai dan ditolak."}
       contentClassName="p-0"
     >
-      {rooms.length ? (
+      {rankedRooms.length ? (
         <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
           <section className="border-b border-border/60 p-4 md:p-5 lg:border-r lg:border-b-0" aria-labelledby="facility-location-title">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 id="facility-location-title" className="text-sm font-semibold text-foreground">Daftar lokasi</h3>
-              <Badge variant="outline" tone="neutral">{locationSearch ? `${matchingRooms.length} dari ${rooms.length}` : `${rooms.length} lokasi`}</Badge>
+              <h3 id="facility-location-title" className="text-sm font-semibold text-foreground">Prioritas historikal ruang</h3>
+              <Badge variant="outline" tone="neutral">{locationSearch ? `${matchingRooms.length} dari ${rankedRooms.length}` : `${rankedRooms.length} lokasi`}</Badge>
             </div>
-            {rooms.length > 5 ? <div className="relative mb-3">
+            <p className="mb-3 text-xs leading-relaxed text-muted-foreground">Urutan berdasarkan total laporan seluruh status, bukan antrean aktif.</p>
+            {rankedRooms.length > 5 ? <div className="relative mb-3">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input type="search" value={locationSearch} onChange={(event) => setLocationSearch(event.target.value)} placeholder="Cari lokasi" aria-label="Cari lokasi fasilitas" className="h-9 pl-9" />
             </div> : null}
-            <div className={cn("space-y-1", rooms.length > 5 && "max-h-80 overflow-y-auto pr-1")}>
+            <div className={cn("space-y-1", rankedRooms.length > 5 && "max-h-80 overflow-y-auto pr-1")}>
               {matchingRooms.length ? matchingRooms.map((room) => {
-                const index = rooms.findIndex((item) => item.room === room.room)
-                const selected = room.room === selectedRoom?.room
+                const index = rankedRooms.findIndex((item) => item.id === room.id)
+                const selected = room.id === selectedRoom?.id
 
                 return (
                   <Button
-                    key={room.room}
+                    key={room.id}
                     type="button"
                     variant="ghost"
                     aria-pressed={selected}
+                    aria-label={`${room.totalReports === maximumRoomReports ? "Prioritas utama" : "Prioritas berikutnya"} historikal: ${room.room}, ${room.totalReports} laporan pada periode terpilih. Tinjau objek fasilitas.`}
                     className={cn(
                       "h-auto w-full justify-start gap-3 rounded-lg border px-3 py-2.5 text-left whitespace-normal",
                       selected ? "border-primary/30 bg-primary/5 hover:bg-primary/10" : "border-transparent hover:border-border hover:bg-muted/50",
                     )}
-                    onClick={() => selectRoom(room.room)}
+                    onClick={() => selectRoom(room.id)}
                   >
                     <span className="w-4 shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">{index + 1}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-3">
-                        <span className="truncate text-sm font-medium text-foreground">{room.room}</span>
-                        <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">{room.activeReports} laporan</span>
+                      <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                        <span className="min-w-0 break-words text-sm font-medium text-foreground">{room.room}</span>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">{room.totalReports} laporan</span>
+                        <RoomPriorityBadge count={room.totalReports} highest={maximumRoomReports} historical />
                       </span>
                       <span className="mt-2 block h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                        <span className="block h-full rounded-full bg-primary/75" style={{ width: (room.activeReports / maximumRoomReports) * 100 + "%" }} />
+                        <span className="block h-full rounded-full bg-primary/75" style={{ width: (room.totalReports / maximumRoomReports) * 100 + "%" }} />
                       </span>
                     </span>
                   </Button>
@@ -458,9 +458,9 @@ function FacilityOverview({ reports }: { reports: readonly (typeof monitoringRep
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h3 id="facility-object-title" className="text-sm font-semibold text-foreground">Objek di {selectedRoom.room}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Komposisi objek pada laporan aktif.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Komposisi objek pada seluruh laporan periode terpilih.</p>
               </div>
-              <Badge variant="outline" tone="primary">{selectedRoom.activeReports} laporan</Badge>
+              <Badge variant="outline" tone="primary">{selectedRoom.totalReports} laporan</Badge>
             </div>
             {manyObjects ? (
               <div className="mt-4 space-y-3">
@@ -470,18 +470,18 @@ function FacilityOverview({ reports }: { reports: readonly (typeof monitoringRep
                     const Icon = facilityIcons[facility.facility] ?? Wrench
                     return (
                       <div key={facility.facility} className="rounded-lg border border-border/60 bg-card px-3 py-2.5">
-                        <div className="flex items-center gap-2.5 text-sm"><Icon className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 flex-1 font-medium text-foreground">{facility.facility}</span><span className="shrink-0 text-xs tabular-nums text-muted-foreground">{facility.activeReports} laporan · {objectMentions ? Math.round((facility.activeReports / objectMentions) * 100) : 0}%</span></div>
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true"><div className="h-full rounded-full bg-primary/75" style={{ width: `${(facility.activeReports / Math.max(1, selectedRoom.facilities[0]?.activeReports ?? 1)) * 100}%` }} /></div>
+                        <div className="flex items-center gap-2.5 text-sm"><Icon className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 flex-1 font-medium text-foreground">{facility.facility}</span><span className="shrink-0 text-xs tabular-nums text-muted-foreground">{facility.totalReports} laporan · {objectMentions ? Math.round((facility.totalReports / objectMentions) * 100) : 0}%</span></div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true"><div className="h-full rounded-full bg-primary/75" style={{ width: `${(facility.totalReports / Math.max(1, selectedRoom.facilities[0]?.totalReports ?? 1)) * 100}%` }} /></div>
                       </div>
                     )
                   })}
                 </div>
                 <Button type="button" variant="ghost" size="sm" className="px-0 text-primary" onClick={() => setShowAllObjects((current) => !current)}>{showAllObjects ? "Tampilkan 5 teratas" : `Lihat semua ${selectedRoom.facilities.length} objek`}</Button>
               </div>
-            ) : (
+            ) : selectedRoom.facilities.length ? (
               <div className="mt-4 grid items-center gap-4 sm:grid-cols-[160px_minmax(0,1fr)] lg:grid-cols-1 2xl:grid-cols-[160px_minmax(0,1fr)]">
                 <div className="relative mx-auto size-[160px]">
-                  <ChartContainer config={objectChartConfig} className="size-[160px] aspect-auto" initialDimension={{ width: 160, height: 160 }} {...pieTooltip.containerProps}>
+                  <ChartContainer aria-label={`Komposisi historikal objek di ${selectedRoom.room}, ${objectMentions} objek dilaporkan`} config={objectChartConfig} className="size-[160px] aspect-auto" initialDimension={{ width: 160, height: 160 }} {...pieTooltip.containerProps}>
                     <PieChart accessibilityLayer>
                       <ChartTooltip
                         active={pieTooltip.tooltipActive}
@@ -489,7 +489,7 @@ function FacilityOverview({ reports }: { reports: readonly (typeof monitoringRep
                         wrapperStyle={{ zIndex: 10 }}
                         content={<ChartTooltipContent hideLabel nameKey="key" />}
                       />
-                      <Pie key={selectedRoom.room} data={objectChartData} dataKey="value" nameKey="name" innerRadius={48} outerRadius={70} paddingAngle={2} strokeWidth={0} isAnimationActive="auto" animationBegin={0} animationDuration={500} animationEasing="ease-out" />
+                      <Pie key={selectedRoom.id} data={objectChartData} dataKey="value" nameKey="name" innerRadius={48} outerRadius={70} paddingAngle={2} strokeWidth={0} isAnimationActive="auto" animationBegin={0} animationDuration={500} animationEasing="ease-out" />
                     </PieChart>
                   </ChartContainer>
                   <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -505,21 +505,21 @@ function FacilityOverview({ reports }: { reports: readonly (typeof monitoringRep
                         <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: objectChartData[index].fill }} aria-hidden="true" />
                         <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                         <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{facility.facility}</span>
-                        <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">{facility.activeReports}</span>
-                        <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{objectMentions ? Math.round((facility.activeReports / objectMentions) * 100) : 0}%</span>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">{facility.totalReports}</span>
+                        <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{objectMentions ? Math.round((facility.totalReports / objectMentions) * 100) : 0}%</span>
                       </div>
                     )
                   })}
                 </div>
               </div>
-            )}
-            <p className="mt-4 text-xs text-muted-foreground">{selectedRoom.totalReports - selectedRoom.activeReports} dari {selectedRoom.totalReports} laporan di lokasi ini sudah selesai.</p>
+            ) : <Card className="mt-4 rounded-xl border-dashed border-border bg-empty-surface shadow-none"><CardContent className="py-8 text-center"><p className="text-sm font-medium">Belum ada rincian objek fasilitas</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Laporan di lokasi ini tidak memuat objek fasilitas terdaftar.</p></CardContent></Card>}
+            <p className="mt-4 text-xs text-muted-foreground">{selectedRoom.activeReports} aktif · {selectedRoom.completedReports} dari {selectedRoom.totalReports} laporan sudah selesai.</p>
             </> : <div className="py-8 text-center"><h3 id="facility-object-title" className="text-sm font-semibold text-foreground">Objek lokasi</h3><p className="mt-1 text-sm text-muted-foreground">Tidak ada lokasi yang sesuai dengan pencarian.</p></div>}
           </section>
         </div>
-      ) : <p className="p-5 text-sm text-muted-foreground">Belum ada laporan fasilitas aktif.</p>}
+      ) : <p className="p-5 text-sm text-muted-foreground">Belum ada laporan fasilitas pada periode ini.</p>}
       <p className="border-t border-border/60 bg-muted/20 px-4 py-3 text-xs leading-relaxed text-muted-foreground md:px-5">
-        Satu laporan bisa mencakup beberapa objek. Jumlah laporan aktif tidak menunjukkan tingkat risiko teknis.
+        Prioritas historikal berdasarkan jumlah laporan, bukan risiko atau antrean kerja saat ini. Satu tiket dapat mencakup beberapa objek.
       </p>
     </AnalyticsCard>
   )
@@ -527,42 +527,35 @@ function FacilityOverview({ reports }: { reports: readonly (typeof monitoringRep
 
 export function ManagementStatistics() {
   const [period, setPeriod] = useState<PeriodSelection>(() => resolvePreset("all"))
-  const reports = monitoringReports.filter((report) => (!period.from || report.reportedOn >= period.from) && (!period.to || report.reportedOn <= period.to))
-  const totalReports = reports.length
-  const completedReports = reports.filter((report) => report.status === "Selesai").length
-  const newReports = reports.filter((report) => report.status === "Baru").length
-  const inProgressReports = reports.filter((report) => isMonitoringReportInProgress(report.status)).length
-  const completionRate = totalReports ? Math.round((completedReports / totalReports) * 100) : 0
+  const [revision, setRevision] = useState(0)
+  const search = new URLSearchParams({ period: period.preset === "all" ? "semua" : "rentang", retry: String(revision) })
+  if (period.from && period.to) { search.set("from", period.from); search.set("to", period.to) }
+  const resource = useOperationalResource<ManagementStatisticsData>("/api/manajemen/statistics?" + search)
+  const data = resource.data
+  const categorySummary = buildCategorySummary(data?.categories ?? [], data?.total ?? 0, period)
+  const completionRate = data?.total ? Math.round(data.completed / data.total * 100) : 0
   const periodLabel = periodRangeLabel(period)
-  const categorySummary = buildCategorySummary(reports, period)
-  const trend = buildTrend(monitoringReports, period)
-  const missingCompletionDates = monitoringReports.filter((report) => report.status === "Selesai" && !report.completedOn).length
-  const monitoringHref = (filter: Record<string, string> = {}) => {
-    const params = new URLSearchParams({ from: period.from, to: period.to, ...filter })
-    return "/manajemen/monitoring?" + params.toString()
-  }
+  const trend: TrendData = data?.trend.map((point) => ({ ...point, label: data.granularity === "day" ? shortDateFormatter.format(new Date(point.date + "T00:00:00Z")) : data.granularity === "month" ? new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(point.date + "T00:00:00Z")) : point.date.slice(0, 4) })) ?? []
+  const monitoringHref = (filter: Record<string, string> = {}) => "/manajemen/monitoring?" + new URLSearchParams({ ...(period.from && period.to ? { from: period.from, to: period.to } : { period: "semua" }), ...filter }).toString()
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="text-xs text-muted-foreground">Cakupan statistik</p><p className="mt-0.5 text-sm font-medium text-foreground">{periodLabel}</p></div>
-        <PeriodPicker period={period} onChange={setPeriod} />
-      </div>
-
+      <ManagementStatisticsScope period={period} onChange={setPeriod} />
+      <ManagementFeedback loading={resource.loading} error={resource.error} onRetry={() => setRevision((v) => v + 1)} />
+      {data ? <>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Ringkasan seluruh laporan">
-        <KpiCard label="Total laporan" value={totalReports} icon={ClipboardList} detail="Kategori tercatat" detailValue={categorySummary.filter((item) => item.value > 0).length + " kategori"} href={monitoringHref()} />
-        <KpiCard label="Baru" value={newReports} icon={FileText} detail="Porsi seluruh tiket" detailValue={totalReports ? Math.round((newReports / totalReports) * 100) + "%" : "0%"} href={monitoringHref({ status: "Baru" })} />
-        <KpiCard label="Dalam penanganan" value={inProgressReports} icon={ListChecks} iconTone="amber" detail="Porsi seluruh tiket" detailValue={totalReports ? Math.round((inProgressReports / totalReports) * 100) + "%" : "0%"} href={monitoringHref({ status: "dalam-penanganan" })} />
-        <KpiCard label="Tingkat selesai" value={completionRate + "%"} icon={Gauge} iconTone="green" detail="Tiket selesai" detailValue={completedReports + " dari " + totalReports} detailTone="green" href={monitoringHref({ status: "Selesai" })} />
+        <KpiCard label="Total laporan" value={data.total} icon={ClipboardList} detail="Kategori tercatat" detailValue={categorySummary.filter((item) => item.value > 0).length + " kategori"} href={monitoringHref()} />
+        <KpiCard label="Baru" value={data.newReports} icon={FileText} detail="Porsi seluruh tiket" detailValue={data.total ? Math.round(data.newReports / data.total * 100) + "%" : "0%"} href={monitoringHref({ status: "baru" })} />
+        <KpiCard label="Dalam penanganan" value={data.inProgress} icon={ListChecks} iconTone="amber" detail="Porsi seluruh tiket" detailValue={data.total ? Math.round(data.inProgress / data.total * 100) + "%" : "0%"} href={monitoringHref({ status: "dalam-penanganan" })} />
+        <KpiCard label="Tingkat selesai" value={completionRate + "%"} icon={Gauge} iconTone="green" detail="Tiket selesai" detailValue={data.completed + " dari " + data.total} detailTone="green" href={monitoringHref({ status: "selesai" })} />
       </section>
-
       <section className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]" aria-label="Tren dan komposisi laporan">
-        <TrendOverview trend={trend} periodLabel={periodLabel} missingCompletionDates={missingCompletionDates} />
-        <CategoryComposition summary={categorySummary} totalReports={totalReports} periodLabel={periodLabel} />
+        <TrendOverview trend={trend} periodLabel={periodLabel} granularity={data.granularity} />
+        <CategoryComposition summary={categorySummary} totalReports={data.total} periodLabel={periodLabel} />
       </section>
-
-      <HandlerOverview reports={reports} />
-      <FacilityOverview key={period.from + ":" + period.to} reports={reports} />
+      <ManagementHandlerOverview handlers={data.handlers} total={data.total} />
+      <ManagementFacilityOverview key={period.from + ":" + period.to} rooms={data.rooms} />
+      </> : null}
     </div>
   )
 }

@@ -90,9 +90,9 @@ export class DrizzleReportRepository implements ReportRepository {
       if (files.length) await tx.insert(reportAttachments).values(files.map((file) => ({ ...file, ownerId: actor.id, reportId: report.id })))
       await tx.insert(reportStatusHistory).values({ reportId: report.id, actorId: actor.id, actorName: user.name, toStatus: "baru", note: "Laporan dikirim oleh Pelapor.", createdAt: now })
       await tx.insert(notifications).values({ recipientId: actor.id, reportId: report.id, kind: "status", title: "Laporan berhasil dikirim", description: `${report.ticketNumber} telah diteruskan ke pengelola sesuai kategorinya.`, createdAt: now })
-      if (payload.category === "kehilangan-temuan" || payload.category === "fasilitas") {
+      {
         const recipients = await tx.select({ id: users.id }).from(users).where(and(eq(users.role, handlerByCategory[payload.category]), eq(users.isActive, true)))
-        const title = payload.category === "fasilitas" ? "Laporan fasilitas baru" : "Laporan kehilangan/temuan baru"
+        const title = payload.category === "fasilitas" ? "Laporan fasilitas baru" : payload.category === "kehilangan-temuan" ? "Laporan kehilangan/temuan baru" : payload.category === "layanan" ? "Laporan layanan baru" : "Laporan lainnya baru"
         if (recipients.length) await tx.insert(notifications).values(recipients.map((user) => ({ recipientId: user.id, reportId: report.id, kind: "status", title, description: `${report.ticketNumber}: ${payload.title}`, createdAt: now })))
       }
       await tx.update(reportDrafts).set({ payload, submittedReportId: report.id, revision: draft.revision + 1, updatedAt: now }).where(eq(reportDrafts.id, draft.id))

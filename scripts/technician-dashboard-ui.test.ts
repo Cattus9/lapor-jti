@@ -5,8 +5,33 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { TechnicianEmptyState } from "../src/features/facilities/components/technician-empty-state"
 import { TechnicianPriorityAnalysis } from "../src/features/facilities/components/technician-priority-analysis"
+import { ReportAttachmentsEmptyState } from "../src/components/reports/report-attachments-empty-state"
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+
+test("Operational attachment empty states share the canonical Satpam icon wrapper and text hierarchy", () => {
+  const html = renderToStaticMarkup(createElement(ReportAttachmentsEmptyState))
+  assert.match(html, /data-slot="card"/)
+  assert.match(html, /data-slot="card-content"/)
+  assert.match(html, /border-dashed border-border bg-muted\/30/)
+  assert.match(html, /size-10 shrink-0.*rounded-xl.*bg-card/)
+  assert.match(html, /aria-hidden="true"/)
+  assert.match(html, /text-sm font-medium text-foreground">Tidak ada lampiran/)
+  assert.match(html, /text-xs leading-relaxed text-muted-foreground">Pelapor tidak menambahkan foto atau dokumen pendukung/)
+  assert.doesNotMatch(html, /<button|<a\b/)
+
+  const technician = read("src/features/facilities/components/technician-report-detail-dialog.tsx")
+  const satpam = read("src/features/lost-found/components/satpam-lost-found-workspace.tsx")
+  for (const modal of [technician, satpam]) {
+    assert.match(modal, /from "@\/components\/reports\/report-attachments-empty-state"/)
+    assert.match(modal, /<ReportAttachmentsEmptyState \/>/)
+  }
+  assert.match(technician, /detail\.data\.files\.length \? detail\.data\.files\.map/)
+  assert.match(technician, /href=\{file\.url\}/)
+  assert.match(technician, /src=\{file\.previewUrl\}/)
+  assert.doesNotMatch(technician, /Pelapor tidak menambahkan lampiran\./)
+  assert.match(satpam, /report\.photoUrl \|\| report\.attachments \?/)
+})
 
 test("Empty priorities retain their section identity without a misleading priority action", () => {
   const html = renderToStaticMarkup(createElement(TechnicianPriorityAnalysis, { rooms: [] }))
@@ -88,6 +113,9 @@ test("Dashboard preserves four shared KPIs and removes the duplicated daily task
   assert.match(dashboard, /<TechnicianEmptyState context="queue"/)
   const loading = read("src/components/layout/page-loading.tsx")
   assert.match(loading, /if \(role === "teknisi"\)/)
+  const technicianLoading = loading.slice(loading.indexOf('if (role === "teknisi")'), loading.indexOf('\n  return (', loading.indexOf('if (role === "teknisi")')))
+  assert.match(technicianLoading, /length: 6/)
+  assert.match(technicianLoading, /size-\[180px\] rounded-full/)
 })
 
 test("Queue navigation lives once in its header while the footer only describes the preview limit", () => {
@@ -104,18 +132,21 @@ test("Queue navigation lives once in its header while the footer only describes 
   assert.match(content, /encodeURIComponent\(item\.ticket\)/)
 })
 
-test("Facility bars and tooltip track the selected room's pie and legend color with a stale-selection fallback", () => {
+test("Room selection updates the facility donut, resets disclosure, and falls back after a room completes", () => {
   const analysis = read("src/features/facilities/components/technician-priority-analysis.tsx")
 
-  assert.match(analysis, /const selectedRoomIndex = Math\.max\(0, topRooms\.findIndex\(\(room\) => room\.id === selectedRoomId\)\)/)
-  assert.match(analysis, /const selectedRoom = topRooms\[selectedRoomIndex\]/)
-  assert.match(analysis, /color: roomColors\[selectedRoomIndex\]/)
-  assert.match(analysis, /fill: roomColors\[index\]/)
-  assert.match(analysis, /backgroundColor: roomColors\[index\]/)
-  assert.match(analysis, /<ChartContainer config=\{facilityChartConfig\}/)
-  assert.match(analysis, /<Bar dataKey="activeReports" fill="var\(--color-activeReports\)"/)
-  assert.match(analysis, /<ChartTooltip cursor=\{false\} content=\{<ChartTooltipContent hideLabel \/>\}/)
-  assert.doesNotMatch(analysis, /color: "var\(--chart-1\)"/)
+  assert.match(analysis, /const selectedRoom = topRooms\.find\(\(room\) => room\.id === selectedRoomId\) \?\? topRooms\[0\]/)
+  assert.match(analysis, /onClick=\{\(\) => setSelectedRoomId\(room\.id\)\}/)
+  assert.match(analysis, /<TechnicianFacilityComposition key=\{selectedRoom\.id\} room=\{selectedRoom\}/)
+  assert.match(analysis, /const pieTooltip = useStablePieTooltip\(\)/)
+  assert.match(analysis, /backgroundColor: objectChartData\[index\]\.fill/)
+  assert.match(analysis, /<ChartContainer config=\{objectChartConfig\}/)
+  assert.match(analysis, /<Pie data=\{objectChartData\} dataKey="value" nameKey="name"/)
+  assert.match(analysis, /isAnimationActive="auto" animationBegin=\{0\} animationDuration=\{500\}/)
+  assert.match(analysis, /<ChartTooltip active=\{pieTooltip\.tooltipActive\}/)
+  assert.match(analysis, /showAllObjects \? facilities : facilities\.slice\(0, OBJECT_CHART_LIMIT\)/)
+  assert.match(analysis, /onClick=\{\(\) => setShowAllObjects\(\(current\) => !current\)\}/)
+  assert.doesNotMatch(analysis, /roomColors|BarChart|role="combobox"/)
 })
 
 function luminance(hex: string) {

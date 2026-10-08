@@ -6,7 +6,7 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    files: ["src/features/reports/domain/**/*.{ts,tsx}", "src/features/reports/application/**/*.{ts,tsx}", "src/features/lost-found/domain/**/*.{ts,tsx}", "src/features/lost-found/application/**/*.{ts,tsx}", "src/features/facilities/domain/**/*.{ts,tsx}", "src/features/facilities/application/**/*.{ts,tsx}"],
+    files: ["src/features/reports/domain/**/*.{ts,tsx}", "src/features/reports/application/**/*.{ts,tsx}", "src/features/lost-found/domain/**/*.{ts,tsx}", "src/features/lost-found/application/**/*.{ts,tsx}", "src/features/facilities/domain/**/*.{ts,tsx}", "src/features/facilities/application/**/*.{ts,tsx}", "src/features/management/domain/**/*.{ts,tsx}", "src/features/management/application/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": ["error", {
         patterns: [

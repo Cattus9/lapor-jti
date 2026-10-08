@@ -6,7 +6,7 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import Image from "next/image"
-import { ArrowRight, Eye, EyeOff, LogIn } from "lucide-react"
+import { Eye, EyeOff, LogIn } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -54,7 +54,6 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             </div>
             <div className="m-auto w-full max-w-sm space-y-8 py-10">
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-xs font-medium text-primary"><LogIn className="size-4" aria-hidden="true" />Portal pelaporan internal JTI</div>
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Masuk ke akun Anda</h1>
                 <p className="max-w-md text-sm leading-relaxed text-muted-foreground">Gunakan email dan password akun yang telah disiapkan pengelola. Login SSO kampus belum tersedia.</p>
               </div>
@@ -84,7 +83,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               </Field>
               <div>
                 {error ? <p id="login-error" className="mb-3 text-sm text-destructive" role="alert">{error}</p> : null}
-                <Button type="submit" size="lg" className="h-12 w-full" disabled={isPending}><LogIn />{isPending ? "Memproses..." : "Masuk"}<ArrowRight className="ml-1" /></Button>
+                <Button type="submit" size="lg" className="h-12 w-full" disabled={isPending}><LogIn />{isPending ? "Memproses..." : "Masuk"}</Button>
               </div>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">Dengan melanjutkan, Anda menyetujui penggunaan AspirasiJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</p>

@@ -1,8 +1,8 @@
 import type { TechnicianRoomPriority } from "@/features/facilities/types"
 
-const SUMMARY_ROOM_LIMIT = 5
+const SUMMARY_ROOM_LIMIT = 6
 
-/** Limit the displayed ranking, not the totals used by the dashboard chart. */
+/** Limit the displayed ranking, not the totals used by the dashboard summary. */
 export function getTechnicianPrioritySummary(rooms: TechnicianRoomPriority[]) {
   const activeRooms = rooms.filter((room) => room.activeReports > 0).sort((left, right) =>
     right.activeReports - left.activeReports || left.room.localeCompare(right.room, "id") || left.id.localeCompare(right.id),

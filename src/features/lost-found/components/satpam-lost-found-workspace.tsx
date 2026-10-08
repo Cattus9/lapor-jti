@@ -4,6 +4,7 @@
 
 import Image from "next/image"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
+import { ReportAttachmentsEmptyState } from "@/components/reports/report-attachments-empty-state"
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -257,7 +258,7 @@ function ReportDetailDialog({
           </section>
           <section className="border-t border-border/60 pt-6">
             <div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><Paperclip className="size-4" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold text-foreground">Lampiran</h3><p className="mt-0.5 text-xs text-muted-foreground">Foto atau dokumen pendukung.</p></div></div>
-            <div className="mt-4 flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">{report.photoUrl ? <ReportPhotoThumbnail key={report.photoUrl} report={report} /> : <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground"><ImageIcon className="size-5" aria-hidden="true" /></span>}<div><p className="text-sm font-medium text-foreground">{report.attachments ? `${report.attachments} lampiran tersedia` : "Tidak ada lampiran"}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{report.photoUrl ? "Foto barang ditampilkan sebagai pratinjau." : report.attachments ? "Pratinjau file belum tersedia." : "Pelapor tidak menambahkan foto atau dokumen pendukung."}</p></div></div>
+            {report.photoUrl || report.attachments ? <div className="mt-4 flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">{report.photoUrl ? <ReportPhotoThumbnail key={report.photoUrl} report={report} /> : <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground"><ImageIcon className="size-5" aria-hidden="true" /></span>}<div><p className="text-sm font-medium text-foreground">{report.attachments ? `${report.attachments} lampiran tersedia` : "Tidak ada lampiran"}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{report.photoUrl ? "Foto barang ditampilkan sebagai pratinjau." : "Pratinjau file belum tersedia."}</p></div></div> : <div className="mt-4"><ReportAttachmentsEmptyState /></div>}
           {detail.data?.files.length ? <div className="mt-3 flex flex-wrap gap-2">{detail.data.files.map((file) => <Button key={file.id} variant="outline" size="sm" nativeButton={false} render={<a href={file.url} target="_blank" rel="noopener noreferrer" />}><Paperclip />{file.name}</Button>)}</div> : null}
           </section>
           <StatusActivity activities={detail.data?.history ?? []} />

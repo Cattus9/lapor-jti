@@ -1,4 +1,5 @@
-import { ClipboardList, FileText, Gauge, ListChecks, MessageSquareText, TimerReset } from "lucide-react"
+import { ArrowRight, ClipboardList, FileText, Gauge, ListChecks, MessageSquareText, TimerReset } from "lucide-react"
+import Link from "next/link"
 // [AUTH-ROLE] CurrentUser/AppRole dipakai untuk presentasi setelah validasi pada halaman server.
 // Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 import { KpiCard } from "@/components/dashboard/kpi-card"
@@ -6,12 +7,19 @@ import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { managementFocus, managementOverview, managementPriorityQueue } from "@/features/management/mock/manajemen-dashboard"
+import type { ManagementDashboard } from "../types"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
-export function ManajemenDashboard({ user }: { user: CurrentUser }) {
+export function ManajemenDashboard({ user, data: managementOverview }: { user: CurrentUser; data: ManagementDashboard }) {
+  const managementPriorityQueue = managementOverview.queue
+  const managementFocus = [
+    { title: "Tindak lanjuti laporan baru", description: "Pastikan pelapor menerima respons awal untuk setiap laporan yang masuk.", count: `${managementOverview.newReports} laporan` },
+    { title: "Perbarui tanggapan penanganan", description: "Catat tanggapan akhir setelah penanganan selesai.", count: `${managementOverview.inProgress} aktif` },
+    { title: "Tinjau ringkasan operasional", description: "Gunakan Monitoring untuk melihat kondisi laporan lintas kategori dan periode.", count: "Lintas peran" },
+  ]
   return (
     <DashboardLayout role="manajemen" user={user}>
       <ContentShell>
@@ -24,6 +32,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
           <KpiCard
             label="Laporan baru"
             value={managementOverview.newReports}
+            href="/manajemen/laporan?status=baru"
             icon={ClipboardList}
             detail="Perlu respons awal"
             detailValue={`${managementOverview.newReports} laporan`}
@@ -32,6 +41,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
           <KpiCard
             label="Sedang diproses"
             value={managementOverview.inProgress}
+            href="/manajemen/laporan?status=diproses"
             icon={TimerReset}
             iconTone="amber"
             detail="Menunggu pembaruan"
@@ -41,6 +51,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
           <KpiCard
             label="Selesai bulan ini"
             value={managementOverview.completedThisMonth}
+            href="/manajemen/laporan?status=selesai&period=bulan-ini&date=completed"
             icon={ListChecks}
             iconTone="green"
             detail="Tercatat periode ini"
@@ -50,6 +61,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
           <KpiCard
             label="Layanan aktif"
             value={managementOverview.activeServiceReports}
+            href="/manajemen/laporan?category=layanan&status=belum-selesai"
             icon={MessageSquareText}
             iconTone="amber"
             detail="Layanan internal JTI"
@@ -69,7 +81,7 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
                     </span>
                     <div>
                       <CardTitle className="text-base">Antrean prioritas</CardTitle>
-                      <p className="mt-1 text-sm text-muted-foreground">Laporan layanan dan lainnya yang perlu diperhatikan terlebih dahulu.</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Maksimal 5 laporan aktif, diurutkan dari yang paling lama dikirim.</p>
                     </div>
                   </div>
                   <span className="shrink-0 text-xs text-muted-foreground">{managementOverview.updatedAt}</span>
@@ -91,9 +103,11 @@ export function ManajemenDashboard({ user }: { user: CurrentUser }) {
                       <span className="text-xs text-muted-foreground">{report.updatedAt}</span>
                       <Badge tone={report.category === "Layanan" ? "violet" : "warning"} variant="outline">{report.category}</Badge>
                       <StatusBadge status={report.status} />
+                      <Button nativeButton={false} render={<Link href={`/manajemen/laporan?ticket=${encodeURIComponent(report.ticket)}`} />} variant="outline" size="sm" className="bg-accent text-accent-foreground">Detail<ArrowRight /></Button>
                     </div>
                   </article>
                 ))}
+                {!managementPriorityQueue.length ? <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-4 text-center"><p className="text-sm font-medium">Tidak ada laporan yang menunggu penanganan</p><p className="mt-1 text-xs text-muted-foreground">Laporan Layanan dan Lainnya yang belum selesai akan muncul di sini.</p></div> : null}
               </CardContent>
             </div>
           </Card>
