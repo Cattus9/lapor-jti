@@ -62,6 +62,17 @@ Aturan penerapan:
 - Provider Google Workspace belum dikonfigurasi saat ini. Jangan mengklaim SSO aktif atau menaruh kredensial OAuth di client. Bila provider ditambahkan, rahasia OAuth hanya di server dan role aplikasi tetap dikelola database.
 - Perubahan role/status harus mempertimbangkan pencabutan session, aturan agar pengelola aktif terakhir tidak terkunci, pemeriksaan origin, audit tanpa kredensial, dan perlindungan update bersamaan.
 
+## Database: PostgreSQL di Docker wajib
+
+**Database utama proyek adalah PostgreSQL dan standar lingkungan tim menjalankannya di Docker melalui service `db` pada Docker Compose.** Drizzle ORM mengakses PostgreSQL tersebut; Better Auth menyimpan data autentikasi pada database yang sama melalui adapter Drizzle. Seluruh pengembangan backend, schema, migration, relasi, index, dan query wajib mengikuti stack ini.
+
+- Konfigurasi database bersumber dari `compose.yaml`; image saat ini adalah `postgres:18-bookworm`. Jangan mengganti engine database, dialect Drizzle, atau versi mayor PostgreSQL tanpa perubahan arsitektur dan rencana migrasi data yang disepakati.
+- PostgreSQL berjalan dalam container terpisah dari `app` dan `migrate`. Di jaringan Compose, keduanya memakai hostname `db` dan port `5432`; `localhost` di dalam container menunjuk container itu sendiri, bukan container PostgreSQL.
+- Tool yang berjalan di laptop, termasuk Drizzle Studio, memakai alamat host `127.0.0.1` dan `DB_PORT` yang dipublikasikan oleh `compose.dev.yaml`. App yang dijalankan lewat Next.js lokal juga tetap dapat memakai PostgreSQL di Docker dengan konfigurasi koneksi host yang sesuai.
+- Data PostgreSQL disimpan dalam named volume `postgres_data`. Pull repo, rebuild image, atau recreate container tidak menyinkronkan isi database antar laptop; setiap lingkungan memiliki data sendiri dan diperbarui melalui migration yang sama.
+- Gunakan kredensial aplikasi untuk runtime dan kredensial pemilik database untuk migration. Jangan hardcode connection string atau password di kode; gunakan environment dan resolver koneksi bersama di `src/db/environment.ts`.
+- Semua petunjuk setup tim harus mencantumkan PostgreSQL di Docker, konfigurasi environment, serta urutan `db` sehat → `migrate` berhasil → `app` berjalan. Jika memakai lingkungan database khusus yang disepakati, dokumentasikan perbedaannya agar tim tidak mengira koneksi tersebut memakai database Compose lokal.
+
 ## Database: migration dan seed
 
 ### Migration
@@ -119,7 +130,7 @@ Perintah Compose yang ekuivalen:
 
 Alur startup:
 
-1. Docker membangun image berbasis Node 24 dan menjalankan `npm ci` di dalam image. Karena itu `npm run docker:dev` tidak membutuhkan Node/npm host; menjalankan command `npm run ...` langsung di PowerShell/terminal host tetap membutuhkan Node.js dan dependencies lokal.
+1. Docker membangun image berbasis Node 24 dan menjalankan `npm ci` di dalam image. Perintah Compose langsung di atas dapat dipakai tanpa Node/npm di host. Jika menggunakan shortcut `npm run docker:dev`, Node/npm harus tersedia di host untuk menjalankan script tersebut; dependency aplikasi tetap dipasang di image Docker.
 2. Service `db` menyiapkan PostgreSQL dan volume bernama untuk menyimpan data.
 3. Service `migrate` menunggu database sehat lalu menjalankan migration dengan kredensial migration.
 4. Service `app` baru berjalan setelah migration berhasil, dengan kredensial aplikasi dan Better Auth runtime config.
