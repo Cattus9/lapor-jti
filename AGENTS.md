@@ -1,3 +1,7 @@
+## Panduan tim
+
+Sebelum mengubah kode, setiap anggota tim dan agent wajib membaca [Dev.md](Dev.md) serta mengikuti aturan di bawah ini. Dev.md memperluas aturan AGENTS.md dengan standar styling, backend, database, dan Docker project.
+
 ## Wajib!! semua iterasi/proses development frentend HARUS menggunakan skills di @.agent/skills/design-taste-frontend, yang memastikan desain dan tata letak yang konsisten dengan standar ShadCN dan SEMUA komponent WAJIB pakai Shadcn.
 
 ## Shadcn Primitive Customization
