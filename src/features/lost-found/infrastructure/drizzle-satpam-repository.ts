@@ -2,13 +2,15 @@ import "server-only"
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { getDb } from "@/db"
-import { users, reports, reportLostFoundDetails, reportAttachments, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers } from "@/db/schema"
+import { users, reports, reportLostFoundDetails, reportAttachments, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory } from "@/db/schema"
 import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor, type ReportStatus } from "../../reports/domain/report"
 import { DrizzleReportRepository } from "../../reports/infrastructure/drizzle-report-repository"
 import { defaultReportFilters, reportDateBounds } from "../../reports/domain/report-list-filters"
 import { expectedStatus, type SatpamCommand } from "../domain/satpam"
+import { validateCreateInventory, validateHandoverInventory, type CreateInventoryInput, type HandoverInventoryInput, type InventoryFilter, type InventoryItem } from "../domain/inventory"
 import type { SatpamRepository } from "../application/ports"
 import type { SatpamHandoverHistoryItem, SatpamHistoryFilter, SatpamListFilter, SatpamLostFoundReport, SatpamPage, SatpamPendingHandover, SatpamReportStatus } from "../types"
+
 
 type Database = ReturnType<typeof getDb>
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
@@ -190,4 +192,181 @@ export class DrizzleSatpamRepository implements SatpamRepository {
   }
   notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor) }
   markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id) }
+
+  async listInventory(filter: InventoryFilter): Promise<{ items: InventoryItem[]; total: number }> {
+    const criteria = and(
+      filter.status && filter.status !== "semua" ? eq(satpamInventory.status, filter.status) : undefined,
+      filter.query
+        ? or(
+            ilike(satpamInventory.itemName, escaped(filter.query)),
+            ilike(satpamInventory.description, escaped(filter.query)),
+            ilike(satpamInventory.founderName, escaped(filter.query)),
+            ilike(satpamInventory.handoverRecipient, escaped(filter.query))
+          )
+        : undefined
+    )
+
+    const [rows, [totals]] = await Promise.all([
+      this.db
+        .select()
+        .from(satpamInventory)
+        .where(criteria)
+        .orderBy(desc(satpamInventory.createdAt), desc(satpamInventory.id)),
+      this.db
+        .select({ count: sql<number>`count(*)::integer` })
+        .from(satpamInventory)
+        .where(criteria),
+    ])
+
+    const items: InventoryItem[] = rows.map((r) => ({
+      id: r.id,
+      itemName: r.itemName,
+      description: r.description,
+      founderName: r.founderName ?? undefined,
+      status: r.status as "tersimpan" | "diserahkan",
+      storageLocation: r.storageLocation,
+      photoUrl: r.photoStorageKey ? `/api/satpam/inventory/${r.id}/photo?preview=1` : r.photoUrl ?? undefined,
+      hasStoredPhoto: Boolean(r.photoStorageKey),
+      handoverRecipient: r.handoverRecipient ?? undefined,
+      handoverNote: r.handoverNote ?? undefined,
+      handedOverAt: r.handedOverAt ? dateLabel(r.handedOverAt) : undefined,
+      registeredByName: r.registeredByName,
+      createdAt: dateLabel(r.createdAt),
+      updatedAt: dateLabel(r.updatedAt),
+    }))
+
+    return { items, total: totals.count }
+  }
+
+  async getInventoryItem(id: string): Promise<InventoryItem | null> {
+    const [r] = await this.db.select().from(satpamInventory).where(eq(satpamInventory.id, id)).limit(1)
+    if (!r) return null
+    return {
+      id: r.id,
+      itemName: r.itemName,
+      description: r.description,
+      founderName: r.founderName ?? undefined,
+      status: r.status as "tersimpan" | "diserahkan",
+      storageLocation: r.storageLocation,
+      photoUrl: r.photoStorageKey ? `/api/satpam/inventory/${r.id}/photo?preview=1` : r.photoUrl ?? undefined,
+      hasStoredPhoto: Boolean(r.photoStorageKey),
+      handoverRecipient: r.handoverRecipient ?? undefined,
+      handoverNote: r.handoverNote ?? undefined,
+      handedOverAt: r.handedOverAt ? dateLabel(r.handedOverAt) : undefined,
+      registeredByName: r.registeredByName,
+      createdAt: dateLabel(r.createdAt),
+      updatedAt: dateLabel(r.updatedAt),
+    }
+  }
+
+  async createInventory(
+    actor: ReportActor,
+    raw: unknown,
+    storedPhoto?: { storageKey: string; mimeType: string; name: string }
+  ): Promise<InventoryItem> {
+    const input = validateCreateInventory(raw as CreateInventoryInput)
+    const [account] = await this.db
+      .select({ name: users.name })
+      .from(users)
+      .where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true)))
+      .limit(1)
+    if (!account) throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
+
+    const [inserted] = await this.db
+      .insert(satpamInventory)
+      .values({
+        itemName: input.itemName,
+        description: input.description,
+        founderName: input.founderName,
+        photoUrl: input.photoUrl,
+        photoStorageKey: storedPhoto?.storageKey,
+        photoMimeType: storedPhoto?.mimeType,
+        photoName: storedPhoto?.name,
+        registeredBy: actor.id,
+        registeredByName: account.name,
+      })
+      .returning()
+
+    return {
+      id: inserted.id,
+      itemName: inserted.itemName,
+      description: inserted.description,
+      founderName: inserted.founderName ?? undefined,
+      status: inserted.status as "tersimpan" | "diserahkan",
+      storageLocation: inserted.storageLocation,
+      photoUrl: inserted.photoStorageKey
+        ? `/api/satpam/inventory/${inserted.id}/photo?preview=1`
+        : inserted.photoUrl ?? undefined,
+      hasStoredPhoto: Boolean(inserted.photoStorageKey),
+      handoverRecipient: inserted.handoverRecipient ?? undefined,
+      handoverNote: inserted.handoverNote ?? undefined,
+      handedOverAt: inserted.handedOverAt ? dateLabel(inserted.handedOverAt) : undefined,
+      registeredByName: inserted.registeredByName,
+      createdAt: dateLabel(inserted.createdAt),
+      updatedAt: dateLabel(inserted.updatedAt),
+    }
+  }
+
+  async handoverInventory(actor: ReportActor, raw: unknown): Promise<InventoryItem> {
+    const input = validateHandoverInventory(raw as HandoverInventoryInput)
+    const now = new Date()
+    const [existing] = await this.db
+      .select()
+      .from(satpamInventory)
+      .where(eq(satpamInventory.id, input.id))
+      .limit(1)
+    if (!existing) throw new ReportError("Barang inventaris tidak ditemukan.", 404)
+    if (existing.status === "diserahkan") {
+      throw new ReportError("Barang ini sudah berstatus diserahkan.", 409)
+    }
+
+    const [updated] = await this.db
+      .update(satpamInventory)
+      .set({
+        status: "diserahkan",
+        handoverRecipient: input.recipient,
+        handoverNote: input.note,
+        handedOverAt: now,
+        updatedAt: now,
+      })
+      .where(eq(satpamInventory.id, input.id))
+      .returning()
+
+    return {
+      id: updated.id,
+      itemName: updated.itemName,
+      description: updated.description,
+      founderName: updated.founderName ?? undefined,
+      status: updated.status as "tersimpan" | "diserahkan",
+      storageLocation: updated.storageLocation,
+      photoUrl: updated.photoStorageKey
+        ? `/api/satpam/inventory/${updated.id}/photo?preview=1`
+        : updated.photoUrl ?? undefined,
+      hasStoredPhoto: Boolean(updated.photoStorageKey),
+      handoverRecipient: updated.handoverRecipient ?? undefined,
+      handoverNote: updated.handoverNote ?? undefined,
+      handedOverAt: updated.handedOverAt ? dateLabel(updated.handedOverAt) : undefined,
+      registeredByName: updated.registeredByName,
+      createdAt: dateLabel(updated.createdAt),
+      updatedAt: dateLabel(updated.updatedAt),
+    }
+  }
+
+  async getInventoryPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null> {
+    const [row] = await this.db
+      .select({
+        photoStorageKey: satpamInventory.photoStorageKey,
+        photoMimeType: satpamInventory.photoMimeType,
+        photoName: satpamInventory.photoName,
+      })
+      .from(satpamInventory)
+      .where(eq(satpamInventory.id, id))
+      .limit(1)
+    if (!row || !row.photoStorageKey || !row.photoMimeType) return null
+    return {
+      storageKey: row.photoStorageKey,
+      mimeType: row.photoMimeType,
+      name: row.photoName || "foto-inventaris",
+    }
+  }
 }

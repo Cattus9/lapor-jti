@@ -71,6 +71,13 @@
       "when": 1791476279842,
       "tag": "0009_chilly_maverick",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791794841298,
+      "tag": "0010_satpam_inventory",
+      "breakpoints": true
     }
   ]
 }

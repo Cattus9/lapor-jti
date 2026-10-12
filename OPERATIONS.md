@@ -17,9 +17,16 @@ Semua kategori memakai tanggal/waktu kejadian otomatis saat pengiriman secara de
 
 Laporan Kehilangan/Temuan memakai Deskripsi untuk ciri barang dan kronologi; Ciri-ciri tidak lagi menjadi field wajib terpisah. Isi ciri dari draft lama digabung ke Deskripsi saat dibuka. Laporan yang telah terkirim tetap mempertahankan ciri lama. Kode tiket tetap menjadi identitas internal API/relasi/tautan, sedangkan UI memakai judul dan waktu laporan dikirim. Riwayat Satpam menampilkan waktu pengiriman laporan Kehilangan dan Temuan masing-masing. Revisi ini tidak mengubah schema PostgreSQL sehingga tidak memerlukan migration atau seed baru.
 
+## Inventaris Pos Satpam
+
+Menu Satpam:
+- `/satpam/inventaris`: pencatatan dan pengelolaan barang temuan langsung di Pos Satpam. Satpam dapat mendaftarkan barang yang diserahkan langsung oleh civitas kampus (nama barang wajib; nama penemu, deskripsi, dan foto via file upload atau URL tautan opsional). Tersedia filter status (semua, tersimpan, diserahkan), kolom pencarian, kartu inventaris dengan thumbnail foto/badge, modal registrasi, serta modal detail dan alur penyerahan barang kembali ke pemilik sah.
+- Endpoint API: `GET/POST /api/satpam/inventory`, `GET /api/satpam/inventory/[id]/photo`, `POST /api/satpam/inventory/[id]/handover`.
+
 ## Data dan migrasi
 
-Migrasi `0008` menambah `location_areas`, relasi many-to-many `location_facility_objects`, revision master, dan `operational_audit`. `0009` menambah index daftar/peran/status akun. ID master tetap stabil. Tidak ada penghapusan master atau akun dari UI.
+Migrasi `0008` menambah `location_areas`, relasi many-to-many `location_facility_objects`, revision master, dan `operational_audit`. `0009` menambah index daftar/peran/status akun. `0010` menambah tabel `satpam_inventory` untuk pencatatan barang inventaris fisik di Pos Satpam. ID master tetap stabil. Tidak ada penghapusan master atau akun dari UI.
+
 
 Lokasi lama dipetakan ke lantai berdasarkan nama/group yang eksplisit. Lobi/koridor tidak diberi lantai tebakan. Pemetaan awal untuk katalog bawaan merupakan template: ruang belajar/lab memakai perangkat/furnitur, toilet memakai sanitasi/lampu, area lain memakai fasilitas dasar. **Management perlu memeriksa template ini sesuai kondisi lapangan.** Lokasi custom/baru mulai tanpa pemetaan; tetap bisa dilaporkan melalui Lainnya. Ini bukan inventaris unit, jumlah aset, atau bukti fasilitas tersedia di lapangan.
 

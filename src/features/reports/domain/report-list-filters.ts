@@ -9,9 +9,9 @@ export const reportPeriods = {
   rentang: "Rentang tanggal",
 } as const
 export const reportProcessFilters = {
-  semua: "Semua",
   "belum-selesai": "Belum selesai",
   selesai: "Selesai",
+  semua: "Semua",
 } as const
 export type ReportListFilters = {
   q: string
@@ -21,7 +21,7 @@ export type ReportListFilters = {
   from: string
   to: string
 }
-export const defaultReportFilters: ReportListFilters = { q: "", category: "semua", status: "semua", period: "semua", from: "", to: "" }
+export const defaultReportFilters: ReportListFilters = { q: "", category: "semua", status: "belum-selesai", period: "semua", from: "", to: "" }
 
 function text(value: unknown): string {
   if (value === undefined || value === null) return ""
@@ -38,7 +38,7 @@ export function parseReportListFilters(raw: unknown = {}): ReportListFilters {
   const value = raw as Record<string, unknown>
   const q = text(value.q)
   const category = text(value.category) || "semua"
-  const status = text(value.status) || "semua"
+  const status = text(value.status) || "belum-selesai"
   const period = text(value.period) || "semua"
   if (q.length > 100) throw new ReportError("Pencarian maksimal 100 karakter.")
   if (category !== "semua" && !reportCategories.includes(category as ReportCategory)) throw new ReportError("Kategori filter tidak valid.")
@@ -67,13 +67,13 @@ export function reportDateBounds(filters: ReportListFilters, now = new Date()): 
   return { from, until }
 }
 export function hasReportFilters(filters: ReportListFilters) {
-  return Boolean(filters.q || filters.category !== "semua" || filters.status !== "semua" || filters.period !== "semua")
+  return Boolean(filters.q || filters.category !== "semua" || filters.status !== "belum-selesai" || filters.period !== "semua")
 }
 export function reportListHref(filters: ReportListFilters, cursors: { cursor?: string | null; draftCursor?: string | null } = {}) {
   const query = new URLSearchParams()
   if (filters.q) query.set("q", filters.q)
   if (filters.category !== "semua") query.set("category", filters.category)
-  if (filters.status !== "semua") query.set("status", filters.status)
+  if (filters.status !== "belum-selesai") query.set("status", filters.status)
   if (filters.period !== "semua") query.set("period", filters.period)
   if (filters.period === "rentang") { query.set("from", filters.from); query.set("to", filters.to) }
   if (cursors.cursor) query.set("cursor", cursors.cursor)

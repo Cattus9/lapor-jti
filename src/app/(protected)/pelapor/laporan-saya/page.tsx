@@ -12,6 +12,7 @@ export default async function PelaporReportsPage({ searchParams }: { searchParam
   const cursor = typeof query.cursor === "string" ? query.cursor : undefined
   const draftCursor = typeof query.draftCursor === "string" ? query.draftCursor : undefined
   const ticket = typeof query.ticket === "string" ? query.ticket : undefined
-  const data = await getReportService().list(user, cursor, ticket, draftCursor, filters)
+  const month = typeof query.month === "string" ? query.month : undefined
+  const data = await getReportService().list(user, cursor, ticket, draftCursor, filters, month)
   return <PelaporReportList user={user} data={data} filters={filters} selectedTicket={ticket} cursor={cursor} draftCursor={draftCursor} />
 }

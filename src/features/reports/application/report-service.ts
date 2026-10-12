@@ -25,10 +25,11 @@ export class ReportService {
     await this.storage.remove(result.created ? result.removed : attachments)
     return result.report ? { report: result.report } : { draft: result.draft }
   }
-  list(actor: ReportActor, cursor?: string, ticket?: string, draftCursor?: string, filters?: unknown) {
+  list(actor: ReportActor, cursor?: string, ticket?: string, draftCursor?: string, filters?: unknown, month?: string) {
     requireReporter(actor)
     if (ticket && (ticket.length > 50 || !/^LJ-\d{4}-\d+$/.test(ticket))) throw new ReportError("Nomor tiket tidak valid.")
-    return this.repository.list(actor.id, cursor, ticket, draftCursor, parseReportListFilters(filters))
+    if (month && !/^\d{4}-\d{2}$/.test(month)) throw new ReportError("Bulan filter tidak valid.")
+    return this.repository.list(actor.id, cursor, ticket, draftCursor, parseReportListFilters(filters), month)
   }
   dashboard(actor: ReportActor) { requireReporter(actor); return this.repository.dashboard(actor.id) }
   async detail(actor: ReportActor, id: string) {

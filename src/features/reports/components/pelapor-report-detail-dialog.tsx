@@ -138,7 +138,15 @@ function ReportDetailContent({ report, submittedAt }: { report: ReportSummary; s
   )
 }
 
-export function PelaporReportDetailDialog({ report, defaultOpen = false }: { report: ReportListItem; defaultOpen?: boolean }) {
+export function PelaporReportDetailDialog({
+  report,
+  defaultOpen = false,
+  trigger,
+}: {
+  report: ReportListItem
+  defaultOpen?: boolean
+  trigger?: React.ReactElement
+}) {
   const [open, setOpen] = useState(defaultOpen)
   const [detail, setDetail] = useState<ReportSummary | null>(null)
   const [error, setError] = useState("")
@@ -152,8 +160,33 @@ export function PelaporReportDetailDialog({ report, defaultOpen = false }: { rep
       .catch((error) => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Koneksi bermasalah.") })
     return () => controller.abort()
   }, [open, report.id, attempt])
-  return <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (value) { setDetail(null); setError("") } }}>
-    <DialogTrigger render={<Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" />}>Lihat detail</DialogTrigger>
-    {detail ? <ReportDetailContent report={detail} submittedAt={report.submittedAt} /> : <DialogContent><div className="space-y-4 p-6"><DialogTitle>{report.title}</DialogTitle><DialogDescription>Memuat informasi dan riwayat laporan.</DialogDescription>{error ? <><FieldError>{error}</FieldError><Button type="button" variant="outline" onClick={() => { setError(""); setAttempt((value) => value + 1) }}>Coba lagi</Button></> : <div className="space-y-3" aria-busy="true"><Skeleton className="h-14 w-full" /><Skeleton className="h-28 w-full" /><Skeleton className="h-24 w-full" /></div>}</div></DialogContent>}
-  </Dialog>
+  return (
+    <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (value) { setDetail(null); setError("") } }}>
+      <DialogTrigger render={trigger ?? <Button type="button" variant="outline" size="sm" className="shrink-0 bg-card">Lihat detail</Button>} />
+      {detail ? (
+        <ReportDetailContent report={detail} submittedAt={report.submittedAt} />
+      ) : (
+        <DialogContent>
+          <div className="space-y-4 p-6">
+            <DialogTitle>{report.title}</DialogTitle>
+            <DialogDescription>Memuat informasi dan riwayat laporan.</DialogDescription>
+            {error ? (
+              <>
+                <FieldError>{error}</FieldError>
+                <Button type="button" variant="outline" onClick={() => { setError(""); setAttempt((value) => value + 1) }}>
+                  Coba lagi
+                </Button>
+              </>
+            ) : (
+              <div className="space-y-3" aria-busy="true">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-28 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      )}
+    </Dialog>
+  )
 }

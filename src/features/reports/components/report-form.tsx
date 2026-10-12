@@ -15,6 +15,7 @@ import { FacilityMappingFields } from "./facility-mapping-fields"
 import { availableFacilities, type OperationalCatalog } from "@/features/operations/domain/operations"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
 import {
+  ArrowLeft,
   ArrowRight,
   Building2,
   CalendarDays,
@@ -26,24 +27,29 @@ import {
   FileText,
   Headphones,
   ImagePlus,
+  Link2,
   MapPin,
   PackageSearch,
   Save,
-  Send,
   ShieldCheck,
+  UploadCloud,
   Wrench,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { FileDropzone } from "@/components/ui/file-dropzone"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "cn"
+import { AttachmentLinkField } from "./attachment-link-field"
+import { FilePreviewList } from "@/components/ui/file-preview-list"
+import { ReportStepper, reportSteps } from "./report-stepper"
 
 const categories = [
   { value: "kehilangan-temuan", label: "Kehilangan & Temuan", icon: PackageSearch, hint: "Barang hilang atau barang yang ditemukan", iconClassName: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300" },
@@ -51,6 +57,11 @@ const categories = [
   { value: "layanan", label: "Laporan Layanan", icon: Headphones, hint: "Kendala layanan internal JTI", iconClassName: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300" },
   { value: "lainnya", label: "Laporan Lainnya", icon: FileText, hint: "Laporan umum di luar kategori utama", iconClassName: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300" },
 ]
+
+function nowInWib() {
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date())
+  return { date: new Date(`${getTodayInWib()}T00:00:00`), time }
+}
 
 function SelectField({ id, label, placeholder, value, onValueChange, options, description }: { id: string; label: string; placeholder: string; value: string; onValueChange: (value: string) => void; options: string[]; description?: string }) {
   return (
@@ -193,6 +204,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   const [preview, setPreview] = useState<(ReportSubmissionSnapshot & { uploadUrls: string[] }) | null>(null)
+  const [step, setStep] = useState<(typeof reportSteps)[number]["id"]>(initialDraft ? "details" : "category")
   const [category, setCategory] = useState(initialDraft?.payload.category ?? "")
   const [reportType, setReportType] = useState(initialDraft?.payload.reportType ?? "")
   const [location, setLocation] = useState(initialDraft?.payload.location ?? "")
@@ -213,7 +225,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   useEffect(() => () => { for (const url of previewUrls.current) URL.revokeObjectURL(url) }, [])
   function releasePreview() { for (const url of previewUrls.current) URL.revokeObjectURL(url); previewUrls.current = [] }
 
-  function resetCategory(nextCategory: string) { setCategory(nextCategory); setReportType(""); setLocation(""); setOtherLocation(""); setSelectedFacilities([]); setOtherFacility(""); setService(""); setProgram(""); setAttachments([]); setRetained([]); setUseCustomTime(false); setIncidentDate(undefined); setIncidentTime(""); setSavedState("idle"); setError("") }
+  function resetCategory(nextCategory: string) { const now = nowInWib(); setCategory(nextCategory); setReportType(""); setLocation(""); setOtherLocation(""); setSelectedFacilities([]); setOtherFacility(""); setService(""); setProgram(""); setAttachments([]); setRetained([]); setIncidentDate(now.date); setIncidentTime(now.time); setSavedState("idle"); setError("") }
   function currentPayload(): ReportPayload {
     const fields = new FormData(formRef.current!)
     const text = (name: string) => String(fields.get(name) ?? "")
@@ -233,11 +245,12 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
       const result = await response.json().catch(() => null)
       if (!response.ok || !result) throw new Error(result?.error || "Permintaan belum dapat dipastikan berhasil. Coba lagi; sistem mencegah laporan ganda.")
       if (submit) {
-        if (typeof result.report?.ticketNumber !== "string") throw new Error("Konfirmasi laporan belum diterima. Coba lagi; sistem mencegah laporan ganda.")
-        const source = submitButtonRef.current?.getBoundingClientRect()
+        if (typeof result.report?.ticketNumber !== "string") throw new Error("Nomor tiket belum diterima. Coba lagi; sistem mencegah laporan ganda.")
+        const sourceRect = submitButtonRef.current?.getBoundingClientRect()
+        const source = sourceRect && sourceRect.width > 0 ? sourceRect : undefined
         // Reset only after confirmed success. Failed/ambiguous requests retain the same id for safe retries.
         setDraftId(crypto.randomUUID()); setRevision(0); setSourceDraft(undefined)
-        resetCategory(category); setDatePickerOpen(false); releasePreview(); setPreview(null)
+        resetCategory(category); setDatePickerOpen(false); releasePreview(); setPreview(null); setStep("category")
         // A submitted draft cannot be resumed; keep refresh from requesting its old URL.
         const url = new URL(window.location.href)
         url.searchParams.delete("draft")
@@ -263,7 +276,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
       if (category === "fasilitas" && !validFacilityCatalog || category === "layanan" && (!catalog || !services.includes(service))) throw new Error("Periksa pilihan lokasi, fasilitas, atau layanan yang tersedia sebelum mengirim.")
       const snapshot = createReportSubmissionSnapshot(currentPayload(), retained, attachments)
       for (const file of snapshot.files) previewUrls.current.push(URL.createObjectURL(file))
-      setError(""); setPreview({ ...snapshot, uploadUrls: [...previewUrls.current] })
+      setError(""); setPreview({ ...snapshot, uploadUrls: [...previewUrls.current] }); setStep("review"); window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (error) {
       releasePreview()
       const message = error instanceof Error ? error.message : "Periksa kembali isian laporan Anda."
@@ -286,82 +299,119 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
         ? "Contoh: Tidak dapat mengakses JTI E-Learning"
         : "Contoh: Usulan perbaikan papan informasi digital"
 
-  return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
-      <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><FileText className="size-4 text-primary" aria-hidden="true" />Formulir laporan</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-5 md:p-6">
-        <form ref={formRef} tabIndex={-1} className="space-y-7" onSubmit={handleSubmit} aria-busy={pending}>
-          <fieldset disabled={pending || Boolean(preview)} className="space-y-7">
-          <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih satu kategori untuk menampilkan kolom yang relevan.</FieldDescription><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} onSelect={() => resetCategory(item.value)} />)}</div></Field>
-          {category ? <div key={draftId} className="space-y-5 border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">1</span><h2 className="text-sm font-semibold">Informasi laporan</h2></div><FieldGroup>
-            {category === "kehilangan-temuan" ? <SelectField id="report-type" label="Jenis laporan" placeholder="Pilih jenis laporan" value={reportType} onValueChange={setReportType} options={["Kehilangan", "Temuan"]} /> : null}
-            <Field><FieldLabel htmlFor="title" className="font-semibold text-foreground">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
-            {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field></> : null}
-            {category === "fasilitas" && catalog ? <FacilityMappingFields key={draftId} disabled={pending || Boolean(preview)} catalog={catalog} location={location} onLocationChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} facilities={selectedFacilities} onFacilitiesChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /> : null}
-            {category === "fasilitas" || category === "layanan" ? catalogResource.loading ? <p role="status" className="text-sm text-muted-foreground">Memuat katalog operasional...</p> : catalogResource.error ? <div className="space-y-2"><FieldError>{catalogResource.error}</FieldError><Button type="button" variant="outline" onClick={() => setCatalogRevision((value) => value + 1)}>Coba lagi</Button></div> : null : null}
-            {category === "layanan" ? <div className="grid gap-5 sm:grid-cols-2"><SelectField id="service" label="Jenis layanan" placeholder="Pilih layanan" value={service} onValueChange={setService} options={services} /><SelectField id="program" label="Unit atau program studi" placeholder="Pilih unit terkait" value={program} onValueChange={setProgram} options={studyPrograms} /></div> : null}
-            {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak lagi tersedia. Pilih layanan yang aktif atau gunakan kategori Laporan Lainnya.</FieldError> : null}
-            {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
-            {category !== "fasilitas" ? <Field><FieldLabel htmlFor="location">Lokasi kejadian</FieldLabel><Input id="location" name="location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Gedung JTI, Ruang 3.4" required /></Field> : null}
-            <Field>
-              <div className="flex items-center justify-between gap-4">
-                <FieldLabel htmlFor="custom-incident-time">Gunakan tanggal &amp; waktu tertentu</FieldLabel>
-                <Switch id="custom-incident-time" checked={useCustomTime} disabled={pending || Boolean(preview)} aria-describedby="incident-time-mode-description" onCheckedChange={(checked) => {
-                  if (checked) {
-                    const current = getIncidentDateTimeInWib()
-                    if (!incidentDate) setIncidentDate(new Date(current.incidentDate + "T00:00:00"))
-                    if (!incidentTime) setIncidentTime(current.incidentTime)
-                  } else setDatePickerOpen(false)
-                  setUseCustomTime(checked)
-                }} />
-              </div>
-              <FieldDescription id="incident-time-mode-description">{useCustomTime ? "Pilih tanggal dan waktu kejadian yang sesuai (WIB)." : "Tanggal dan waktu kejadian otomatis dicatat saat laporan dikirim (WIB). Aktifkan jika kejadian berlangsung pada waktu lain."}</FieldDescription>
-            </Field>
-            {useCustomTime ? <div className="grid gap-5 sm:grid-cols-2">
-              <Field data-invalid={Boolean(incidentDateError)}>
-                <FieldLabel htmlFor="incident-date">Tanggal kejadian</FieldLabel>
-                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                  <PopoverTrigger render={<Button id="incident-date" type="button" variant="outline" aria-label="Tanggal kejadian" aria-invalid={Boolean(incidentDateError)} aria-describedby={incidentDateError ? "incident-date-description incident-date-error" : "incident-date-description"} className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}>
-                    <CalendarDays className="size-4 text-muted-foreground" />{incidentDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(incidentDate) : <span className="text-muted-foreground/70">Pilih tanggal</span>}
-                  </PopoverTrigger>
-                  <PopoverContent align="start">
-                    <Calendar mode="single" selected={incidentDate} today={today} defaultMonth={incidentDate && !incidentDateError ? incidentDate : today} endMonth={today} disabled={(date) => formatCalendarDate(date) > getTodayInWib()} onSelect={(date) => {
-                      if (date && formatCalendarDate(date) > getTodayInWib()) { setError("Tanggal kejadian tidak boleh melebihi hari ini (WIB)."); return }
-                      setIncidentDate(date); setDatePickerOpen(false)
-                    }} />
-                  </PopoverContent>
-                </Popover>
-                <FieldDescription id="incident-date-description">Maksimal hari ini (WIB).</FieldDescription>
-                {incidentDateError ? <FieldError id="incident-date-error">{incidentDateError}</FieldError> : null}
-              </Field>
-              <TimePickerField value={incidentTime} onValueChange={setIncidentTime} />
+  function addLinkedFile(file: File) {
+    setAttachments((files) => files.some((item) => item.name === file.name && item.size === file.size) ? files : [...files, file])
+  }
+  const remainingAttachments = Math.max(0, 4 - retained.length - attachments.length)
+  const stepIndex = reportSteps.findIndex((item) => item.id === step)
 
-            </div> : null}
-            <Field><FieldLabel htmlFor="description">Deskripsi laporan</FieldLabel><Textarea id="description" name="description" defaultValue={sourceDraft ? [sourceDraft.payload.description, sourceDraft.payload.category === "kehilangan-temuan" ? sourceDraft.payload.itemDetails : ""].filter(Boolean).join("\n\n") : undefined} placeholder={category === "kehilangan-temuan" ? "Jelaskan ciri barang dan kronologi kehilangan atau penemuan." : "Jelaskan kronologi, kondisi, atau kendala secara singkat dan jelas."} required /><FieldDescription>{category === "kehilangan-temuan" ? "Sertakan ciri barang dalam deskripsi. " : ""}Hindari data pribadi yang tidak diperlukan.</FieldDescription></Field>
-          </FieldGroup></div> : null}
-          {category ? <div className="space-y-5 border-t border-border/60 pt-6">
-            <div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">2</span><h2 className="text-sm font-semibold">Lampiran dan pengiriman</h2></div>
-            <Field>
-              <FieldLabel htmlFor="attachment">Lampiran pendukung <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel>
-              {retained.length ? <div className="space-y-2">{retained.map((file) => <div key={file.id} className="flex items-center justify-between gap-3 rounded-lg border p-3"><a href={`/api/pelapor/attachments/${file.id}`} className="truncate text-sm text-primary">{file.name}</a><Button type="button" variant="ghost" size="sm" onClick={() => setRetained((items) => items.filter((item) => item.id !== file.id))}>Hapus</Button></div>)}</div> : null}
-              <FileDropzone id="attachment" value={attachments} onChange={setAttachments} maxFiles={Math.max(0, 4 - retained.length)} />
-              <FieldDescription>Foto atau dokumen pendukung membantu pengelola memahami laporan Anda.</FieldDescription>
-            </Field>
-            <div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Data laporan hanya digunakan untuk penanganan internal JTI.</span></div>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                <Button type="button" variant="outline" onClick={handleDraft}><Save />Simpan draft</Button>
-                <Button ref={submitButtonRef} type="submit" aria-haspopup="dialog" disabled={!canSubmit}><Send />Kirim laporan<ArrowRight className="ml-0.5" /></Button>
-              </div>
+  return (
+    <div className="space-y-6">
+      <ReportStepper current={stepIndex} />
+      <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><FileText className="size-4 text-primary" aria-hidden="true" />Formulir laporan</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-5 md:p-6">
+        <form ref={formRef} tabIndex={-1} className={cn("space-y-7", step === "review" && "hidden")} onSubmit={handleSubmit} aria-busy={pending}>
+          <fieldset disabled={pending || Boolean(preview)} className="space-y-7">
+            <div hidden={step !== "category"} className="space-y-6">
+              <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih satu kategori untuk menampilkan kolom yang relevan.</FieldDescription><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} onSelect={() => resetCategory(item.value)} />)}</div></Field>
+              <div className="flex justify-end border-t border-border/60 pt-5"><Button type="button" disabled={!category} onClick={() => { setStep("details"); window.scrollTo({ top: 0, behavior: "smooth" }) }}>Lanjut isi informasi<ArrowRight /></Button></div>
             </div>
-          </div> : <div className="rounded-lg border border-dashed border-border bg-muted/30 p-5 text-center text-sm text-muted-foreground">Pilih kategori laporan untuk mulai mengisi formulir.</div>}
+            {category ? <div hidden={step !== "details"} className="space-y-7">
+              <div key={draftId} className="space-y-5"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileText className="size-4" aria-hidden="true" /></span><h2 className="text-sm font-semibold">Informasi laporan</h2></div><FieldGroup>
+                {category === "kehilangan-temuan" ? <SelectField id="report-type" label="Jenis laporan" placeholder="Pilih jenis laporan" value={reportType} onValueChange={setReportType} options={["Kehilangan", "Temuan"]} /> : null}
+                <Field><FieldLabel htmlFor="title" className="font-semibold text-foreground">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
+                {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field></> : null}
+                {category === "fasilitas" && catalog ? <FacilityMappingFields key={draftId} disabled={pending || Boolean(preview)} catalog={catalog} location={location} onLocationChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} facilities={selectedFacilities} onFacilitiesChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /> : null}
+                {category === "fasilitas" || category === "layanan" ? catalogResource.loading ? <p role="status" className="text-sm text-muted-foreground">Memuat katalog operasional...</p> : catalogResource.error ? <div className="space-y-2"><FieldError>{catalogResource.error}</FieldError><Button type="button" variant="outline" onClick={() => setCatalogRevision((value) => value + 1)}>Coba lagi</Button></div> : null : null}
+                {category === "layanan" ? <div className="grid gap-5 sm:grid-cols-2"><SelectField id="service" label="Jenis layanan" placeholder="Pilih layanan" value={service} onValueChange={setService} options={services} /><SelectField id="program" label="Unit atau program studi" placeholder="Pilih unit terkait" value={program} onValueChange={setProgram} options={studyPrograms} /></div> : null}
+                {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak lagi tersedia. Pilih layanan yang aktif atau gunakan kategori Laporan Lainnya.</FieldError> : null}
+                {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
+                {category !== "fasilitas" ? <Field><FieldLabel htmlFor="location">Lokasi kejadian</FieldLabel><Input id="location" name="location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Gedung JTI, Ruang 3.4" required /></Field> : null}
+                <Field>
+                  <div className="flex items-center justify-between gap-4">
+                    <FieldLabel htmlFor="custom-incident-time">Gunakan tanggal &amp; waktu tertentu</FieldLabel>
+                    <Switch id="custom-incident-time" checked={useCustomTime} disabled={pending || Boolean(preview)} aria-describedby="incident-time-mode-description" onCheckedChange={(checked) => {
+                      if (checked) {
+                        const current = getIncidentDateTimeInWib()
+                        if (!incidentDate) setIncidentDate(new Date(current.incidentDate + "T00:00:00"))
+                        if (!incidentTime) setIncidentTime(current.incidentTime)
+                      } else setDatePickerOpen(false)
+                      setUseCustomTime(checked)
+                    }} />
+                  </div>
+                  <FieldDescription id="incident-time-mode-description">{useCustomTime ? "Pilih tanggal dan waktu kejadian yang sesuai (WIB)." : "Tanggal dan waktu kejadian otomatis dicatat saat laporan dikirim (WIB). Aktifkan jika kejadian berlangsung pada waktu lain."}</FieldDescription>
+                </Field>
+                {useCustomTime ? (
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field data-invalid={Boolean(incidentDateError)}>
+                      <FieldLabel htmlFor="incident-date">Tanggal kejadian</FieldLabel>
+                      <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                        <PopoverTrigger render={<Button id="incident-date" type="button" variant="outline" aria-label="Tanggal kejadian" aria-invalid={Boolean(incidentDateError)} aria-describedby={incidentDateError ? "incident-date-description incident-date-error" : "incident-date-description"} className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}>
+                          <CalendarDays className="size-4 text-muted-foreground" />{incidentDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(incidentDate) : <span className="text-muted-foreground/70">Pilih tanggal</span>}
+                        </PopoverTrigger>
+                        <PopoverContent align="start">
+                          <Calendar mode="single" selected={incidentDate} today={today} defaultMonth={incidentDate && !incidentDateError ? incidentDate : today} endMonth={today} disabled={(date) => formatCalendarDate(date) > getTodayInWib()} onSelect={(date) => {
+                            if (date && formatCalendarDate(date) > getTodayInWib()) { setError("Tanggal kejadian tidak boleh melebihi hari ini (WIB)."); return }
+                            setIncidentDate(date); setDatePickerOpen(false)
+                          }} />
+                        </PopoverContent>
+                      </Popover>
+                      <FieldDescription id="incident-date-description">Maksimal hari ini (WIB).</FieldDescription>
+                      {incidentDateError ? <FieldError id="incident-date-error">{incidentDateError}</FieldError> : null}
+                    </Field>
+                    <TimePickerField value={incidentTime} onValueChange={setIncidentTime} />
+                  </div>
+                ) : null}
+                <Field>
+                  <FieldLabel htmlFor="description">Deskripsi laporan</FieldLabel>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    defaultValue={sourceDraft ? [sourceDraft.payload.description, sourceDraft.payload.category === "kehilangan-temuan" ? sourceDraft.payload.itemDetails : ""].filter(Boolean).join("\n\n") : undefined}
+                    placeholder={category === "kehilangan-temuan" ? "Jelaskan ciri barang dan kronologi kehilangan atau penemuan." : "Jelaskan kronologi, kondisi, atau kendala secara singkat dan jelas."}
+                    required
+                  />
+                  <FieldDescription>
+                    {category === "kehilangan-temuan" ? "Sertakan ciri barang dalam deskripsi. " : ""}
+                    Hindari data pribadi yang tidak diperlukan dalam laporan.
+                  </FieldDescription>
+                </Field>
+              </FieldGroup>
+            </div>
+              <div className="space-y-5 border-t border-border/60 pt-6">
+                <div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary"><ImagePlus className="size-4" aria-hidden="true" /></span><h2 className="text-sm font-semibold">Lampiran</h2></div>
+                <Field>
+                  <FieldTitle>Lampiran pendukung <span className="font-normal text-muted-foreground">(opsional)</span></FieldTitle>
+                  {retained.length ? <div className="space-y-2">{retained.map((file) => <div key={file.id} className="flex items-center justify-between gap-3 rounded-lg border p-3"><a href={`/api/pelapor/attachments/${file.id}`} className="truncate text-sm text-primary">{file.name}</a><Button type="button" variant="ghost" size="sm" onClick={() => setRetained((items) => items.filter((item) => item.id !== file.id))}>Hapus</Button></div>)}</div> : null}
+                  <Tabs defaultValue="upload">
+                    <TabsList aria-label="Cara menambahkan lampiran">
+                      <TabsTrigger value="upload"><UploadCloud className="size-4" aria-hidden="true" />Unggah file</TabsTrigger>
+                      <TabsTrigger value="link"><Link2 className="size-4" aria-hidden="true" />Tautan foto</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="upload"><FileDropzone id="attachment" value={attachments} onChange={setAttachments} maxFiles={Math.max(0, 4 - retained.length)} /></TabsContent>
+                    <TabsContent value="link" className="space-y-3">
+                      <AttachmentLinkField id="attachment-link" disabled={pending} remaining={remainingAttachments} onAdd={addLinkedFile} />
+                      <FilePreviewList title="Sudah dilampirkan" files={attachments} onRemove={(file) => setAttachments((items) => items.filter((item) => item !== file))} />
+                    </TabsContent>
+                  </Tabs>
+                </Field>
+                <div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Data laporan hanya digunakan untuk penanganan internal JTI.</span></div>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                    <Button type="button" variant="outline" onClick={() => setStep("category")}><ArrowLeft />Ganti kategori</Button>
+                    <Button type="button" variant="outline" onClick={handleDraft}><Save />Simpan draft</Button>
+                    <Button ref={submitButtonRef} type="submit" disabled={!canSubmit}>Periksa laporan<ArrowRight className="ml-0.5" /></Button>
+                  </div>
+                </div>
+              </div>
+            </div> : null}
           </fieldset>
           {pending ? <p className="text-sm text-muted-foreground" role="status">Menyimpan laporan...</p> : null}
-          {error ? <FieldError>{error}</FieldError> : null}
+          {error && step !== "review" ? <FieldError>{error}</FieldError> : null}
           {savedState === "draft" ? <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><CheckCircle2 className="size-4 text-primary" />Draft terakhir tersimpan. Simpan lagi setelah melakukan perubahan.</p> : null}
         </form>
+        {step === "review" && preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} onClose={() => { if (!busy.current) { releasePreview(); setPreview(null); setError(""); setStep("details") } }} onConfirm={() => { void save(true, preview) }} /> : null}
       </CardContent></div></Card>
-      <ReportGuidance category={category} />
-      {preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} onClose={() => { if (!busy.current) { releasePreview(); setPreview(null); setError("") } }} onConfirm={() => { void save(true, preview) }} finalFocus={() => submitButtonRef.current?.disabled ? formRef.current : submitButtonRef.current} /> : null}
+      {step === "review" ? <ReportGuidance category={category} /> : null}
     </div>
   )
 }

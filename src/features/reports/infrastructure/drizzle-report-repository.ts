@@ -111,9 +111,24 @@ export class DrizzleReportRepository implements ReportRepository {
       return { created: true, report, removed }
     })
   }
-  async list(ownerId: string, cursor?: string, ticket?: string, draftCursor?: string, filters: ReportListFilters = defaultReportFilters) {
+  async list(ownerId: string, cursor?: string, ticket?: string, draftCursor?: string, filters: ReportListFilters = defaultReportFilters, month?: string) {
     const after = cursorValue(cursor)
     const draftAfter = cursorValue(draftCursor)
+    const isMonthSegmented = filters.period === "semua" && (filters.status === "semua" || filters.status === "selesai")
+    const now = new Date()
+    const todayWib = new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
+    const currentMonthWib = todayWib.slice(0, 7)
+    const activeMonth = month || currentMonthWib
+    const [yearStr, monthStr] = activeMonth.split("-")
+    const year = parseInt(yearStr, 10)
+    const m = parseInt(monthStr, 10)
+    const nextYear = m === 12 ? year + 1 : year
+    const nextM = m === 12 ? 1 : m + 1
+    const monthStart = new Date(`${yearStr}-${monthStr}-01T00:00:00+07:00`)
+    const monthUntil = new Date(`${nextYear}-${String(nextM).padStart(2, "0")}-01T00:00:00+07:00`)
+    const monthLabel = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "Asia/Jakarta" }).format(monthStart)
+    const isCurrentMonth = activeMonth === currentMonthWib
+
     const bounds = reportDateBounds(filters)
     // Parameterized literal search: '%' and '_' in user input must not become SQL wildcards.
     const search = `%${filters.q.replace(/[\\%_]/g, (character) => `\\${character}`)}%`
@@ -122,19 +137,52 @@ export class DrizzleReportRepository implements ReportRepository {
       filters.q ? or(ilike(reports.title, search), ilike(reports.ticketNumber, search)) : undefined,
       filters.category !== "semua" ? eq(reports.category, filters.category) : undefined,
       filters.status === "belum-selesai" ? notInArray(reports.status, ["selesai", "ditolak"]) : filters.status !== "semua" ? eq(reports.status, filters.status) : undefined,
-      bounds.from ? gte(reports.submittedAt, bounds.from) : undefined,
-      bounds.until ? lt(reports.submittedAt, bounds.until) : undefined,
+      isMonthSegmented ? gte(reports.submittedAt, monthStart) : bounds.from ? gte(reports.submittedAt, bounds.from) : undefined,
+      isMonthSegmented ? lt(reports.submittedAt, monthUntil) : bounds.until ? lt(reports.submittedAt, bounds.until) : undefined,
       after ? or(lt(reports.submittedAt, after.date), and(eq(reports.submittedAt, after.date), lt(reports.id, after.id))) : undefined,
     )
-    const [rows, drafts, selected] = await Promise.all([
+    const olderConditions = isMonthSegmented ? and(
+      eq(reports.reporterId, ownerId),
+      filters.q ? or(ilike(reports.title, search), ilike(reports.ticketNumber, search)) : undefined,
+      filters.category !== "semua" ? eq(reports.category, filters.category) : undefined,
+      filters.status === "selesai" ? eq(reports.status, "selesai") : undefined,
+      lt(reports.submittedAt, monthStart),
+    ) : undefined
+
+    const [rows, drafts, selected, olderRow] = await Promise.all([
       this.db.select(listColumns).from(reports).where(conditions).orderBy(desc(reports.submittedAt), desc(reports.id)).limit(pageSize + 1),
       this.db.select({ id: reportDrafts.id, payload: reportDrafts.payload, updatedAt: reportDrafts.updatedAt }).from(reportDrafts).where(and(eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId), draftAfter ? or(lt(reportDrafts.updatedAt, draftAfter.date), and(eq(reportDrafts.updatedAt, draftAfter.date), lt(reportDrafts.id, draftAfter.id))) : undefined)).orderBy(desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(pageSize + 1),
       ticket ? this.db.select(listColumns).from(reports).where(and(eq(reports.reporterId, ownerId), eq(reports.ticketNumber, ticket))).limit(1) : Promise.resolve([]),
+      olderConditions ? this.db.select({ maxDate: sql<string | null>`max(${reports.submittedAt})::text` }).from(reports).where(olderConditions) : Promise.resolve([]),
     ])
     const items = rows.slice(0, pageSize)
     const last = items.at(-1)
     const draftItems = drafts.slice(0, pageSize); const lastDraft = draftItems.at(-1)
-    return { items: items.map(listItem), selected: selected[0] ? listItem(selected[0]) : undefined, nextCursor: rows.length > pageSize && last ? nextCursor(last.submittedAt, last.id) : null, nextDraftCursor: drafts.length > pageSize && lastDraft ? nextCursor(lastDraft.updatedAt, lastDraft.id) : null, drafts: draftItems.map((draft) => ({ ...draft, updatedAt: draft.updatedAt.toISOString() })) }
+
+    let previousMonth: string | null = null
+    let previousMonthLabel: string | null = null
+    if (olderRow[0]?.maxDate) {
+      const olderDate = new Date(olderRow[0].maxDate)
+      const olderWibIso = new Date(olderDate.getTime() + 7 * 3_600_000).toISOString()
+      previousMonth = olderWibIso.slice(0, 7)
+      const [pYear, pMonth] = previousMonth.split("-")
+      const pDate = new Date(`${pYear}-${pMonth}-01T00:00:00+07:00`)
+      previousMonthLabel = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "Asia/Jakarta" }).format(pDate)
+    }
+
+    return {
+      items: items.map(listItem),
+      selected: selected[0] ? listItem(selected[0]) : undefined,
+      nextCursor: rows.length > pageSize && last ? nextCursor(last.submittedAt, last.id) : null,
+      nextDraftCursor: drafts.length > pageSize && lastDraft ? nextCursor(lastDraft.updatedAt, lastDraft.id) : null,
+      drafts: draftItems.map((draft) => ({ ...draft, updatedAt: draft.updatedAt.toISOString() })),
+      month: isMonthSegmented ? activeMonth : null,
+      monthLabel: isMonthSegmented ? monthLabel : null,
+      isCurrentMonth: isMonthSegmented ? isCurrentMonth : false,
+      hasMoreInMonth: isMonthSegmented ? rows.length > pageSize : false,
+      previousMonth: isMonthSegmented ? previousMonth : null,
+      previousMonthLabel: isMonthSegmented ? previousMonthLabel : null,
+    }
   }
   async draft(ownerId: string, id: string) {
     const [row] = await this.db.select().from(reportDrafts).where(and(eq(reportDrafts.id, id), eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId))).limit(1)

@@ -5,7 +5,7 @@ export async function GET(request: Request) {
   return apiResult(async () => {
     const query = new URL(request.url).searchParams
     const filters = Object.fromEntries(["q", "category", "status", "period", "from", "to"].map((key) => [key, query.get(key) ?? undefined]))
-    return getReportService().list(await reporterRequest(request), query.get("cursor") ?? undefined, query.get("ticket") ?? undefined, query.get("draftCursor") ?? undefined, filters)
+    return getReportService().list(await reporterRequest(request), query.get("cursor") ?? undefined, query.get("ticket") ?? undefined, query.get("draftCursor") ?? undefined, filters, query.get("month") ?? undefined)
   })
 }
 export async function POST(request: Request) {

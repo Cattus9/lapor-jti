@@ -39,3 +39,28 @@ export const reportHandovers = pgTable("report_handovers", {
   check("handover_location_check", sql`length(trim(${t.location})) between 1 and 200`),
   check("handover_note_check", sql`length(${t.note}) <= 2000`),
 ])
+
+export const satpamInventory = pgTable("satpam_inventory", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  itemName: text("item_name").notNull(),
+  description: text("description").notNull().default(""),
+  founderName: text("founder_name"),
+  status: text("status").notNull().default("tersimpan"),
+  storageLocation: text("storage_location").notNull().default("Pos Satpam"),
+  photoUrl: text("photo_url"),
+  photoStorageKey: text("photo_storage_key"),
+  photoMimeType: text("photo_mime_type"),
+  photoName: text("photo_name"),
+  handoverRecipient: text("handover_recipient"),
+  handoverNote: text("handover_note"),
+  handedOverAt: timestamp("handed_over_at", { withTimezone: true, precision: 3 }),
+  registeredBy: uuid("registered_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  registeredByName: text("registered_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, precision: 3 }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  index("satpam_inventory_created_idx").on(t.createdAt.desc(), t.id.desc()),
+  index("satpam_inventory_status_created_idx").on(t.status, t.createdAt.desc(), t.id.desc()),
+  check("satpam_inventory_name_check", sql`length(trim(${t.itemName})) between 1 and 200`),
+  check("satpam_inventory_status_check", sql`${t.status} in ('tersimpan', 'diserahkan')`),
+])

@@ -1,5 +1,6 @@
 import type { ReportActor, StoredAttachment } from "../../reports/domain/report"
 import type { SatpamCommand } from "../domain/satpam"
+import type { InventoryFilter, InventoryItem } from "../domain/inventory"
 import type { SatpamDashboardData, SatpamDetail, SatpamHandoverHistoryItem, SatpamHistoryFilter, SatpamListFilter, SatpamNotifications, SatpamPage, SatpamLostFoundReport, SatpamWorkspaceData } from "../types"
 
 export interface SatpamRepository {
@@ -13,4 +14,9 @@ export interface SatpamRepository {
   attachment(id: string): Promise<StoredAttachment | null>
   notifications(actorId: string, cursor?: string): Promise<SatpamNotifications>
   markRead(actorId: string, id?: string): Promise<void>
+  listInventory(filter: InventoryFilter): Promise<{ items: InventoryItem[]; total: number }>
+  createInventory(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<InventoryItem>
+  handoverInventory(actor: ReportActor, raw: unknown): Promise<InventoryItem>
+  getInventoryPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null>
+  getInventoryItem(id: string): Promise<InventoryItem | null>
 }

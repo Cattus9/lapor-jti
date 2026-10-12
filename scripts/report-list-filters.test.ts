@@ -21,7 +21,7 @@ test("unknown or malformed category/status/period filters are rejected", () => {
   for (const raw of [null, [], "filter", { category: "admin" }, { status: "ditemukan" }, { period: "constructor" }, { period: "__proto__" }, { category: 1 }, { status: {} }]) assert.throws(() => parseReportListFilters(raw))
 })
 test("process options have exactly three compact groups for every category", () => {
-  assert.deepEqual(Object.values(reportProcessFilters), ["Semua", "Belum selesai", "Selesai"])
+  assert.deepEqual(Object.values(reportProcessFilters), ["Belum selesai", "Selesai", "Semua"])
   for (const category of ["semua", "kehilangan-temuan", "fasilitas", "layanan", "lainnya"]) {
     for (const status of Object.keys(reportProcessFilters)) assert.equal(parseReportListFilters({ category, status }).status, status)
   }
@@ -67,14 +67,20 @@ test("pagination links preserve criteria and applying/resetting removes stale cu
   assert.deepEqual(parseReportListFilters(Object.fromEntries(url.searchParams)), filters)
   assert.equal(new URL(reportListHref(filters), url).searchParams.has("cursor"), false)
   assert.equal(reportListHref(defaultReportFilters), "/pelapor/laporan-saya")
+
+  const allFilters = parseReportListFilters({ status: "semua" })
+  assert.equal(reportListHref(allFilters), "/pelapor/laporan-saya?status=semua")
+  const selesaiFilters = parseReportListFilters({ status: "selesai" })
+  assert.equal(reportListHref(selesaiFilters), "/pelapor/laporan-saya?status=selesai")
 })
 test("service validates filters and keeps ownership before handing them to persistence", async () => {
   let calls = 0
-  const repository = { list: (ownerId: string, cursor?: string, ticket?: string, draftCursor?: string, filters?: unknown) => { calls++; assert.equal(ownerId, "owner"); assert.equal(cursor, "cursor"); assert.deepEqual(filters, parseReportListFilters({ category: "fasilitas" })); return Promise.resolve({ items: [], drafts: [], nextCursor: null, nextDraftCursor: null }) } } as unknown as ReportRepository
+  const repository = { list: (ownerId: string, cursor?: string, ticket?: string, draftCursor?: string, filters?: unknown, month?: string) => { calls++; assert.equal(ownerId, "owner"); assert.equal(cursor, "cursor"); assert.equal(month, "2026-10"); assert.deepEqual(filters, parseReportListFilters({ category: "fasilitas" })); return Promise.resolve({ items: [], drafts: [], nextCursor: null, nextDraftCursor: null }) } } as unknown as ReportRepository
   const service = new ReportService(repository, {} as AttachmentStorage)
   assert.throws(() => service.list({ id: "owner", role: "pelapor" }, undefined, undefined, undefined, { category: "unknown" }))
   assert.throws(() => service.list({ id: "owner", role: "teknisi" }))
+  assert.throws(() => service.list({ id: "owner", role: "pelapor" }, undefined, undefined, undefined, undefined, "invalid-month"))
   assert.equal(calls, 0)
-  await service.list({ id: "owner", role: "pelapor" }, "cursor", undefined, undefined, { category: "fasilitas" })
+  await service.list({ id: "owner", role: "pelapor" }, "cursor", undefined, undefined, { category: "fasilitas" }, "2026-10")
   assert.equal(calls, 1)
 })

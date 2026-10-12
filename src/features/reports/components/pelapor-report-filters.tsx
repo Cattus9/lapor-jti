@@ -33,7 +33,7 @@ export function PelaporReportFilters({ filters }: { filters: ReportListFilters }
     if (searchTimer.current !== null) clearTimeout(searchTimer.current)
   }, [synchronized.revision])
   const dirty = hasReportFilters(values) || hasReportFilters(filters)
-  const activeCount = Number(values.category !== "semua") + Number(values.status !== "semua") + Number(values.period !== "semua")
+  const activeCount = Number(values.category !== "semua") + Number(values.status !== "belum-selesai") + Number(values.period !== "semua")
   const needsRangeGuide = values.period === "rentang" && (!values.from || !values.to)
   const periodDescriptionId = needsRangeGuide ? `${id}-period-description` : undefined
 
@@ -90,7 +90,7 @@ export function PelaporReportFilters({ filters }: { filters: ReportListFilters }
           </Field>
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${id}-status`} className="text-xs text-muted-foreground">Proses</FieldLabel>
-            <Select value={values.status} onValueChange={(value) => change({ ...values, status: (value ?? "semua") as ReportListFilters["status"] })}>
+            <Select value={values.status} onValueChange={(value) => change({ ...values, status: (value ?? "belum-selesai") as ReportListFilters["status"] })}>
               <SelectTrigger id={`${id}-status`} aria-label="Proses laporan" className="!h-9 w-full bg-background"><SelectValue className="min-w-0 truncate">{reportProcessFilters[values.status]}</SelectValue></SelectTrigger>
               <SelectContent>{Object.entries(reportProcessFilters).map(([process, label]) => <SelectItem key={process} value={process}>{label}</SelectItem>)}</SelectContent>
             </Select>
