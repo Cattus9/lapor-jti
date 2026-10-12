@@ -7,6 +7,7 @@ import { handlerByCategory, isUuid, ReportError, type ReportActor, type StoredAt
 import type { DraftView, ReportRepository, ReportWrite } from "../application/ports"
 import type { ReportListItem, ReportSummary } from "../types"
 import { defaultReportFilters, reportDateBounds, type ReportListFilters } from "../domain/report-list-filters"
+import { getIncidentDateTimeInWib } from "../domain/report-date"
 
 const pageSize = 20
 const reportDateFormatter = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })
@@ -48,7 +49,7 @@ export class DrizzleReportRepository implements ReportRepository {
       const kept = existingFiles.filter((file) => input.retainedAttachmentIds.includes(file.id))
       if (kept.length !== input.retainedAttachmentIds.length) throw new ReportError("Lampiran bukan milik draft ini.", 400)
       const removed = existingFiles.filter((file) => !input.retainedAttachmentIds.includes(file.id))
-      const payload = input.payload
+      let payload = input.payload
       let location: typeof locations.$inferSelect | undefined
       let service: typeof services.$inferSelect | undefined
       // Serialize catalog validation with configuration writes. Old drafts remain editable;
@@ -75,6 +76,8 @@ export class DrizzleReportRepository implements ReportRepository {
       }
       if (removed.length) await tx.delete(reportAttachments).where(inArray(reportAttachments.id, removed.map((file) => file.id)))
       const now = new Date()
+      // Use the exact submission clock for both event time and submittedAt in automatic mode.
+      if (submit && payload.incidentTimeMode === "automatic") payload = { ...payload, ...getIncidentDateTimeInWib(now) }
       if (!submit) {
         if (files.length) await tx.insert(reportAttachments).values(files.map((file) => ({ ...file, ownerId: actor.id, draftId: draft.id })))
         const [saved] = await tx.update(reportDrafts).set({ payload, revision: draft.revision + 1, updatedAt: now }).where(eq(reportDrafts.id, draft.id)).returning()
@@ -149,7 +152,7 @@ export class DrizzleReportRepository implements ReportRepository {
     let fields: Array<{ label: string; value: string }> = []
     if (row.category === "kehilangan-temuan") {
       const [detail] = await this.db.select().from(reportLostFoundDetails).where(eq(reportLostFoundDetails.reportId, id))
-      if (detail) fields = [{ label: "Jenis laporan", value: detail.kind === "kehilangan" ? "Kehilangan" : "Temuan" }, { label: "Nama barang", value: detail.itemName }, { label: "Ciri-ciri barang", value: detail.itemDetails }]
+      if (detail) fields = [{ label: "Jenis laporan", value: detail.kind === "kehilangan" ? "Kehilangan" : "Temuan" }, { label: "Nama barang", value: detail.itemName }, ...(detail.itemDetails ? [{ label: "Ciri barang dari laporan lama", value: detail.itemDetails }] : [])]
     } else if (row.category === "fasilitas") {
       const objects = await this.db.select({ name: reportFacilityObjects.objectText }).from(reportFacilityObjects).where(eq(reportFacilityObjects.reportId, id))
       fields = [{ label: "Objek fasilitas", value: objects.map((object) => object.name).join(", ") }]

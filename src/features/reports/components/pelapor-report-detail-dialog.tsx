@@ -27,7 +27,7 @@ function ReportStepper({ report }: { report: ReportSummary }) {
   const steps = lifecycle[report.category]
   const activeStep = getActiveStep(report)
   return (
-    <div className="overflow-x-auto pb-1" aria-label={`Progres ${report.ticketNumber}`}>
+    <div className="overflow-x-auto pb-1" aria-label={`Progres laporan ${report.title}`}>
       <div className="flex min-w-[30rem] items-start">
         {steps.map((step, index) => {
           const completed = index <= activeStep
@@ -44,7 +44,7 @@ function getStepSummary(report: ReportSummary) {
   return report.status === "ditolak" ? "Laporan ditolak" : `Tahap ${getActiveStep(report) + 1} dari ${total}`
 }
 
-function ReportDetailContent({ report }: { report: ReportSummary }) {
+function ReportDetailContent({ report, submittedAt }: { report: ReportSummary; submittedAt: string }) {
   const meta = categoryMeta[report.category]
   const Icon = meta.icon
   const { detail } = report
@@ -52,13 +52,13 @@ function ReportDetailContent({ report }: { report: ReportSummary }) {
   return (
     <DialogContent>
         <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary">
               <Icon className="size-4" aria-hidden="true" />
             </span>
             <span>{meta.label}</span>
             <span aria-hidden="true">·</span>
-            <span>{report.ticketNumber}</span>
+            <span>Dikirim {submittedAt} WIB</span>
             <StatusBadge className="ml-auto" status={statusLabel[report.status]} />
           </div>
           <DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">
@@ -154,6 +154,6 @@ export function PelaporReportDetailDialog({ report, defaultOpen = false }: { rep
   }, [open, report.id, attempt])
   return <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (value) { setDetail(null); setError("") } }}>
     <DialogTrigger render={<Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" />}>Lihat detail</DialogTrigger>
-    {detail ? <ReportDetailContent report={detail} /> : <DialogContent><div className="space-y-4 p-6"><DialogTitle>{report.title}</DialogTitle><DialogDescription>Memuat detail laporan {report.ticketNumber}.</DialogDescription>{error ? <><FieldError>{error}</FieldError><Button type="button" variant="outline" onClick={() => { setError(""); setAttempt((value) => value + 1) }}>Coba lagi</Button></> : <div className="space-y-3" aria-busy="true"><Skeleton className="h-14 w-full" /><Skeleton className="h-28 w-full" /><Skeleton className="h-24 w-full" /></div>}</div></DialogContent>}
+    {detail ? <ReportDetailContent report={detail} submittedAt={report.submittedAt} /> : <DialogContent><div className="space-y-4 p-6"><DialogTitle>{report.title}</DialogTitle><DialogDescription>Memuat informasi dan riwayat laporan.</DialogDescription>{error ? <><FieldError>{error}</FieldError><Button type="button" variant="outline" onClick={() => { setError(""); setAttempt((value) => value + 1) }}>Coba lagi</Button></> : <div className="space-y-3" aria-busy="true"><Skeleton className="h-14 w-full" /><Skeleton className="h-28 w-full" /><Skeleton className="h-24 w-full" /></div>}</div></DialogContent>}
   </Dialog>
 }

@@ -1,5 +1,5 @@
 import type { PublicAttachment } from "../application/ports"
-import { isUuid, parsePayload, ReportError, type ReportPayload } from "../domain/report"
+import { getIncidentTimeMode, isUuid, parsePayload, ReportError, type ReportPayload } from "../domain/report"
 
 export type ReportSubmissionSnapshot = {
   payload: ReportPayload
@@ -30,14 +30,17 @@ export function reportSubmissionBody(snapshot: ReportSubmissionSnapshot, id: str
 export function reportSubmissionRows(payload: ReportPayload) {
   const rows = [
     { label: "Judul laporan", value: payload.title },
+    ...(getIncidentTimeMode(payload) === "automatic" ? [
+      { label: "Waktu kejadian", value: "Otomatis saat laporan dikirim (WIB)" },
+    ] : [
     { label: "Tanggal kejadian", value: new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(`${payload.incidentDate}T00:00:00+07:00`)) },
     { label: "Waktu kejadian", value: `${payload.incidentTime.replace(":", ".")} WIB` },
+    ]),
     { label: "Lokasi kejadian", value: payload.category === "fasilitas" && payload.location === "Lainnya" ? payload.otherLocation : payload.location },
   ]
   if (payload.category === "kehilangan-temuan") rows.push(
     { label: "Jenis laporan", value: payload.reportType },
     { label: "Nama barang", value: payload.itemName },
-    { label: "Ciri-ciri barang", value: payload.itemDetails },
   )
   if (payload.category === "fasilitas") rows.push({ label: "Objek fasilitas", value: payload.facilities.map((name) => name === "Lainnya" ? payload.otherFacility : name).join(", ") })
   if (payload.category === "layanan") rows.push({ label: "Jenis layanan", value: payload.service }, { label: "Unit / program studi", value: payload.program })

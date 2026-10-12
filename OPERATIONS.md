@@ -11,6 +11,12 @@ Form fasilitas memilih area/lantai, kemudian lokasi dalam area tersebut, lalu ch
 
 Katalog lokasi, fasilitas, serta layanan dibaca dari database, bukan daftar statis frontend. Program studi masih referensi tetap. Backend memvalidasi ulang katalog aktif dan pemetaan pada pengiriman, termasuk area yang dinonaktifkan. Draft lama dapat disimpan meskipun pilihan katalognya berubah; pengguna harus memperbaiki pilihan sebelum mengirim.
 
+## Form Pelapor dan waktu laporan
+
+Semua kategori memakai tanggal/waktu kejadian otomatis saat pengiriman secara default. Toggle "Gunakan tanggal & waktu tertentu" membuka input tanggal dan waktu dalam WIB untuk kejadian pada waktu lain. Mode otomatis disimpan pada JSON draft tanpa membekukan waktunya; ketika dikirim, backend memakai satu timestamp server untuk waktu kejadian dan `submittedAt`. Draft lama dengan waktu yang sudah diisi tetap memakai mode khusus. Preview mode otomatis menjelaskan bahwa waktu baru dicatat saat Konfirmasi kirim.
+
+Laporan Kehilangan/Temuan memakai Deskripsi untuk ciri barang dan kronologi; Ciri-ciri tidak lagi menjadi field wajib terpisah. Isi ciri dari draft lama digabung ke Deskripsi saat dibuka. Laporan yang telah terkirim tetap mempertahankan ciri lama. Kode tiket tetap menjadi identitas internal API/relasi/tautan, sedangkan UI memakai judul dan waktu laporan dikirim. Riwayat Satpam menampilkan waktu pengiriman laporan Kehilangan dan Temuan masing-masing. Revisi ini tidak mengubah schema PostgreSQL sehingga tidak memerlukan migration atau seed baru.
+
 ## Data dan migrasi
 
 Migrasi `0008` menambah `location_areas`, relasi many-to-many `location_facility_objects`, revision master, dan `operational_audit`. `0009` menambah index daftar/peran/status akun. ID master tetap stabil. Tidak ada penghapusan master atau akun dari UI.

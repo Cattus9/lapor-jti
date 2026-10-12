@@ -1,5 +1,5 @@
 // Domain values are independent of Next.js, React, Drizzle, and the login provider.
-import { getTodayInWib } from "./report-date"
+import { getIncidentDateTimeInWib, getTodayInWib } from "./report-date"
 
 export const reportCategories = ["kehilangan-temuan", "fasilitas", "layanan", "lainnya"] as const
 export const reportStatuses = ["baru", "diverifikasi", "diproses", "barang_teridentifikasi", "diserahkan", "selesai", "ditolak"] as const
@@ -30,6 +30,7 @@ export type ReportPayload = {
   category: ReportCategory; title: string; description: string; incidentDate: string; incidentTime: string
   location: string; otherLocation: string; reportType: string; itemName: string; itemDetails: string
   facilities: string[]; otherFacility: string; service: string; program: string; otherCategory: string
+  incidentTimeMode?: "automatic" | "custom"
 }
 export const emptyReportPayload: ReportPayload = {
   category: "lainnya", title: "", description: "", incidentDate: "", incidentTime: "", location: "", otherLocation: "",
@@ -38,13 +39,17 @@ export const emptyReportPayload: ReportPayload = {
 export function isUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
+// Drafts created before the mode existed retain their explicitly entered event time.
+export function getIncidentTimeMode(payload: Pick<ReportPayload, "incidentTimeMode" | "incidentDate" | "incidentTime">) {
+  return payload.incidentTimeMode ?? (payload.incidentDate || payload.incidentTime ? "custom" : "automatic")
+}
 export function parsePayload(raw: unknown, submitted: boolean, now = new Date()): ReportPayload {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new ReportError("Isian laporan tidak valid.")
   const value = raw as Record<string, unknown>
   if (!reportCategories.includes(value.category as ReportCategory)) throw new ReportError("Pilih kategori laporan yang valid.")
   const payload = { ...emptyReportPayload, category: value.category as ReportCategory }
   for (const key of Object.keys(emptyReportPayload) as (keyof ReportPayload)[]) {
-    if (key === "category" || key === "facilities") continue
+    if (key === "category" || key === "facilities" || key === "incidentTimeMode") continue
     const item = value[key] ?? ""
     const limit = key === "description" || key === "itemDetails" ? 5000 : key === "title" ? 200 : 300
     if (typeof item !== "string" || item.length > limit || /\u0000/.test(item)) throw new ReportError(`Isian ${key} tidak valid atau terlalu panjang.`)
@@ -53,12 +58,18 @@ export function parsePayload(raw: unknown, submitted: boolean, now = new Date())
   const objects = value.facilities ?? []
   if (!Array.isArray(objects) || objects.length > 20 || objects.some((item) => typeof item !== "string" || item.length > 100)) throw new ReportError("Pilihan objek fasilitas tidak valid.")
   payload.facilities = [...new Set(objects)]
+  if (value.incidentTimeMode !== undefined && !["automatic", "custom"].includes(value.incidentTimeMode as string)) throw new ReportError("Pilihan waktu kejadian tidak valid.")
+  payload.incidentTimeMode = getIncidentTimeMode({ ...payload, incidentTimeMode: value.incidentTimeMode as ReportPayload["incidentTimeMode"] })
+  if (payload.incidentTimeMode === "automatic") {
+    // An automatic draft has no frozen date; the server resolves it on submission.
+    Object.assign(payload, submitted ? getIncidentDateTimeInWib(now) : { incidentDate: "", incidentTime: "" })
+  }
   if (payload.incidentDate && (!/^\d{4}-\d{2}-\d{2}$/.test(payload.incidentDate) || !Number.isFinite(Date.parse(payload.incidentDate + "T00:00:00Z")) || new Date(payload.incidentDate + "T00:00:00Z").toISOString().slice(0, 10) !== payload.incidentDate)) throw new ReportError("Tanggal kejadian tidak valid.")
   if (payload.incidentDate && payload.incidentDate > getTodayInWib(now)) throw new ReportError("Tanggal kejadian tidak boleh melebihi hari ini (WIB).")
   if (payload.incidentTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(payload.incidentTime)) throw new ReportError("Waktu kejadian tidak valid.")
   if (submitted) {
     const required: (keyof ReportPayload)[] = ["title", "description", "incidentDate", "incidentTime", "location"]
-    if (payload.category === "kehilangan-temuan") required.push("reportType", "itemName", "itemDetails")
+    if (payload.category === "kehilangan-temuan") required.push("reportType", "itemName")
     if (payload.category === "fasilitas") {
       if (!payload.facilities.length) throw new ReportError("Pilih minimal satu objek fasilitas.")
       if (payload.location === "Lainnya") required.push("otherLocation")

@@ -41,7 +41,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       filter.matching ? inArray(reports.status, ["baru", "diverifikasi", "diproses"]) : filter.status !== "semua" ? eq(reports.status, filter.status) : undefined,
       bounds.from ? gte(reports.submittedAt, bounds.from) : undefined,
       bounds.until ? lt(reports.submittedAt, bounds.until) : undefined,
-      filter.query ? or(ilike(reports.title, escaped(filter.query)), ilike(reports.ticketNumber, escaped(filter.query)), ilike(reports.locationText, escaped(filter.query)), ilike(reportLostFoundDetails.itemDetails, escaped(filter.query))) : undefined,
+      filter.query ? or(ilike(reports.title, escaped(filter.query)), ilike(reports.ticketNumber, escaped(filter.query)), ilike(reports.locationText, escaped(filter.query)), ilike(reports.description, escaped(filter.query)), ilike(reportLostFoundDetails.itemName, escaped(filter.query)), ilike(reportLostFoundDetails.itemDetails, escaped(filter.query))) : undefined,
     )!
     const [rows, totals] = await Promise.all([
       this.db.select({ report: reports, kind: reportLostFoundDetails.kind, characteristics: reportLostFoundDetails.itemDetails, reporter: users.name }).from(reports)
@@ -80,7 +80,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const after = cursorValue(cursor)
     const criteria = and(isNull(reportHandovers.id), isNull(lostFoundMatches.completedAt))!
     const [rows, totals] = await Promise.all([
-      this.db.select({ id: lostFoundMatches.id, lossTicket: lost.ticketNumber, foundTicket: found.ticketNumber, title: lost.title, reporter: users.name, matchedAt: lostFoundMatches.matchedAt }).from(lostFoundMatches)
+      this.db.select({ id: lostFoundMatches.id, lossTicket: lost.ticketNumber, foundTicket: found.ticketNumber, title: lost.title, reporter: users.name, matchedAt: lostFoundMatches.matchedAt, lossSubmittedAt: lost.submittedAt, foundSubmittedAt: found.submittedAt }).from(lostFoundMatches)
         .innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId)).innerJoin(users, eq(users.id, lost.reporterId))
         .leftJoin(reportHandovers, eq(reportHandovers.matchId, lostFoundMatches.id))
         .where(and(criteria, after ? or(lt(lostFoundMatches.matchedAt, after.date), and(eq(lostFoundMatches.matchedAt, after.date), lt(lostFoundMatches.id, after.id))) : undefined))
@@ -88,7 +88,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       this.db.select({ count: sql<number>`count(*)::integer` }).from(lostFoundMatches).leftJoin(reportHandovers, eq(reportHandovers.matchId, lostFoundMatches.id)).where(criteria),
     ])
     const page = rows.slice(0, pageSize), last = page.at(-1)
-    return { items: page.map((r) => ({ ...r, matchedAt: dateLabel(r.matchedAt) })), total: totals[0].count, nextCursor: rows.length > pageSize && last ? cursorFor(last.matchedAt, last.id) : null }
+    return { items: page.map((r) => ({ ...r, matchedAt: dateLabel(r.matchedAt), lossSubmittedAt: dateLabel(r.lossSubmittedAt), foundSubmittedAt: dateLabel(r.foundSubmittedAt) })), total: totals[0].count, nextCursor: rows.length > pageSize && last ? cursorFor(last.matchedAt, last.id) : null }
   }
   async workspace() {
     const [officers, pending, totals] = await Promise.all([
@@ -173,7 +173,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       filter.to ? lt(reportHandovers.handedOverAt, new Date(Date.parse(`${filter.to}T00:00:00+07:00`) + 86400000)) : undefined,
       filter.query ? or(ilike(lost.title, escaped(filter.query)), ilike(lost.ticketNumber, escaped(filter.query)), ilike(found.ticketNumber, escaped(filter.query)), ilike(reportHandovers.recipient, escaped(filter.query)), ilike(reportHandovers.officerName, escaped(filter.query))) : undefined,
     )
-    const base = () => this.db.select({ handover: reportHandovers, pair: lostFoundMatches, title: lost.title, lostTicket: lost.ticketNumber, foundTicket: found.ticketNumber, description: reportLostFoundDetails.itemDetails, itemName: reportLostFoundDetails.itemName }).from(reportHandovers)
+    const base = () => this.db.select({ handover: reportHandovers, pair: lostFoundMatches, title: lost.title, lostTicket: lost.ticketNumber, foundTicket: found.ticketNumber, description: lost.description, characteristics: reportLostFoundDetails.itemDetails, itemName: reportLostFoundDetails.itemName, lostSubmittedAt: lost.submittedAt, foundSubmittedAt: found.submittedAt }).from(reportHandovers)
       .innerJoin(lostFoundMatches, eq(lostFoundMatches.id, reportHandovers.matchId)).innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId)).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, lost.id))
     const rows = await base().where(and(criteria, after ? or(lt(reportHandovers.handedOverAt, after.date), and(eq(reportHandovers.handedOverAt, after.date), lt(reportHandovers.id, after.id))) : undefined)).orderBy(desc(reportHandovers.handedOverAt), desc(reportHandovers.id)).limit(pageSize + 1)
     const [total] = await this.db.select({ count: sql<number>`count(*)::integer` }).from(reportHandovers).innerJoin(lostFoundMatches, eq(lostFoundMatches.id, reportHandovers.matchId)).innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId)).where(criteria)
@@ -182,7 +182,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const photos = reportIds.length ? await this.db.select({ id: reportAttachments.id, reportId: reportAttachments.reportId }).from(reportAttachments)
       .where(and(inArray(reportAttachments.reportId, reportIds), ilike(reportAttachments.mimeType, "image/%"))).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)) : []
     const photoUrl = (reportId: string) => { const photo = photos.find((file) => file.reportId === reportId); return photo ? `/api/satpam/attachments/${photo.id}?preview=1` : undefined }
-    return { items: page.map(({ handover: h, pair, title, description, itemName, lostTicket, foundTicket }) => ({ id: h.id, title, itemCategory: itemName, itemDescription: description, lostTicket, foundTicket, lostPhotoUrl: photoUrl(pair.lossReportId), foundPhotoUrl: photoUrl(pair.foundReportId), recipient: h.recipient, handler: h.officerName, actor: h.actorName, location: h.location, matchedAt: dateLabel(pair.matchedAt), handedOverAt: dateLabel(h.handedOverAt), handedOverAtIso: h.handedOverAt.toISOString(), completedAt: pair.completedAt ? dateLabel(pair.completedAt) : "Belum ditutup", handoverNote: h.note, status: pair.completedAt ? "Selesai" : "Diserahkan" })), total: total.count, nextCursor: rows.length > pageSize && last ? cursorFor(last.handover.handedOverAt, last.handover.id) : null }
+    return { items: page.map(({ handover: h, pair, title, description, characteristics, itemName, lostTicket, foundTicket, lostSubmittedAt, foundSubmittedAt }) => ({ id: h.id, title, itemCategory: itemName, itemDescription: [description, characteristics].filter(Boolean).join("\n\n"), lostTicket, foundTicket, lostSubmittedAt: dateLabel(lostSubmittedAt), foundSubmittedAt: dateLabel(foundSubmittedAt), lostPhotoUrl: photoUrl(pair.lossReportId), foundPhotoUrl: photoUrl(pair.foundReportId), recipient: h.recipient, handler: h.officerName, actor: h.actorName, location: h.location, matchedAt: dateLabel(pair.matchedAt), handedOverAt: dateLabel(h.handedOverAt), handedOverAtIso: h.handedOverAt.toISOString(), completedAt: pair.completedAt ? dateLabel(pair.completedAt) : "Belum ditutup", handoverNote: h.note, status: pair.completedAt ? "Selesai" : "Diserahkan" })), total: total.count, nextCursor: rows.length > pageSize && last ? cursorFor(last.handover.handedOverAt, last.handover.id) : null }
   }
   async attachment(id: string) {
     const [row] = await this.db.select({ file: reportAttachments }).from(reportAttachments).innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(and(scope, eq(reportAttachments.id, id))).limit(1)

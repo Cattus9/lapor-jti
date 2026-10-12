@@ -17,11 +17,11 @@ function QueueReport({ report }: { report: SatpamLostFoundReport }) {
   return <article className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
     <div className="flex min-w-0 flex-1 items-start gap-3">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><PackageSearch className="size-4" aria-hidden="true" /></span>
-      <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{report.title}</p><p className="mt-1 truncate text-xs text-muted-foreground">{report.ticket} · {type} · {report.location}</p></div>
+      <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{report.title}</p><p className="mt-1 truncate text-xs text-muted-foreground">{type} · {report.location}</p></div>
     </div>
     <div className="flex flex-wrap items-center justify-between gap-3 sm:shrink-0 sm:justify-end">
-      <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end"><span className="text-xs text-muted-foreground">{report.updatedAt}</span><StatusBadge status={report.status} /></div>
-      <Button nativeButton={false} variant="outline" size="xs" className="rounded-lg border-primary/20 bg-primary/5 text-primary-action-hover hover:bg-primary/10 hover:text-primary-action-hover dark:bg-primary/10 dark:text-primary dark:hover:bg-primary/15 dark:hover:text-primary" aria-label={`Lihat detail laporan ${report.title}, ${report.ticket}`} render={<Link href={`/satpam/kehilangan-temuan?ticket=${encodeURIComponent(report.ticket)}&detail=1`} />}>Detail<ArrowRight aria-hidden="true" /></Button>
+      <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end"><span className="text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</span><StatusBadge status={report.status} /></div>
+      <Button nativeButton={false} variant="outline" size="xs" className="rounded-lg border-primary/20 bg-primary/5 text-primary-action-hover hover:bg-primary/10 hover:text-primary-action-hover dark:bg-primary/10 dark:text-primary dark:hover:bg-primary/15 dark:hover:text-primary" aria-label={`Lihat detail laporan ${report.title}, dikirim ${report.submittedAt}`} render={<Link href={`/satpam/kehilangan-temuan?ticket=${encodeURIComponent(report.ticket)}&detail=1`} />}>Detail<ArrowRight aria-hidden="true" /></Button>
     </div>
   </article>
 }

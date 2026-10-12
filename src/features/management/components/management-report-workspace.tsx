@@ -39,7 +39,7 @@ function ReportList({ page, openReport, retry }: { page: ReturnType<typeof useMa
                 <p className="truncate text-sm font-medium">{report.title}</p>
                 <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <MapPin className="size-3 shrink-0" aria-hidden="true" />
-                  <span className="break-words">{report.ticket} · {report.context} · {report.location}</span>
+                  <span className="break-words">{report.context} · {report.location}</span>
                 </p>
               </div>
             </div>
@@ -95,7 +95,7 @@ function WorkspaceContent({ initialCategory, openReport, retry }: { initialCateg
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative sm:w-68">
                   <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari tiket, laporan, atau pelapor" aria-label="Cari laporan Manajemen" className="h-9 bg-background pl-9" maxLength={200} />
+                  <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari laporan atau pelapor" aria-label="Cari laporan Manajemen" className="h-9 bg-background pl-9" maxLength={200} />
                 </div>
                 <Select value={status} onValueChange={(value) => setStatus(value ?? "semua")}>
                   <SelectTrigger className="h-9 min-w-44 bg-background" aria-label="Filter status laporan"><SelectValue /></SelectTrigger>

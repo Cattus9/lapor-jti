@@ -52,15 +52,15 @@ function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
               </span>
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Pasangan laporan</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">Kode LJ adalah nomor tiket untuk setiap laporan.</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Waktu pengiriman laporan kehilangan dan temuan oleh masing-masing pelapor.</p>
               </div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)]">
-              <TicketSummary label="Kehilangan" ticket={item.lostTicket} />
+              <ReportSummary label="Kehilangan" submittedAt={item.lostSubmittedAt} />
               <div className="hidden items-center justify-center sm:flex">
                 <span className="text-xs text-muted-foreground">dan</span>
               </div>
-              <TicketSummary label="Temuan" ticket={item.foundTicket} />
+              <ReportSummary label="Temuan" submittedAt={item.foundSubmittedAt} />
             </div>
           </section>
           <EvidenceSection item={item} />
@@ -130,7 +130,7 @@ function ItemSummary({ item }: { item: SatpamHandoverHistoryItem }) {
           <dd className="mt-1.5 text-sm font-medium text-foreground">{item.itemCategory}</dd>
         </div>
         <div className="p-4">
-          <dt className="text-xs text-muted-foreground">Ciri barang</dt>
+          <dt className="text-xs text-muted-foreground">Deskripsi barang</dt>
           <dd className="mt-1.5 text-sm leading-relaxed text-foreground">{item.itemDescription}</dd>
         </div>
       </dl>
@@ -151,14 +151,14 @@ function EvidenceSection({ item }: { item: SatpamHandoverHistoryItem }) {
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <EvidencePhoto label="Kehilangan" ticket={item.lostTicket} photoUrl={item.lostPhotoUrl} />
-        <EvidencePhoto label="Temuan" ticket={item.foundTicket} photoUrl={item.foundPhotoUrl} />
+        <EvidencePhoto label="Kehilangan" photoUrl={item.lostPhotoUrl} />
+        <EvidencePhoto label="Temuan" photoUrl={item.foundPhotoUrl} />
       </div>
     </section>
   )
 }
 
-function EvidencePhoto({ label, ticket, photoUrl }: { label: string; ticket: string; photoUrl?: string }) {
+function EvidencePhoto({ label, photoUrl }: { label: string; photoUrl?: string }) {
   const [imageFailed, setImageFailed] = useState(false)
   const hasPhoto = Boolean(photoUrl) && !imageFailed
 
@@ -166,13 +166,12 @@ function EvidencePhoto({ label, ticket, photoUrl }: { label: string; ticket: str
     <Card className="gap-0 overflow-hidden rounded-xl border-border/60 bg-background/60 py-0 shadow-none">
       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
         <p className="text-sm font-medium text-foreground">{label}</p>
-        <p className="truncate text-xs text-muted-foreground">{ticket}</p>
       </div>
       <div className="relative flex h-36 items-center justify-center border-t border-border/60 bg-muted/30 sm:h-44">
         {hasPhoto ? (
           <Image
             src={photoUrl!}
-            alt={`Foto bukti ${label.toLowerCase()} untuk tiket ${ticket}`}
+            alt={`Foto bukti laporan ${label.toLowerCase()}`}
             fill
             sizes="(min-width: 640px) 300px, 100vw"
             className="object-contain"
@@ -190,14 +189,14 @@ function EvidencePhoto({ label, ticket, photoUrl }: { label: string; ticket: str
   )
 }
 
-function TicketSummary({ label, ticket }: { label: string; ticket: string }) {
+function ReportSummary({ label, submittedAt }: { label: string; submittedAt: string }) {
   return (
     <div className="rounded-xl border border-border/60 bg-background/60 p-3.5">
       <Badge variant="outline" tone="neutral" className="h-6 rounded-md px-2 text-[11px]">
         Laporan {label.toLocaleLowerCase()}
       </Badge>
-      <p className="mt-2.5 text-xs text-muted-foreground">Nomor tiket</p>
-      <p className="mt-1 font-mono text-sm font-semibold tracking-tight text-foreground">{ticket}</p>
+      <p className="mt-2.5 text-xs text-muted-foreground">Laporan dikirim</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{submittedAt} WIB</p>
     </div>
   )
 }
@@ -222,8 +221,9 @@ function HistoryRow({ item }: { item: SatpamHandoverHistoryItem }) {
         <StatusBadge className="shrink-0" status={item.status} />
       </div>
       <div className="mt-4 border-t border-border/60 pt-4">
-        <p className="text-xs font-medium text-muted-foreground">Ciri barang</p>
-        <p className="mt-1 text-sm leading-relaxed text-foreground">{item.itemDescription}</p>
+        <p className="text-xs font-medium text-muted-foreground">Deskripsi barang</p>
+        <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap text-foreground">{item.itemDescription}</p>
+        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2"><p>Kehilangan dikirim {item.lostSubmittedAt} WIB</p><p>Temuan dikirim {item.foundSubmittedAt} WIB</p></div>
       </div>
       <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
@@ -359,7 +359,7 @@ export function SatpamHandoverHistory({ user, officers }: { user: CurrentUser; o
                     <label htmlFor="history-search" className="text-xs font-medium text-muted-foreground">Cari riwayat</label>
                     <div className="relative">
                       <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                      <Input id="history-search" value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 bg-background pl-9" placeholder="Barang, penerima, atau nomor tiket" />
+                      <Input id="history-search" value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 bg-background pl-9" placeholder="Barang, penerima, atau petugas" />
                     </div>
                   </div>
                   <div className="hidden items-end gap-2 lg:flex">

@@ -96,7 +96,7 @@ export function ManajemenDashboard({ user, data: managementOverview }: { user: C
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">{report.title}</p>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">{report.ticket} · {report.reporter}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{report.reporter} · Dikirim {report.submittedAt} WIB</p>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">

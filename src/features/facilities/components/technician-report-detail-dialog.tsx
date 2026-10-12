@@ -50,7 +50,7 @@ export function TechnicianReportDetailDialog({ report: initialReport, open, onOp
   }
   function choose(value: "selesai" | "ditolak") { setNote(""); setDecision(value) }
 
-  return <OperationalReportDialog open={open} onOpenChange={(value) => { if (!pending) onOpenChange(value) }} finalFocus={finalFocus} icon={Wrench} category="Laporan fasilitas" ticket={report.ticket} status={report.status} title={report.title} updatedAt={report.updatedAt}>
+  return <OperationalReportDialog open={open} onOpenChange={(value) => { if (!pending) onOpenChange(value) }} finalFocus={finalFocus} icon={Wrench} category="Laporan fasilitas" submittedAt={report.submittedAt} status={report.status} title={report.title} updatedAt={report.updatedAt}>
     <ReportStepper status={report.status} />
     <section className="rounded-xl border border-border/60 bg-muted/50 p-4" aria-label="Aksi penanganan">
       <p className="text-sm font-medium">{action ? "Aksi penanganan" : report.status === "Selesai" ? "Laporan selesai" : "Laporan ditolak"}</p>

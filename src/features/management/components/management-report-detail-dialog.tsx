@@ -44,7 +44,7 @@ export function ManagementReportDetailDialog({ ticket, initialReport, open, onOp
     if (await onCommand({ ticket, status: decision, note: note.trim() })) { setDecision(null); setNote("") }
   }
   function choose(value: "selesai" | "ditolak") { setNote(""); setDecision(value) }
-  return <OperationalReportDialog open={open} onOpenChange={(value) => { if (!pending) { if (!value) { setDecision(null); setNote("") }; onOpenChange(value) } }} finalFocus={finalFocus} icon={MessageSquareText} category={report?.category ?? "Laporan"} ticket={ticket} status={report?.status ?? "Memuat"} title={report?.title ?? "Detail laporan"} updatedAt={report?.updatedAt ?? "..."}>
+  return <OperationalReportDialog open={open} onOpenChange={(value) => { if (!pending) { if (!value) { setDecision(null); setNote("") }; onOpenChange(value) } }} finalFocus={finalFocus} icon={MessageSquareText} category={report?.category ?? "Laporan"} submittedAt={report?.submittedAt} status={report?.status ?? "Memuat"} title={report?.title ?? "Detail laporan"} updatedAt={report?.updatedAt ?? "..."}>
     {report ? <ReportStepper report={report} /> : null}
     <section className="rounded-xl border border-border/60 bg-muted/50 p-4" aria-label="Aksi penanganan">
       <p className="text-sm font-medium">{readOnly ? "Monitoring laporan" : report?.statusKey === "selesai" ? "Laporan selesai" : report?.statusKey === "ditolak" ? "Laporan ditolak" : "Aksi penanganan"}</p>

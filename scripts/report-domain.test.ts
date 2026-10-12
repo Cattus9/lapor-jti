@@ -44,6 +44,36 @@ test("calendar serialization preserves the selected day rather than shifting loc
   assert.equal(formatCalendarDate(new Date(2026, 9, 4)), "2026-10-04")
   assert.equal(formatCalendarDate(new Date(2028, 1, 29)), "2028-02-29")
 })
+test("automatic event time is resolved in WIB on submission for every category, not while saving a draft", () => {
+  const now = new Date("2026-12-31T17:02:34Z")
+  for (const category of ["kehilangan-temuan", "fasilitas", "layanan", "lainnya"] as const) {
+    const raw = { ...complete, category, incidentTimeMode: "automatic", incidentDate: "2026-01-01", incidentTime: "08:30", reportType: "Temuan", itemName: "Dompet", facilities: ["AC"], service: "JTI Surat", program: "Teknik Informatika" }
+    const draft = parsePayload(raw, false, now)
+    assert.equal(draft.incidentDate, "")
+    assert.equal(draft.incidentTime, "")
+    const submitted = parsePayload(draft, true, now)
+    assert.equal(submitted.incidentTimeMode, "automatic")
+    assert.equal(submitted.incidentDate, "2027-01-01")
+    assert.equal(submitted.incidentTime, "00:02")
+  }
+})
+test("custom and legacy event times retain the chosen values and require both date and time", () => {
+  const now = new Date("2026-10-04T12:00:00Z")
+  for (const raw of [complete, { ...complete, incidentTimeMode: "custom" }]) {
+    const submitted = parsePayload(raw, true, now)
+    assert.equal(submitted.incidentTimeMode, "custom")
+    assert.equal(submitted.incidentDate, complete.incidentDate)
+    assert.equal(submitted.incidentTime, complete.incidentTime)
+  }
+  for (const patch of [{ incidentDate: "" }, { incidentTime: "" }, { incidentTimeMode: "unsupported" }]) assert.throws(() => parsePayload({ ...complete, incidentTimeMode: "custom", ...patch }, true, now), ReportError)
+})
+test("loss and finding submissions need description but no separate item characteristics", () => {
+  for (const reportType of ["Kehilangan", "Temuan"]) {
+    const raw = { ...complete, category: "kehilangan-temuan", reportType, itemName: "Dompet", itemDetails: "" }
+    assert.equal(parsePayload(raw, true).itemDetails, "")
+    assert.throws(() => parsePayload({ ...raw, description: "" }, true), ReportError)
+  }
+})
 test("category details must be complete; hidden data is discarded", () => {
   assert.throws(() => parsePayload({ ...complete, category: "fasilitas", facilities: ["Lainnya"] }, true), ReportError)
   assert.throws(() => parsePayload({ ...complete, category: "kehilangan-temuan", reportType: "Temuan" }, true), ReportError)

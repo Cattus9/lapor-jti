@@ -42,7 +42,7 @@ export function ReportActivityPanel({ reports }: { reports: ReportListItem[] }) 
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{report.title}</p>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{report.ticketNumber} · {categoryLabel[report.category]} · {report.updatedAt}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{categoryLabel[report.category]} · Dikirim {report.submittedAt} WIB</p>
                 </div>
                 <StatusBadge status={statusLabel[report.status]} />
               </Link>

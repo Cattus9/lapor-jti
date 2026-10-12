@@ -24,7 +24,7 @@ export function ManagementReportSession({ children, initialTicket = "", readOnly
       const response = await fetch("/api/manajemen/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Status belum berhasil diperbarui.")
-      notify({ title: "Status laporan diperbarui", description: `${value.ticket} berhasil diperbarui.`, tone: "success" }); retry(); return true
+      notify({ title: "Status laporan diperbarui", description: "Laporan berhasil diperbarui.", tone: "success" }); retry(); return true
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Koneksi bermasalah."
       setError(message); notify({ title: "Pembaruan belum berhasil", description: message, tone: "warning" }); retry(); return false

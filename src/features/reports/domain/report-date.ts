@@ -3,6 +3,11 @@ export function getTodayInWib(now = new Date()): string {
   return new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
 }
 
+export function getIncidentDateTimeInWib(now = new Date()) {
+  const local = new Date(now.getTime() + 7 * 3_600_000).toISOString()
+  return { incidentDate: local.slice(0, 10), incidentTime: local.slice(11, 16) }
+}
+
 // DayPicker without a timeZone prop represents calendar cells in local time.
 // Preserve that date label instead of converting local midnight into a UTC day.
 export function formatCalendarDate(date: Date): string {

@@ -39,7 +39,7 @@ function Feedback({ loading, error }: { loading: boolean; error: string }) {
 
 function FacilityReportRow({ report }: { report: TechnicianFacilityReport }) {
   const openReport = useContext(ReportContext)
-  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.ticket} · {report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : report.status === "Ditolak" ? `Ditolak ${report.updatedAt}` : `Dikirim ${report.submittedAt}`}</span><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
+  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : report.status === "Ditolak" ? `Ditolak ${report.updatedAt}` : `Dikirim ${report.submittedAt}`}</span><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
 }
 
 function ReportPage({ url, emptyContext = "room-reports", hasFilters = false, onReset }: {
@@ -178,7 +178,7 @@ export function TeknisiFacilityReportList({ initialView = "priority", ticket, hi
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || "Perubahan belum berhasil disimpan.")
       retry(); router.refresh()
-      notify({ title: "Status laporan diperbarui", description: `${command.ticket}: perubahan tersimpan dan pelapor diberi notifikasi.`, tone: "success" })
+      notify({ title: "Status laporan diperbarui", description: "Perubahan tersimpan dan pelapor diberi notifikasi.", tone: "success" })
       return true
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Koneksi bermasalah."
@@ -200,7 +200,7 @@ export function TeknisiFacilityReportList({ initialView = "priority", ticket, hi
     <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-center">
       <div className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" aria-hidden="true" />
-        <Input className={cn("pl-9", history && "bg-background")} aria-label="Cari tiket, fasilitas, atau lokasi" placeholder="Cari tiket, fasilitas, atau lokasi" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Input className={cn("pl-9", history && "bg-background")} aria-label="Cari laporan, fasilitas, atau lokasi" placeholder="Cari laporan, fasilitas, atau lokasi" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>
       <div className="flex flex-wrap gap-2">
         {history ? statusControl : null}

@@ -14,7 +14,7 @@ import { reportSubmissionRows, type ReportSubmissionSnapshot } from "./report-su
 const rowIcons: Record<string, LucideIcon> = {
   "Judul laporan": FileText, "Tanggal kejadian": CalendarDays, "Waktu kejadian": Clock3,
   "Lokasi kejadian": MapPin, "Jenis laporan": PackageSearch, "Nama barang": PackageSearch,
-  "Ciri-ciri barang": AlignLeft, "Objek fasilitas": Wrench, "Jenis layanan": Headphones,
+  "Objek fasilitas": Wrench, "Jenis layanan": Headphones,
   "Unit / program studi": GraduationCap, "Kategori umum": Tags, "Deskripsi laporan": AlignLeft,
 }
 

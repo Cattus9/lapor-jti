@@ -227,7 +227,7 @@ function ReportDetailDialog({
   const report = detail.data?.report ?? sourceReport
 
   return (
-    <OperationalReportDialog open={open} onOpenChange={onOpenChange} finalFocus={finalFocus} icon={isFound ? Inbox : PackageSearch} category={tabMeta[report.kind].label} ticket={report.ticket} status={report.status} title={report.title} updatedAt={report.updatedAt}>
+    <OperationalReportDialog open={open} onOpenChange={onOpenChange} finalFocus={finalFocus} icon={isFound ? Inbox : PackageSearch} category={tabMeta[report.kind].label} submittedAt={report.submittedAt} status={report.status} title={report.title} updatedAt={report.updatedAt}>
           <section>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -251,10 +251,10 @@ function ReportDetailDialog({
               <div className="p-4 sm:col-span-2"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3.5" aria-hidden="true" />Lokasi</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.location}</dd></div>
             </dl>
             <dl className="mt-3 grid overflow-hidden rounded-xl border border-border/60 sm:grid-cols-2">
-              <div className="border-b border-border/60 p-4 sm:border-b-0 sm:border-r"><dt className="text-xs text-muted-foreground">Pelapor / penemu</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.reporter}</dd></div>
-              <div className="p-4"><dt className="text-xs text-muted-foreground">Ciri-ciri barang</dt><dd className="mt-1.5 text-sm font-medium leading-relaxed text-foreground">{report.characteristics}</dd></div>
+              <div className={cn("p-4", report.characteristics && "border-b border-border/60 sm:border-b-0 sm:border-r")}><dt className="text-xs text-muted-foreground">Pelapor / penemu</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.reporter}</dd></div>
+              {report.characteristics ? <div className="p-4"><dt className="text-xs text-muted-foreground">Ciri barang dari laporan lama</dt><dd className="mt-1.5 text-sm font-medium leading-relaxed text-foreground">{report.characteristics}</dd></div> : null}
             </dl>
-            <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-4"><p className="text-xs text-muted-foreground">Kronologi</p><p className="mt-1.5 text-sm leading-relaxed text-foreground">{report.description}</p></div>
+            <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-4"><p className="text-xs text-muted-foreground">Deskripsi laporan</p><p className="mt-1.5 text-sm leading-relaxed text-foreground">{report.description}</p></div>
           </section>
           <section className="border-t border-border/60 pt-6">
             <div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><Paperclip className="size-4" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold text-foreground">Lampiran</h3><p className="mt-0.5 text-xs text-muted-foreground">Foto atau dokumen pendukung.</p></div></div>
@@ -285,7 +285,7 @@ function ReportList({ kind }: { kind: SatpamReportKind }) {
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_9rem]">
           <Field className="col-span-2 min-w-0 sm:col-span-1">
             <FieldLabel htmlFor={`${id}-search`} className="sr-only">Pencarian laporan</FieldLabel>
-            <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id={`${id}-search`} value={query} onChange={(event) => setQuery(event.target.value)} maxLength={200} className="h-9 bg-background pl-9" placeholder="Cari tiket, barang, atau lokasi" aria-label={`Cari laporan ${meta.label.toLocaleLowerCase()}`} /></div>
+            <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id={`${id}-search`} value={query} onChange={(event) => setQuery(event.target.value)} maxLength={200} className="h-9 bg-background pl-9" placeholder="Cari barang, deskripsi, atau lokasi" aria-label={`Cari laporan ${meta.label.toLocaleLowerCase()}`} /></div>
           </Field>
           <Popover>
             <PopoverTrigger render={<Button type="button" variant="outline" aria-label={`Filter laporan ${meta.label.toLocaleLowerCase()}${activeFilterCount ? `, ${activeFilterCount} filter aktif` : ""}`} className={cn("h-9 bg-background", activeFilterCount > 0 && "border-primary/25 bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground")} />}>
@@ -340,7 +340,7 @@ function ReportRow({ report }: { report: SatpamLostFoundReport }) {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground md:text-base">{report.title}</h3>
-              <p className="mt-1 text-xs text-muted-foreground">{report.ticket} · {report.reporter}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{report.reporter} · Dikirim {report.submittedAt} WIB</p>
             </div>
             <StatusBadge status={report.status} />
           </div>
@@ -390,7 +390,7 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
           else setError("Penyerahan belum berhasil. Periksa pesan kesalahan dan coba kembali.")
         } finally { setPending(false) }
       }}>
-        <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-sm"><p className="font-medium">{pair.title}</p><p className="mt-1 text-xs text-muted-foreground">{pair.lossTicket} / {pair.foundTicket}</p></div>
+        <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-sm"><p className="font-medium">{pair.title}</p><p className="mt-1 text-xs text-muted-foreground">Kehilangan dikirim {pair.lossSubmittedAt} WIB</p><p className="mt-1 text-xs text-muted-foreground">Temuan dikirim {pair.foundSubmittedAt} WIB</p></div>
         <Field>
           <FieldLabel htmlFor="handover-officer">Petugas penanggung jawab</FieldLabel>
           <Select value={officerId || null} onValueChange={(value) => setOfficerId(value ?? "")} items={officers.map((officer) => ({ value: officer.id, label: officer.name }))} disabled={pending || !officers.length} required>
@@ -435,7 +435,7 @@ function MatchingConfirmationDialog({
 }
 
 function MatchPreviewCard({ label, report }: { label: string; report: SatpamLostFoundReport }) {
-  return <section className="rounded-xl border border-border/60 bg-background/60 p-4"><div className="flex items-start gap-3"><ReportPhotoThumbnail report={report} size="large" /><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold text-foreground">{report.title}</p><p className="mt-1 text-xs text-muted-foreground">{report.ticket}</p><div className="mt-2"><StatusBadge status={report.status} /></div></div></div><dl className="mt-4 space-y-3 text-xs"><div><dt className="text-muted-foreground">Ciri barang</dt><dd className="mt-1 leading-relaxed text-foreground">{report.characteristics}</dd></div><div className="grid gap-2 sm:grid-cols-2"><div><dt className="text-muted-foreground">Lokasi</dt><dd className="mt-1 text-foreground">{report.location}</dd></div><div><dt className="text-muted-foreground">Waktu</dt><dd className="mt-1 text-foreground">{report.eventDate}, {report.eventTime}</dd></div></div></dl></section>
+  return <section className="rounded-xl border border-border/60 bg-background/60 p-4"><div className="flex items-start gap-3"><ReportPhotoThumbnail report={report} size="large" /><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold text-foreground">{report.title}</p><p className="mt-1 text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</p><div className="mt-2"><StatusBadge status={report.status} /></div></div></div><dl className="mt-4 space-y-3 text-xs"><div><dt className="text-muted-foreground">Deskripsi barang</dt><dd className="mt-1 leading-relaxed whitespace-pre-wrap text-foreground">{[report.description, report.characteristics].filter(Boolean).join("\n\n")}</dd></div><div className="grid gap-2 sm:grid-cols-2"><div><dt className="text-muted-foreground">Lokasi</dt><dd className="mt-1 text-foreground">{report.location}</dd></div><div><dt className="text-muted-foreground">Waktu</dt><dd className="mt-1 text-foreground">{report.eventDate}, {report.eventTime}</dd></div></div></dl></section>
 }
 
 function MatchingWorkspace({
@@ -531,7 +531,7 @@ function MatchingReportList({ title, reports, selectedTicket, onSelect }: { titl
         {reports.length === 0 ? <p className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">Belum ada laporan aktif untuk dibandingkan.</p> : reports.map((report) => <article key={report.ticket} className={cn("flex min-h-28 items-center gap-2 rounded-xl border p-2.5 transition-colors", selectedTicket === report.ticket ? "border-primary bg-primary/5" : "border-border bg-card")}>
           <Button type="button" variant="ghost" className="h-auto min-w-0 flex-1 justify-start gap-3 rounded-lg p-0 text-left whitespace-normal hover:bg-transparent focus-visible:ring-3 focus-visible:ring-ring/50" aria-pressed={selectedTicket === report.ticket} onClick={() => onSelect(report.ticket)}>
             <ReportPhotoThumbnail report={report} size="compact" />
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{report.title}</span><span className="mt-1 block truncate text-xs font-normal text-muted-foreground">{report.ticket} · {report.location}</span></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{report.title}</span><span className="mt-1 block truncate text-xs font-normal text-muted-foreground">Dikirim {report.submittedAt} WIB · {report.location}</span></span>
             <StatusBadge status={report.status} />
           </Button>
           <ReportDetailTrigger report={report} compact />

@@ -100,12 +100,12 @@ export function TeknisiDashboard({ user, data: technicianOverview }: { user: Cur
                       <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
                       <p className="mt-1 flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
                         <MapPin className="size-3 shrink-0" aria-hidden="true" />
-                        <span className="truncate">{item.ticket} · {item.facility} - {item.location}</span>
+                        <span className="truncate">{item.facility} - {item.location}</span>
                       </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-                    <span className="text-xs text-muted-foreground">{item.updatedAt}</span>
+                    <span className="text-xs text-muted-foreground">Dikirim {item.submittedAt} WIB</span>
                     <StatusBadge status={item.status} />
                     <Button nativeButton={false} render={<Link href={`/teknisi/laporan-fasilitas?ticket=${encodeURIComponent(item.ticket)}`} />} variant="outline" size="xs" className="bg-primary/5 text-primary-action-hover hover:bg-primary/10 dark:text-primary">Detail<ArrowRight className="size-3.5" /></Button>
                   </div>

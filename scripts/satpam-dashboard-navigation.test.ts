@@ -36,7 +36,7 @@ test("queue rows provide a compact soft-blue Shadcn link CTA to the encoded tick
   const render = attrs.find((attr) => attr.name.getText(dashboard) === "render")?.getText(dashboard)
   assert.ok(render?.includes("<Link href="))
   assert.ok(render?.includes("/satpam/kehilangan-temuan?ticket=${encodeURIComponent(report.ticket)}&detail=1"))
-  assert.ok(attrs.find((attr) => attr.name.getText(dashboard) === "aria-label")?.getText(dashboard).includes("report.ticket"))
+  assert.ok(attrs.find((attr) => attr.name.getText(dashboard) === "aria-label")?.getText(dashboard).includes("report.submittedAt"))
 })
 
 test("automatic detail opening is explicit and preserves the server role guard", () => {

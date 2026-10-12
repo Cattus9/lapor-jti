@@ -10,12 +10,12 @@ export type SatpamLostFoundReport = {
   description: string; characteristics: string; attachments: number; photoUrl?: string
 }
 export type SecurityOfficer = { id: string; name: string }
-export type SatpamPendingHandover = { id: string; lossTicket: string; foundTicket: string; title: string; reporter: string; matchedAt: string }
+export type SatpamPendingHandover = { id: string; lossTicket: string; foundTicket: string; title: string; reporter: string; matchedAt: string; lossSubmittedAt: string; foundSubmittedAt: string }
 export type StatusHistoryItem = { status: SatpamReportStatus; actor: string; timestamp: string; note?: string }
 export type SatpamDetail = { report: SatpamLostFoundReport; history: StatusHistoryItem[]; files: Array<{ id: string; name: string; url: string }> }
 export type SatpamHandoverHistoryItem = {
   id: string; title: string; itemCategory: string; itemDescription: string; lostTicket: string; foundTicket: string
-  lostPhotoUrl?: string; foundPhotoUrl?: string; recipient: string; handler: string; actor: string; location: string
+  lostSubmittedAt: string; foundSubmittedAt: string; lostPhotoUrl?: string; foundPhotoUrl?: string; recipient: string; handler: string; actor: string; location: string
   matchedAt: string; handedOverAt: string; handedOverAtIso: string; completedAt: string; handoverNote: string
   status: "Diserahkan" | "Selesai"
 }

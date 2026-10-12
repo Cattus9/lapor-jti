@@ -161,13 +161,144 @@ Perintah bantu:
 - Volume Docker bukan strategi backup. Siapkan backup database dan lampiran, uji pemulihan, HTTPS, secret management, logging, monitoring, dan prosedur upgrade sebelum penggunaan publik/production.
 - Konfigurasi Compose saat ini bukan bukti bahwa semua kebutuhan deployment production terpenuhi. Tinjau hosting, domain, provider auth, storage, backup, dan keamanan secara terpisah.
 
-## Pemeriksaan sebelum menyerahkan perubahan
+## Workflow wajib untuk tim Dev dan agent AI
 
-- Pastikan implementasi sesuai cakupan dan pola repository; tinjau `git diff` untuk mendeteksi file/konfigurasi yang tidak terkait.
-- Untuk frontend, jalankan pemeriksaan statis yang sesuai—biasanya `npm run lint`, `npm run typecheck`, dan `npm run build`. Jangan memakai preview/browser automation/Playwright; QA visual dilakukan manual oleh pengguna.
-- Untuk backend/database, jalankan tes domain dan database terkait. Tes database lokal hanya boleh memakai database development yang jelas; jangan arahkan tes ke production.
-- Jika mengubah schema, sertakan migration baru dan catat cara migrasi. Jika mengubah setup/operasi, perbarui README, `OPERATIONS.md`, atau panduan ini sesuai kebutuhan.
-- Laporkan pemeriksaan yang berhasil, gagal, tidak dijalankan, serta langkah manual yang masih diperlukan. Jangan menyatakan sukses bila pemeriksaan belum dilakukan.
+Ikuti alur **baca konteks → petakan dampak → implementasi → verifikasi statis/domain → verifikasi PostgreSQL bila terkait → review diff → serahkan untuk QA manual → commit/push saat diminta**. Verifikasi harus menghasilkan bukti sesuai perubahan; keberhasilan build saja tidak membuktikan transaksi, relasi, otorisasi, atau query database sudah benar.
+
+### 1. Baca konteks dan periksa workspace
+
+- Baca AGENTS.md dan Dev.md sebelum bekerja. Untuk frontend, baca skill `.agents/skills/design-taste-frontend/SKILL.md` serta komponen dan token yang relevan.
+- Sampaikan pemahaman cakupan dan langkah awal secara singkat. Selama bekerja, beri pembaruan ketika ada temuan, keputusan, hasil tes, atau kendala yang bermakna.
+- Periksa `git status --short`, branch, diff, dan staging yang sudah ada. Perubahan pengguna atau file untracked yang tidak terkait harus tetap terjaga; jangan otomatis memasukkannya ke commit.
+- Gunakan `rg`/`rg --files` untuk menemukan seluruh pemakai komponen, tipe, field, API, repository, schema, dan tes terkait. Periksa paket terpasang sebelum memakai library baru.
+- Ambil keputusan implementasi rutin dalam cakupan yang sudah diberikan. Minta klarifikasi hanya jika pilihan mengubah hasil, cakupan, atau kewenangan secara material; jangan meminta ulang izin yang sudah diberikan.
+
+### 2. Petakan perilaku dan dampak sebelum mengedit
+
+- Telusuri alur UI → state/preview → request → validasi domain → repository Drizzle → PostgreSQL → proyeksi response → UI/riwayat/notifikasi.
+- Jika field dihapus atau perilakunya berubah, periksa juga required validation, draft lama, serialisasi, API, kolom yang menyimpan data, dan seluruh tampilan pembacanya. Jangan berhenti pada penghapusan JSX.
+- Jika primitive bersama berubah, periksa semua role dan pemakainya. Migrasikan semua caller dalam cakupan dan pertahankan aksesibilitas, focus, helper text, serta token desain.
+- Bedakan identitas internal dan informasi yang ditampilkan. Menghilangkan kode tiket dari UI tetap harus menjaga relasi, URL detail, key, lookup, dan idempotency internal.
+- Tentukan kebutuhan migration dari perubahan schema/constraint/index/data versi. Perubahan UI atau penambahan property kompatibel pada JSON draft tidak otomatis membutuhkan migration; jelaskan alasannya. Seed bukan langkah rutin untuk memperbarui aplikasi.
+
+### 3. Implementasikan perilaku secara utuh
+
+- Frontend mengikuti Shadcn, normalisasi `globals.css`, serta standar komposisi proyek. Backend tetap memakai Drizzle ORM dan Better Auth.
+- Server adalah sumber waktu pengiriman, actor, role, status akun, dan aturan persistence. Jangan mengandalkan jam browser, field tersembunyi, atau state UI untuk informasi otoritatif.
+- Bedakan waktu kejadian, waktu laporan dikirim, waktu diperbarui, dan waktu penanganan. Gunakan WIB secara konsisten untuk input/label tanpa mencampur timezone host dengan tanggal kalender pengguna.
+- Periksa alur baru, draft/resume, preview/konfirmasi, pergantian hari, kegagalan request, retry, dan data lama sesuai fitur yang diubah. Retain input saat gagal dan jaga agar retry tidak menggandakan data.
+- Pertahankan data historis dan snapshot. Bila field baru menggantikan field lama, tentukan fallback/backfill atau penggabungan yang terlihat oleh pengguna; jangan membuang data lama diam-diam.
+- Jalankan pemeriksaan yang independen secara paralel bila aman. Operasi yang bergantung pada hasil sebelumnya, mutasi, migration, dan langkah Git dilakukan berurutan.
+
+### 4. Pilih verifikasi sesuai perubahan
+
+| Jenis perubahan | Verifikasi yang diperlukan |
+| --- | --- |
+| Dokumentasi saja | Review isi, kesesuaian command/path, dan `git diff --check`. Tidak perlu menjalankan app atau tes database hanya untuk perubahan teks. |
+| Styling/copy/komponen frontend | Lint, typecheck, build sesuai dampak; review pemakai shared component dan QA visual manual oleh pengguna. |
+| State/form/preview/validasi | Pemeriksaan frontend serta tes perilaku terkait: default, mode khusus, input tidak valid, draft, preview, kegagalan, dan retry. |
+| Repository/query/transaksi/otorisasi/data | Tes domain terkait, pemeriksaan statis/build, koneksi PostgreSQL, serta integration test yang menguji perubahan pada database nyata. |
+| Schema/relasi/constraint/index | Review migration dan metadata, apply pada database development, integration test/data lama, serta verifikasi upgrade sesuai perubahan. |
+
+Perintah yang tersedia saat ini:
+
+| Tujuan | Command |
+| --- | --- |
+| Lint | `npm run lint` |
+| Typecheck | `npm run typecheck` |
+| Production build | `npm run build` |
+| Domain Pelapor | `npm run test:reports` |
+| Preview/konfirmasi Pelapor | `node --import tsx --test scripts/report-submission-preview.test.ts` |
+| Domain Satpam | `npm run test:satpam` |
+| Arsitektur dialog/navigasi Satpam | `node --import tsx --test scripts/satpam-detail-architecture.test.ts scripts/satpam-dashboard-navigation.test.ts` |
+| Tes Teknisi | `npm run test:teknisi` |
+| Tes Management | `npm run test:manajemen` |
+| Domain/komponen Operasional | `npm run test:operations` |
+| Koneksi PostgreSQL/tabel users | `npm run db:check` |
+| Integration SQL Management | `npm run test:manajemen-db` |
+| Integration SQL Operasional | `npm run test:operations-db` |
+
+- Periksa `package.json` sebelum menjalankan script; jangan mengarang nama command yang belum tersedia. `test:reports` saat ini tidak mencakup file preview, sehingga jalankan tes preview tersendiri bila perilaku tersebut berubah.
+- Command Node/npm di host membutuhkan Node/npm dan dependency lokal. PostgreSQL tetap dijalankan di Docker. Image production standalone tidak otomatis menyediakan seluruh tooling development.
+- Tes integration database di tabel memerlukan `NODE_ENV=development` dan PostgreSQL development lokal sesuai guard script. Pastikan kredensial serta port menunjuk lingkungan yang benar.
+- Tulis tes yang memeriksa hasil/perilaku bisnis, failure case, atau bug yang relevan. Jangan membuat tes yang hanya menyalin markup/implementasi untuk mendapatkan status hijau.
+- Setelah pemeriksaan yang diperlukan lolos, perluas/ulang tes hanya jika ada perubahan berikutnya, kegagalan, atau persoalan yang belum terjawab. Jangan menjalankan seluruh workflow berat berulang-ulang untuk perubahan dokumentasi.
+
+### 5. Verifikasi PostgreSQL nyata dengan fixture aman
+
+**Perubahan persistence/query/transaksi harus dibuktikan pada PostgreSQL development yang benar-benar digunakan proyek. Mock dan typecheck membantu, tetapi tidak menggantikan pemeriksaan hasil query/penyimpanan yang berubah.**
+
+1. Pastikan service PostgreSQL Docker tersedia dan migration yang diperlukan sudah diterapkan. Jalankan `npm run db:check`. Script ini hanya membuktikan koneksi dan tabel users dapat dibaca; belum memverifikasi login, relasi, transaksi, atau perilaku fitur.
+2. Verifikasi `NODE_ENV=development` dan target koneksi sebelum membuat fixture. Script database yang ada membatasi host ke loopback lokal. Jangan menghapus guard untuk menjalankan tes pada production atau database bersama.
+3. Gunakan ID unik dari `randomUUID()` dan identitas fixture yang jelas. Buat actor/catalog/report sementara yang diperlukan; jangan memakai akun nyata untuk diubah, menimpa seed, atau mereset password.
+4. Panggil domain/service/repository yang digunakan aplikasi, lalu baca hasil yang benar-benar disimpan atau dikembalikan PostgreSQL. Assert field, relasi, timestamp, status, konflik, atau batas akses sesuai perubahan. Jangan hanya memeriksa bahwa query tidak melempar error.
+5. Untuk tes repository langsung, prioritaskan satu transaksi luar yang mencakup fixture dan seluruh operasi tes, kemudian **rollback juga saat semua assertion sukses**. Repository harus memakai koneksi transaksi yang sama; pemanggilan `getDb()`/pool lain dapat membuat perubahan keluar dari transaksi tes.
+6. Pola rollback sukses memakai penanda khusus yang dilempar setelah seluruh assertion lolos. Catch hanya penanda tersebut; error assertion/SQL lain harus tetap membuat tes gagal. Pastikan rollback telah selesai sebelum mencetak PASS dan tutup pool melalui `finally`.
+7. Tes HTTP atau script yang memang melakukan commit memerlukan cleanup pada `finally` dengan ID fixture run tersebut, urutan foreign key yang benar, dan pembersihan lampiran test bila ada. Script `test:manajemen-db`/`test:operations-db` yang ada memakai cleanup fixture, bukan berarti semuanya sudah memakai rollback.
+
+Aturan tambahan:
+
+- Tes module yang mengimpor `server-only` dijalankan dengan `node --conditions=react-server --import tsx`, sesuai script integration yang tersedia.
+- Rollback SQL tidak membatalkan file upload, request eksternal, email, atau semua jenis counter/sequence. Isolasi efek tersebut dan bersihkan artefak fixture secara tepat bila tes memerlukannya.
+- Jangan melakukan `TRUNCATE`, reset schema, penghapusan data massal, atau `docker compose down -v` untuk menyiapkan/menutup tes.
+- Tes khusus boleh dijalankan lewat Node/tsx secara langsung bila belum ada script yang sesuai. Catat skenario/assertion dan hasilnya. Jika dibutuhkan sebagai regression berulang, simpan menjadi tes reusable di `scripts` dan dokumentasikan command yang benar.
+- Jika database tidak tersedia atau integration test belum dapat dijalankan, selesaikan pemeriksaan lain dan laporkan batasan tersebut. Jangan mengganti integration test dengan mock lalu mengklaim PostgreSQL telah teruji.
+
+Contoh menjalankan script SQL yang tersedia melalui PowerShell, setelah memastikan targetnya database development lokal. Environment shell dikembalikan walaupun tes gagal:
+
+```powershell
+$devTestPreviousNodeEnv = $env:NODE_ENV
+try {
+  $env:NODE_ENV = 'development'
+  npm run test:operations-db
+  if ($LASTEXITCODE -ne 0) { throw 'Integration test Operasional gagal.' }
+} finally {
+  if ($null -eq $devTestPreviousNodeEnv) {
+    Remove-Item Env:NODE_ENV -ErrorAction SilentlyContinue
+  } else {
+    $env:NODE_ENV = $devTestPreviousNodeEnv
+  }
+}
+```
+
+Untuk integration SQL Management, gunakan `npm run test:manajemen-db` pada pola environment yang sama. Pelajari fixture/cleanup script sebelum menjalankannya.
+
+### 6. Tangani kendala environment/sandbox berdasarkan bukti
+
+- Bedakan bug kode/SQL dari kegagalan akses filesystem, koneksi, konfigurasi, atau tooling. Catat command, exit code, dan pesan error yang relevan tanpa membocorkan rahasia.
+- Pada Windows, build dapat gagal saat canonicalize path `jsc.baseUrl` dengan `Access is denied`; koneksi PostgreSQL dalam sandbox dapat ditolak dengan `EACCES`. Error tersebut perlu diperiksa sebagai kendala akses sebelum mengubah kode aplikasi.
+- Jika sistem agent menyediakan mekanisme eskalasi, ulangi command yang relevan dengan izin minimum dan alasan konkret setelah penolakan akses diketahui. Gunakan otorisasi tugas yang sudah diberikan; jangan meminta konfirmasi percakapan berulang untuk pemeriksaan rutin yang sudah termasuk cakupan.
+- Eskalasi tetap harus melalui mekanisme persetujuan tool. Jangan menonaktifkan sandbox, mengubah permission sistem secara luas, mengubah credential, atau menghapus volume untuk menghindari penolakan.
+- Jika persetujuan otomatis menolak tindakan dan alternatif aman tidak menyelesaikannya, jelaskan tindakan yang ditolak beserta alasan yang diberikan, lalu minta arahan untuk bagian yang masih terhalang. Lanjutkan bagian independen yang tetap bisa diselesaikan.
+- Setelah pemeriksaan berhasil dijalankan ulang, laporkan hasil akhirnya dan kendala awal yang material; jangan menyebut pemeriksaan gagal permanen bila percobaan yang sah berikutnya sudah lolos.
+
+### 7. Review akhir, dokumentasi, dan QA manual
+
+- Review diff final dan jalankan `git diff --check`. Periksa juga file baru yang belum di-track; Git diff biasa tidak menampilkan isi file untracked.
+- Cocokkan ulang dengan seluruh poin permintaan dan pemakai lintas role. Untuk perubahan informasi UI, cari sisa label, aria-label/alt, placeholder, preview, dialog, toast, dan notifikasi lama yang mungkin masih menampilkan pola lama.
+- Jangan menganggap pemeriksaan source/AST, lint, atau build sebagai bukti bahwa tampilan dan klik telah diuji. **Preview Mode, browser automation, dan Playwright dilarang; QA visual/interaksi dilakukan manual oleh pengguna.**
+- Berikan langkah QA manual yang relevan, misalnya toggle otomatis/khusus, penyimpanan dan resume draft, preview sebelum kirim, laporan baru vs lama, riwayat pasangan laporan, serta tampilan mobile/tema yang terpengaruh.
+- Perbarui `OPERATIONS.md` bila perilaku operasional berubah. Perbarui Dev.md/AGENTS.md bersama jika standar tim berubah; jangan meninggalkan aturan lama yang bertentangan dengan implementasi yang diminta pengguna.
+- Handoff harus menyebut hasil perubahan, pemeriksaan yang berhasil/gagal/belum dijalankan, kebutuhan migration/seed beserta alasan, batasan nyata, dan status commit/push. Jangan menyatakan semua tes atau QA visual lolos bila belum dilakukan.
+
+### 8. Commit dan push hanya saat diminta
+
+- Saat diotorisasi, periksa branch/upstream, status, diff, dan staging. Stage file yang termasuk perubahan yang diminta; jangan memakai `git add .` untuk memasukkan semua file tanpa review.
+- Periksa `git diff --cached --check` dan daftar file staged sebelum commit. Jangan mengikutsertakan `.env`, secret, lampiran chat, data/artefak test, atau perubahan lain di luar cakupan.
+- Buat commit dengan pesan yang menjelaskan perubahan, push ke tujuan yang sudah diverifikasi, lalu pastikan commit local/upstream sesuai.
+- Jangan memakai force push, reset destruktif, atau mengubah history sebagai langkah normal. Jika push ditolak, periksa penyebab dan state remote sebelum menentukan tindakan.
+- Laporkan hash commit, branch tujuan, dan hasil push yang benar-benar terkonfirmasi. Bila hanya commit yang berhasil, nyatakan bahwa push belum selesai.
+
+### Contoh workflow yang diterapkan pada revisi Pelapor/Satpam
+
+Revisi penghapusan Ciri-ciri, waktu otomatis, dan penyembunyian kode tiket ditelusuri sampai validasi domain, draft/preview, penyimpanan, serta UI seluruh role. Field Ciri-ciri tidak hanya dihapus dari form: required validation ikut disesuaikan, draft lama digabung ke Deskripsi, dan data laporan lama tetap terbaca. Kode tiket tetap digunakan internal untuk relasi/API/tautan.
+
+Verifikasi mencakup lint, typecheck, production build, tes terkait Pelapor/Satpam/Teknisi/Management, serta dua pemeriksaan PostgreSQL langsung dengan fixture yang seluruhnya di-rollback:
+
+- Waktu otomatis seluruh kategori sama dengan `submittedAt`; waktu khusus tetap tersimpan; Deskripsi cukup tanpa Ciri-ciri terpisah; draft otomatis tidak membekukan waktu; retry tetap idempotent. Tes domain/preview juga memeriksa pergantian hari dalam WIB.
+- Proyeksi pending/riwayat Satpam memakai waktu pengiriman laporan Kehilangan dan Temuan masing-masing, serta membaca Deskripsi untuk laporan baru yang tidak memiliki Ciri-ciri terpisah.
+
+Pemeriksaan source juga memastikan kode tiket tidak lagi tampil sebagai teks/label aksesibilitas. Build dan koneksi PostgreSQL diulang melalui eskalasi setelah penolakan akses sandbox, lalu berhasil. Pemeriksaan SQL khusus ini saat itu dijalankan langsung lewat Node/tsx; jangan mengasumsikan ada script npm baru untuknya. Tidak diperlukan migration/seed karena schema PostgreSQL tidak berubah. QA visual tetap diserahkan kepada pengguna dan commit/push menunggu permintaan eksplisit.
 
 ## Aturan yang diwarisi dari AGENTS.md
 
@@ -203,7 +334,7 @@ Aturan berikut disalin dari AGENTS.md agar tersedia juga dalam satu panduan onbo
 
 ## Report Detail Modal Standard
 - `ReportDetailDialog` in `src/features/lost-found/components/satpam-lost-found-workspace.tsx` is the single source of truth for every operational report-detail modal.
-- Modal headers MUST use the compact metadata row: semantic icon, report category, ticket number, and status badge. Follow it with a prominent title and one concise update description. Do not use card-like headers or duplicate summary grids.
+- Modal headers MUST use the compact metadata row: semantic icon, report category, submission date/time (WIB), and status badge. Internal ticket codes MUST NOT be displayed in the UI. Follow it with a prominent title and one concise update description. Do not use card-like headers or duplicate summary grids.
 - The body order MUST be: progress stepper, status action panel, report details, attachments, then status history. Use existing Shadcn primitives for every part.
 - The status action panel MUST use the muted bordered treatment with the primary action below explanatory copy. Terminal actions may open a nested confirmation form when a note is required.
 - Report details MUST use one or more `overflow-hidden rounded-xl border` definition-list tables with shared cell borders. Each field label pairs a semantic Lucide icon with a concise sublabel. Do not replace this structure with separate metric cards.
