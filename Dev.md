@@ -335,8 +335,8 @@ Aturan berikut disalin dari AGENTS.md agar tersedia juga dalam satu panduan onbo
 ## Report Detail Modal Standard
 - `ReportDetailDialog` in `src/features/lost-found/components/satpam-lost-found-workspace.tsx` is the single source of truth for every operational report-detail modal.
 - Modal headers MUST use the compact metadata row: semantic icon, report category, submission date/time (WIB), and status badge. Internal ticket codes MUST NOT be displayed in the UI. Follow it with a prominent title and one concise update description. Do not use card-like headers or duplicate summary grids.
-- The body order MUST be: progress stepper, status action panel, report details, attachments, then status history. Use existing Shadcn primitives for every part.
-- The status action panel MUST use the muted bordered treatment with the primary action below explanatory copy. Terminal actions may open a nested confirmation form when a note is required.
+- The body order MUST be: progress stepper, report details, attachments, then status history, with the status action panel docked as an accessible sticky bottom card shelf at the bottom of the modal. Use existing Shadcn primitives for every part.
+- The status action panel MUST use the muted bordered treatment with the primary action below explanatory copy (or responsive side-by-side layout on desktop viewports) within the docked bottom shelf. Terminal actions may open a nested confirmation form when a note is required.
 - Report details MUST use one or more `overflow-hidden rounded-xl border` definition-list tables with shared cell borders. Each field label pairs a semantic Lucide icon with a concise sublabel. Do not replace this structure with separate metric cards.
 - Section headers for details and attachments MUST pair a semantic icon badge with a title and supportive subtext. Attachments use the dashed empty-state treatment, and status history uses compact bordered entries.
 - Role-specific data and lifecycle labels may differ, but the visual hierarchy, spacing, borders, and interaction pattern must remain aligned with this standard.

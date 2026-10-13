@@ -10,19 +10,17 @@ import {
   Clock3,
   FileText,
   Handshake,
-  Link2,
   Loader2,
   MapPin,
+  MapPinned,
   Package,
   PackagePlus,
   PackageSearch,
   Plus,
   Search,
   ShieldCheck,
-  UploadCloud,
   User,
   UserRound,
-  X,
 } from "lucide-react"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -39,9 +37,8 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { AttachmentLinkField } from "@/features/reports/components/attachment-link-field"
+import { FoundItemForm } from "./found-item-form"
 import { useDebouncedSatpamQuery, useSatpamResource } from "./use-satpam-data"
 import type { CurrentUser } from "@/lib/auth/current-user"
 import type { InventoryItem, InventoryStatus } from "../domain/inventory"
@@ -336,7 +333,7 @@ function InventoryCard({
 /**
  * Modal: Register New Inventory Item
  */
-function RegisterInventoryDialog({
+export function RegisterInventoryDialog({
   open,
   onOpenChange,
   onSuccess,
@@ -345,78 +342,6 @@ function RegisterInventoryDialog({
   onOpenChange: (open: boolean) => void
   onSuccess: (item: InventoryItem) => void
 }) {
-  const [itemName, setItemName] = useState("")
-  const [founderName, setFounderName] = useState("")
-  const [description, setDescription] = useState("")
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [photoUrl, setPhotoUrl] = useState("")
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState("")
-
-  function handleFileSelected(file: File) {
-    if (!file.type.startsWith("image/")) {
-      setError("File harus berupa foto JPG atau PNG.")
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Ukuran foto maksimal 5 MB.")
-      return
-    }
-    setError("")
-    setPhotoFile(file)
-    setPhotoUrl("")
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(URL.createObjectURL(file))
-  }
-
-  function handleRemovePhoto() {
-    setPhotoFile(null)
-    setPhotoUrl("")
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(null)
-  }
-
-  function handleClose() {
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    onOpenChange(false)
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!itemName.trim()) {
-      setError("Nama barang wajib diisi.")
-      return
-    }
-
-    setSubmitting(true)
-    setError("")
-
-    try {
-      const formData = new FormData()
-      formData.set("itemName", itemName.trim())
-      if (founderName.trim()) formData.set("founderName", founderName.trim())
-      if (description.trim()) formData.set("description", description.trim())
-      if (photoUrl.trim()) formData.set("photoUrl", photoUrl.trim())
-      if (photoFile) formData.set("photo", photoFile)
-
-      const response = await fetch("/api/satpam/inventory", {
-        method: "POST",
-        body: formData,
-      })
-
-      const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || "Gagal menyimpan barang inventaris.")
-
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-      onSuccess(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-6 sm:p-7">
@@ -436,169 +361,9 @@ function RegisterInventoryDialog({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-          {error && <FieldError>{error}</FieldError>}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-            {/* Left Column: Detail Barang */}
-            <div className="space-y-4">
-              <Field className="space-y-1.5">
-                <FieldLabel htmlFor="inv-item-name">
-                  Nama Barang <span className="text-destructive">*</span>
-                </FieldLabel>
-                <Input
-                  id="inv-item-name"
-                  placeholder="Contoh: Dompet Hitam Kulit, Kunci Motor..."
-                  value={itemName}
-                  onChange={(e) => setItemName(e.target.value)}
-                  disabled={submitting}
-                  required
-                />
-                <FieldDescription>
-                  Nama atau sebutan barang temuan yang mudah dikenali oleh pemilik.
-                </FieldDescription>
-              </Field>
-
-              <Field className="space-y-1.5">
-                <FieldLabel htmlFor="inv-founder-name">Nama Penemu (Opsional)</FieldLabel>
-                <Input
-                  id="inv-founder-name"
-                  placeholder="Nama orang yang menyerahkan barang..."
-                  value={founderName}
-                  onChange={(e) => setFounderName(e.target.value)}
-                  disabled={submitting}
-                />
-                <FieldDescription>
-                  Dapat dikosongkan jika penemu tidak menyebutkan identitas (anonim).
-                </FieldDescription>
-              </Field>
-
-              <Field className="space-y-1.5">
-                <FieldLabel htmlFor="inv-description">Deskripsi & Ciri-Ciri (Opsional)</FieldLabel>
-                <Textarea
-                  id="inv-description"
-                  placeholder="Warna, merk, kondisi, lokasi ditemukan, atau ciri khusus..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  disabled={submitting}
-                  rows={4}
-                  className="resize-none"
-                />
-                <FieldDescription>
-                  Catatan ciri khusus untuk memudahkan verifikasi saat ada yang menanyakan.
-                </FieldDescription>
-              </Field>
-            </div>
-
-            {/* Right Column: Foto Barang */}
-            <div className="space-y-2 flex flex-col h-full">
-              <Field className="space-y-2 flex flex-col flex-1">
-                <FieldLabel>Foto Barang (Opsional)</FieldLabel>
-
-                {previewUrl ? (
-                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border bg-muted/60 p-2 shadow-2xs">
-                    <Image
-                      src={previewUrl}
-                      alt="Pratinjau foto barang"
-                      fill
-                      className="object-contain"
-                      unoptimized
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="xs"
-                      onClick={handleRemovePhoto}
-                      className="absolute top-3 right-3 gap-1 shadow-md"
-                    >
-                      <X className="size-3" aria-hidden="true" />
-                      Hapus Foto
-                    </Button>
-                  </div>
-                ) : (
-                  <Tabs defaultValue="upload" className="w-full flex flex-col flex-1">
-                    <TabsList className="w-full grid grid-cols-2">
-                      <TabsTrigger value="upload" className="gap-2 text-xs">
-                        <UploadCloud className="size-3.5" aria-hidden="true" />
-                        Unggah File
-                      </TabsTrigger>
-                      <TabsTrigger value="link" className="gap-2 text-xs">
-                        <Link2 className="size-3.5" aria-hidden="true" />
-                        Tautan Foto
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="upload" className="pt-2 flex-1">
-                      <label
-                        htmlFor="inv-photo-file"
-                        className="flex flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-border/80 bg-muted/20 p-5 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/40 transition-colors h-48 sm:h-52"
-                      >
-                        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                          <UploadCloud className="size-5" aria-hidden="true" />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-semibold text-foreground">
-                            Pilih foto dari perangkat
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Format JPG atau PNG (Maksimal 5 MB)
-                          </p>
-                        </div>
-                        <input
-                          id="inv-photo-file"
-                          type="file"
-                          accept="image/jpeg,image/png"
-                          className="sr-only"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) handleFileSelected(file)
-                          }}
-                        />
-                      </label>
-                    </TabsContent>
-
-                    <TabsContent value="link" className="pt-2 space-y-2 flex-1">
-                      <AttachmentLinkField
-                        id="inv-photo-link"
-                        disabled={submitting}
-                        remaining={1}
-                        onAdd={(file) => handleFileSelected(file)}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                )}
-
-                <FieldDescription>
-                  Foto barang mempermudah pencocokan saat pemilik mencari barangnya.
-                </FieldDescription>
-              </Field>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end border-t border-border/60 pt-4 gap-2.5">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={submitting}
-              onClick={handleClose}
-            >
-              Batal
-            </Button>
-            <Button type="submit" disabled={submitting} className="gap-2 min-w-[150px]">
-              {submitting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  Menyimpan...
-                </>
-              ) : (
-                <>
-                  <Check className="size-4" aria-hidden="true" />
-                  Simpan ke Inventaris
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
+        <div className="pt-2">
+          <FoundItemForm idPrefix="inv" onSuccess={onSuccess} onCancel={() => onOpenChange(false)} />
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -609,7 +374,7 @@ function RegisterInventoryDialog({
  * Modal: Inventory Detail & Handover Action
  * Strictly aligns with Report Detail Modal Standard from Dev.md / AGENTS.md
  */
-function InventoryDetailDialog({
+export function InventoryDetailDialog({
   item,
   open,
   onOpenChange,
@@ -864,6 +629,18 @@ function InventoryDetailDialog({
                     {item.founderName || "Anonim / Tidak dicatat"}
                   </dd>
                 </div>
+
+                {item.foundLocation ? (
+                  <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
+                    <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
+                      <MapPinned className="size-3.5 text-primary" aria-hidden="true" />
+                      Lokasi Temuan
+                    </dt>
+                    <dd className="text-foreground col-span-2 sm:col-span-3">
+                      {item.foundLocation}
+                    </dd>
+                  </div>
+                ) : null}
 
                 <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
                   <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">

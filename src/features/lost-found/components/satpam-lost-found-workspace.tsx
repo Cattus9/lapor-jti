@@ -9,6 +9,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from "r
 import { useRouter } from "next/navigation"
 import {
   ArrowLeftRight,
+  ArrowRight,
   BadgeCheck,
   CalendarDays,
   Check,
@@ -19,13 +20,20 @@ import {
   ImageIcon,
   Inbox,
   MapPin,
+  PackagePlus,
   PackageSearch,
   Paperclip,
+  PlusCircle,
   RotateCcw,
   Search,
   SearchCheck,
   SlidersHorizontal,
 } from "lucide-react"
+import { RegisterInventoryDialog, InventoryDetailDialog } from "./satpam-inventory-workspace"
+import { RegisterFoundReportDialog } from "./register-found-report-dialog"
+import type { InventoryItem } from "../domain/inventory"
+import type { FoundReport } from "../domain/found-report"
+
 import { ContentShell } from "@/components/layout/content-shell"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -143,29 +151,33 @@ function StatusActionPanel({
   }
 
   if (report.status === "Ditolak") {
-    return <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-4"><p className="text-sm font-medium text-destructive">Laporan ditolak</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">Tidak ada tindakan lanjutan yang dapat dilakukan pada tiket ini.</p></div>
+    return <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3.5 sm:p-4"><p className="text-sm font-medium text-destructive">Laporan ditolak</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Tidak ada tindakan lanjutan yang dapat dilakukan pada tiket ini.</p></div>
   }
 
   if (report.status === "Selesai") {
-    return <div className="rounded-xl border border-border/60 bg-muted/50 p-4"><p className="text-sm font-medium text-foreground">Laporan selesai</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">Tiket telah ditutup dan dapat dilihat kembali pada Riwayat.</p></div>
+    return <div className="rounded-xl border border-border/60 bg-muted/50 p-3.5 sm:p-4"><p className="text-sm font-medium text-foreground">Laporan selesai</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Tiket telah ditutup dan dapat dilihat kembali pada Riwayat.</p></div>
   }
 
   if (report.status === "Diproses") {
-    return <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-background text-primary"><ArrowLeftRight className="size-4" aria-hidden="true" /></span><div><p className="text-sm font-medium text-foreground">Lanjutkan melalui pencocokan barang</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">Periksa ciri barang, lokasi, dan waktu pada kedua laporan. Konfirmasi pencocokan setelah hasil pemeriksaan sesuai.</p></div></div><div className="mt-4 flex justify-end"><Button type="button" className="shrink-0" onClick={onOpenMatching}><ArrowLeftRight />Buka pencocokan</Button></div></div>
+    return <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-background text-primary"><ArrowLeftRight className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="text-sm font-medium text-foreground">Lanjutkan melalui pencocokan barang</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Periksa ciri barang, lokasi, dan waktu pada kedua laporan. Konfirmasi pencocokan setelah hasil pemeriksaan sesuai.</p></div></div><Button type="button" className="shrink-0" onClick={onOpenMatching}><ArrowLeftRight />Buka pencocokan</Button></div></div>
   }
 
   if (report.status === "Barang teridentifikasi") {
-    return <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="text-sm font-medium text-foreground">Menunggu penyerahan</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">Pasangan laporan ini siap ditindaklanjuti di tab Penyerahan.</p><div className="mt-4 flex justify-end"><Button type="button" onClick={onOpenHandover ?? onOpenMatching}><Handshake />Buka penyerahan</Button></div></div>
+    return <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-background text-primary"><Handshake className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="text-sm font-medium text-foreground">Menunggu penyerahan</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Pasangan laporan ini siap ditindaklanjuti di tab Penyerahan.</p></div></div><Button type="button" className="shrink-0" onClick={onOpenHandover ?? onOpenMatching}><Handshake />Buka penyerahan</Button></div></div>
   }
 
   if (report.status === "Baru") {
     return <>
-      <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
-        <p className="text-sm font-medium text-foreground">Tinjau laporan</p>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Periksa informasi dan ciri barang sebelum memutuskan.</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="button" disabled={pending} onClick={() => setDecision("accept")}>Terima laporan</Button>
-          <Button type="button" variant="outline" className="bg-card text-destructive hover:text-destructive" disabled={pending} onClick={() => setDecision("reject")}>Tolak laporan</Button>
+      <div className="rounded-xl border border-border/60 bg-muted/50 p-3.5 sm:p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Tinjau laporan</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Periksa informasi dan ciri barang sebelum memutuskan.</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button type="button" disabled={pending} onClick={() => setDecision("accept")}>Terima laporan</Button>
+            <Button type="button" variant="outline" className="bg-card text-destructive hover:text-destructive" disabled={pending} onClick={() => setDecision("reject")}>Tolak laporan</Button>
+          </div>
         </div>
       </div>
       <Dialog open={decision !== null} onOpenChange={(open) => { if (!open) closeDecision() }}>
@@ -189,7 +201,7 @@ function StatusActionPanel({
 
   if (!action) return null
 
-  return <div className="rounded-xl border border-border/60 bg-muted/50 p-4"><p className="text-sm font-medium text-foreground">Aksi penanganan</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">{action.description}</p><FieldError>{actionError}</FieldError><div className="mt-4"><Button type="button" disabled={pending} onClick={() => void change(action.nextStatus)}>{action.label}</Button></div></div>
+  return <div className="rounded-xl border border-border/60 bg-muted/50 p-3.5 sm:p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="text-sm font-medium text-foreground">Aksi penanganan</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{action.description}</p>{actionError ? <FieldError>{actionError}</FieldError> : null}</div><div className="shrink-0"><Button type="button" disabled={pending} onClick={() => void change(action.nextStatus)}>{action.label}</Button></div></div></div>
 }
 
 function StatusActivity({ activities }: { activities: StatusHistoryItem[] }) {
@@ -227,20 +239,30 @@ function ReportDetailDialog({
   const report = detail.data?.report ?? sourceReport
 
   return (
-    <OperationalReportDialog open={open} onOpenChange={onOpenChange} finalFocus={finalFocus} icon={isFound ? Inbox : PackageSearch} category={tabMeta[report.kind].label} submittedAt={report.submittedAt} status={report.status} title={report.title} updatedAt={report.updatedAt}>
-          <section>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Progres penanganan</p>
-                <p className="mt-1 text-xs text-muted-foreground">{report.status === "Ditolak" ? "Tidak melanjutkan lifecycle" : `Tahap ${statusStep(report.status) + 1} dari ${lifecycle.length}`}</p>
-              </div>
-              <StatusBadge status={report.status} />
-            </div>
-            <div className="mt-5"><ReportStepper status={report.status} /></div>
-          </section>
-          <SatpamPageFeedback loading={detail.loading} error={detail.error} />
-          {detail.data ? <fieldset disabled={detail.loading || Boolean(detail.error)}><StatusActionPanel report={report} onStatusChange={onStatusChange} onOpenMatching={() => { onOpenChange(false); onOpenMatching() }} onOpenHandover={onOpenHandover ? () => { onOpenChange(false); onOpenHandover() } : undefined} /></fieldset> : null}
-          <section className="border-t border-border/60 pt-6">
+    <OperationalReportDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      finalFocus={finalFocus}
+      icon={isFound ? Inbox : PackageSearch}
+      category={tabMeta[report.kind].label}
+      submittedAt={report.submittedAt}
+      status={report.status}
+      title={report.title}
+      updatedAt={report.updatedAt}
+      action={<fieldset disabled={detail.loading || Boolean(detail.error)}><StatusActionPanel report={report} onStatusChange={onStatusChange} onOpenMatching={() => { onOpenChange(false); onOpenMatching() }} onOpenHandover={onOpenHandover ? () => { onOpenChange(false); onOpenHandover() } : undefined} /></fieldset>}
+    >
+      <section>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Progres penanganan</p>
+            <p className="mt-1 text-xs text-muted-foreground">{report.status === "Ditolak" ? "Tidak melanjutkan lifecycle" : `Tahap ${statusStep(report.status) + 1} dari ${lifecycle.length}`}</p>
+          </div>
+          <StatusBadge status={report.status} />
+        </div>
+        <div className="mt-5"><ReportStepper status={report.status} /></div>
+      </section>
+      <SatpamPageFeedback loading={detail.loading} error={detail.error} />
+      <section className="border-t border-border/60 pt-6">
             <div className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><FileText className="size-4" aria-hidden="true" /></span>
               <div><h3 className="text-sm font-semibold text-foreground">Detail laporan</h3><p className="mt-0.5 text-xs text-muted-foreground">Informasi yang dikirimkan oleh pelapor atau penemu.</p></div>
@@ -251,8 +273,8 @@ function ReportDetailDialog({
               <div className="p-4 sm:col-span-2"><dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3.5" aria-hidden="true" />Lokasi</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.location}</dd></div>
             </dl>
             <dl className="mt-3 grid overflow-hidden rounded-xl border border-border/60 sm:grid-cols-2">
-              <div className={cn("p-4", report.characteristics && "border-b border-border/60 sm:border-b-0 sm:border-r")}><dt className="text-xs text-muted-foreground">Pelapor / penemu</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.reporter}</dd></div>
-              {report.characteristics ? <div className="p-4"><dt className="text-xs text-muted-foreground">Ciri barang dari laporan lama</dt><dd className="mt-1.5 text-sm font-medium leading-relaxed text-foreground">{report.characteristics}</dd></div> : null}
+              <div className={cn("p-4", report.characteristics && report.characteristics !== report.description ? "border-b border-border/60 sm:border-b-0 sm:border-r" : "sm:col-span-2")}><dt className="text-xs text-muted-foreground">Pelapor / penemu</dt><dd className="mt-1.5 text-sm font-medium text-foreground">{report.reporter}</dd></div>
+              {report.characteristics && report.characteristics !== report.description ? <div className="p-4"><dt className="text-xs text-muted-foreground">Ciri barang</dt><dd className="mt-1.5 text-sm font-medium leading-relaxed text-foreground">{report.characteristics}</dd></div> : null}
             </dl>
             <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-4"><p className="text-xs text-muted-foreground">Deskripsi laporan</p><p className="mt-1.5 text-sm leading-relaxed text-foreground">{report.description}</p></div>
           </section>
@@ -269,15 +291,15 @@ function ReportDetailDialog({
 function ReportList({ kind }: { kind: SatpamReportKind }) {
   const id = useId()
   const [query, setQuery] = useState("")
-  const [status, setStatus] = useState<"semua" | SatpamReportStatus>("semua")
+  const [status, setStatus] = useState<"aktif" | "semua" | SatpamReportStatus>("aktif")
   const [period, setPeriod] = useState<SatpamReportPeriod>("semua")
   const [sort, setSort] = useState<SatpamReportSort>("terbaru")
   const meta = tabMeta[kind]
   const search = useDebouncedSatpamQuery(query)
-  const canonical = status === "semua" ? "semua" : Object.entries(statusLabels).find(([, label]) => label === status)?.[0] ?? "semua"
+  const canonical = status === "aktif" ? "aktif" : status === "semua" ? "semua" : Object.entries(statusLabels).find(([, label]) => label === status)?.[0] ?? "aktif"
   const page = useSatpamPage<SatpamLostFoundReport>(`/api/satpam/reports?kind=${kind}&status=${canonical}&period=${period}&sort=${sort}&q=${encodeURIComponent(search)}`)
   const reports = page.items
-  const activeFilterCount = Number(status !== "semua") + Number(period !== "semua")
+  const activeFilterCount = Number(status !== "aktif") + Number(period !== "semua")
 
   return (
     <div className="space-y-4">
@@ -295,9 +317,13 @@ function ReportList({ kind }: { kind: SatpamReportKind }) {
               <h3 id={`${id}-filter-title`} className="text-sm font-semibold">Filter laporan</h3>
               <Field className="min-w-0">
                 <FieldLabel htmlFor={`${id}-status`} className="text-xs text-muted-foreground">Status</FieldLabel>
-                <Select value={status} onValueChange={(value) => setStatus((value ?? "semua") as "semua" | SatpamReportStatus)}>
-                  <SelectTrigger id={`${id}-status`} className="!h-9 w-full bg-background"><SelectValue className="min-w-0 truncate">{status === "semua" ? "Semua status" : status}</SelectValue></SelectTrigger>
-                  <SelectContent matchTriggerWidth={false} className="min-w-52"><SelectItem value="semua">Semua status</SelectItem>{statusOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                <Select value={status} onValueChange={(value) => setStatus((value ?? "aktif") as "aktif" | "semua" | SatpamReportStatus)}>
+                  <SelectTrigger id={`${id}-status`} className="!h-9 w-full bg-background"><SelectValue className="min-w-0 truncate">{status === "aktif" ? "Aktif (belum selesai)" : status === "semua" ? "Semua status" : status}</SelectValue></SelectTrigger>
+                  <SelectContent matchTriggerWidth={false} className="min-w-52">
+                    <SelectItem value="aktif">Aktif (belum selesai)</SelectItem>
+                    <SelectItem value="semua">Semua status</SelectItem>
+                    {statusOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </Field>
               <Field className="min-w-0">
@@ -309,7 +335,7 @@ function ReportList({ kind }: { kind: SatpamReportKind }) {
                 <FieldDescription id={`${id}-period-description`}>Berdasarkan tanggal laporan dikirim (WIB).</FieldDescription>
               </Field>
               <div className="border-t border-border/60 pt-3">
-                <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" disabled={!activeFilterCount} onClick={() => { setStatus("semua"); setPeriod("semua") }}><RotateCcw aria-hidden="true" />Reset filter</Button>
+                <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" disabled={!activeFilterCount} onClick={() => { setStatus("aktif"); setPeriod("semua") }}><RotateCcw aria-hidden="true" />Reset filter</Button>
               </div>
             </PopoverContent>
           </Popover>
@@ -435,44 +461,799 @@ function MatchingConfirmationDialog({
 }
 
 function MatchPreviewCard({ label, report }: { label: string; report: SatpamLostFoundReport }) {
-  return <section className="rounded-xl border border-border/60 bg-background/60 p-4"><div className="flex items-start gap-3"><ReportPhotoThumbnail report={report} size="large" /><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold text-foreground">{report.title}</p><p className="mt-1 text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</p><div className="mt-2"><StatusBadge status={report.status} /></div></div></div><dl className="mt-4 space-y-3 text-xs"><div><dt className="text-muted-foreground">Deskripsi barang</dt><dd className="mt-1 leading-relaxed whitespace-pre-wrap text-foreground">{[report.description, report.characteristics].filter(Boolean).join("\n\n")}</dd></div><div className="grid gap-2 sm:grid-cols-2"><div><dt className="text-muted-foreground">Lokasi</dt><dd className="mt-1 text-foreground">{report.location}</dd></div><div><dt className="text-muted-foreground">Waktu</dt><dd className="mt-1 text-foreground">{report.eventDate}, {report.eventTime}</dd></div></div></dl></section>
+  return <section className="rounded-xl border border-border/60 bg-background/60 p-4"><div className="flex items-start gap-3"><ReportPhotoThumbnail report={report} size="large" /><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold text-foreground">{report.title}</p><p className="mt-1 text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</p><div className="mt-2"><StatusBadge status={report.status} /></div></div></div><dl className="mt-4 space-y-3 text-xs"><div><dt className="text-muted-foreground">Deskripsi barang</dt><dd className="mt-1 leading-relaxed whitespace-pre-wrap text-foreground">{report.description || report.characteristics}</dd></div><div className="grid gap-2 sm:grid-cols-2"><div><dt className="text-muted-foreground">Lokasi</dt><dd className="mt-1 text-foreground">{report.location}</dd></div><div><dt className="text-muted-foreground">Waktu</dt><dd className="mt-1 text-foreground">{report.eventDate}, {report.eventTime}</dd></div></div></dl></section>
 }
 
 function MatchingWorkspace({
   onRecordMatch,
   onOpenHandover,
   pendingCount,
+  onRefresh,
 }: {
   onRecordMatch: (lossTicket: string, foundTicket: string) => Promise<boolean>
   onOpenHandover: () => void
   pendingCount: number
+  onRefresh?: () => void
 }) {
   const lostPage = useSatpamPage<SatpamLostFoundReport>("/api/satpam/reports?kind=kehilangan&matching=1")
   const foundPage = useSatpamPage<SatpamLostFoundReport>("/api/satpam/reports?kind=temuan&matching=1")
   const lostReports = lostPage.items
   const foundReports = foundPage.items
+
+  const [inventoryRev, setInventoryRev] = useState(0)
+  const inventoryResource = useSatpamResource<{ items: InventoryItem[]; total: number }>(
+    `/api/satpam/inventory?rev=${inventoryRev}`
+  )
+  const inventoryItems = inventoryResource.data?.items ?? []
+
   const [selectedLost, setSelectedLost] = useState("")
   const [selectedFound, setSelectedFound] = useState("")
+  const [selectedInventoryId, setSelectedInventoryId] = useState("")
   const [matchingPreviewOpen, setMatchingPreviewOpen] = useState(false)
+
+  // Candidate Search & Filter states
+  const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearch = useDebouncedSatpamQuery(searchQuery).toLowerCase().trim()
+  const [sourceFilter, setSourceFilter] = useState<"semua" | "temuan" | "inventaris">("semua")
+  const [statusFilter, setStatusFilter] = useState<"diproses" | "baru" | "semua">("diproses")
+
+  // Dialog states
+  const [registerInventoryOpen, setRegisterInventoryOpen] = useState(false)
+  const [registerFoundOpen, setRegisterFoundOpen] = useState(false)
+  const [selectedInventoryDetail, setSelectedInventoryDetail] = useState<InventoryItem | null>(null)
+  const [inventoryDetailOpen, setInventoryDetailOpen] = useState(false)
+
   const activeLossTicket = lostReports.some((report) => report.ticket === selectedLost) ? selectedLost : ""
   const activeFoundTicket = foundReports.some((report) => report.ticket === selectedFound) ? selectedFound : ""
   const loss = lostReports.find((report) => report.ticket === activeLossTicket)
   const found = foundReports.find((report) => report.ticket === activeFoundTicket)
-  const canValidate = loss?.status === "Diproses" && found?.status === "Diproses"
-  const hasSelectedPair = Boolean(loss && found)
+  const selectedInventoryItem = inventoryItems.find((item) => item.id === selectedInventoryId)
 
+  const canValidate = Boolean(loss && found && loss.status === "Diproses" && found.status === "Diproses")
+  const hasSelectedPair = Boolean(loss && (found || selectedInventoryItem))
+
+  // Filter temuan reports based on status filter and search query
+  const filteredTemuanReports = foundReports.filter((report) => {
+    if (sourceFilter === "inventaris") return false
+
+    // Status filter:
+    // Default is "diproses" (ready to match). User can select "baru" or "semua"
+    if (statusFilter === "diproses" && report.status !== "Diproses") return false
+    if (statusFilter === "baru" && report.status !== "Baru") return false
+
+    // Query filter:
+    if (debouncedSearch) {
+      const matchTitle = report.title.toLowerCase().includes(debouncedSearch)
+      const matchDesc = report.description.toLowerCase().includes(debouncedSearch)
+      const matchChar = report.characteristics.toLowerCase().includes(debouncedSearch)
+      const matchLoc = report.location.toLowerCase().includes(debouncedSearch)
+      const matchTicket = report.ticket.toLowerCase().includes(debouncedSearch)
+      if (!matchTitle && !matchDesc && !matchChar && !matchLoc && !matchTicket) return false
+    }
+
+    return true
+  })
+
+  // Filter inventory items based on status and search query
+  const filteredInventoryItems = inventoryItems.filter((item) => {
+    if (sourceFilter === "temuan") return false
+
+    // If status filter is "baru", inventory items don't have "Baru" (they are accepted in pos)
+    if (statusFilter === "baru") return false
+
+    // If status filter is "diproses", show "tersimpan" (ready in pos)
+    if (statusFilter === "diproses" && item.status !== "tersimpan") return false
+
+    // Query filter:
+    if (debouncedSearch) {
+      const matchName = item.itemName.toLowerCase().includes(debouncedSearch)
+      const matchDesc = item.description.toLowerCase().includes(debouncedSearch)
+      const matchLoc = item.storageLocation.toLowerCase().includes(debouncedSearch)
+      const matchFounder = (item.founderName ?? "").toLowerCase().includes(debouncedSearch)
+      if (!matchName && !matchDesc && !matchLoc && !matchFounder) return false
+    }
+
+    return true
+  })
+
+  const totalCandidates = filteredTemuanReports.length + filteredInventoryItems.length
+
+  function handleInventoryCreated(item: InventoryItem) {
+    setInventoryRev((prev) => prev + 1)
+    onRefresh?.()
+    setSelectedInventoryId(item.id)
+    setSelectedFound("")
+  }
+
+  function handleFoundReportCreated(report: FoundReport) {
+    onRefresh?.()
+    if (report.ticket) {
+      setSelectedFound(report.ticket)
+      setSelectedInventoryId("")
+    }
+  }
+
+  function handleInventoryItemUpdated(item: InventoryItem) {
+    setInventoryRev((prev) => prev + 1)
+    onRefresh?.()
+    setSelectedInventoryDetail(item)
+  }
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-base font-semibold text-foreground">Pencocokan barang</h2><p className="mt-1 text-sm text-muted-foreground">Bandingkan laporan secara manual, lalu pilih pasangan yang sesuai.</p></div><div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end"><Button type="button" disabled={!canValidate} onClick={() => setMatchingPreviewOpen(true)}><BadgeCheck />Catat kecocokan</Button>{hasSelectedPair && !canValidate ? <p className="text-xs text-muted-foreground">Kedua laporan harus berstatus Diproses.</p> : null}</div></div>
-      <div className="grid items-stretch gap-4 xl:grid-cols-2">
-        <div className="space-y-3"><SatpamPageFeedback loading={lostPage.loading} error={lostPage.error} nextCursor={lostPage.nextCursor} loadMore={lostPage.loadMore} /><MatchingReportList title="Laporan kehilangan" reports={lostReports} selectedTicket={activeLossTicket} onSelect={(ticket) => { setSelectedLost(ticket); setMatchingPreviewOpen(false) }} /></div>
-        <div className="space-y-3"><SatpamPageFeedback loading={foundPage.loading} error={foundPage.error} nextCursor={foundPage.nextCursor} loadMore={foundPage.loadMore} /><MatchingReportList title="Barang temuan" reports={foundReports} selectedTicket={activeFoundTicket} onSelect={(ticket) => { setSelectedFound(ticket); setMatchingPreviewOpen(false) }} /></div>
+      <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Pencocokan barang</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {loss
+              ? "Bandingkan laporan kehilangan terpilih dengan barang temuan atau inventaris pos yang cocok."
+              : "Pilih salah satu laporan kehilangan aktif di bawah ini untuk memulai pencocokan barang."}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:items-end">
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5 bg-card"
+            onClick={() => setRegisterInventoryOpen(true)}
+          >
+            <PackagePlus className="size-4 text-primary" aria-hidden="true" />
+            <span>+ Tambah ke Inventaris</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5 bg-card"
+            onClick={() => setRegisterFoundOpen(true)}
+          >
+            <PlusCircle className="size-4 text-primary" aria-hidden="true" />
+            <span>+ Catat Temuan</span>
+          </Button>
+        </div>
       </div>
-      {pendingCount > 0 && <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2.5"><Handshake className="size-4 shrink-0 text-primary" aria-hidden="true" /><p className="text-sm text-foreground"><span className="font-medium">{pendingCount} pasangan</span> menunggu penyerahan</p></div><Button type="button" variant="outline" size="sm" className="bg-card" onClick={onOpenHandover}>Lihat penyerahan</Button></div>}
-      <MatchingConfirmationDialog loss={loss} found={found} canValidate={canValidate} open={matchingPreviewOpen} onOpenChange={setMatchingPreviewOpen} onConfirm={async () => { if (!loss || !found || !canValidate) return false; const ok = await onRecordMatch(loss.ticket, found.ticket); if (ok) { setSelectedLost(""); setSelectedFound(""); setMatchingPreviewOpen(false) } return ok }} />
+
+      {/* Step 1: When NO loss report is selected -> Show Loss Reports Selection First */}
+      {!loss ? (
+        <section className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">
+                Langkah 1: Pilih Laporan Kehilangan
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Klik salah satu laporan kehilangan aktif di bawah untuk membuka kandidat pencocokan barang.
+              </p>
+            </div>
+            <Badge variant="secondary" className="text-xs">
+              {lostReports.length} laporan kehilangan
+            </Badge>
+          </div>
+
+          <SatpamPageFeedback
+            loading={lostPage.loading}
+            error={lostPage.error}
+            nextCursor={lostPage.nextCursor}
+            loadMore={lostPage.loadMore}
+          />
+
+          {lostReports.length === 0 && !lostPage.loading ? (
+            <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 p-6 text-center">
+              <PackageSearch className="size-8 text-muted-foreground/60" aria-hidden="true" />
+              <p className="mt-2 text-sm font-medium text-foreground">
+                Belum ada laporan kehilangan aktif
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Laporan kehilangan yang berstatus aktif akan muncul di sini untuk dicocokkan.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {lostReports.map((report) => (
+                <article
+                  key={report.ticket}
+                  className="group flex flex-col justify-between rounded-xl border border-border/70 bg-card p-3.5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md cursor-pointer"
+                  onClick={() => {
+                    setSelectedLost(report.ticket)
+                    setSelectedFound("")
+                    setSelectedInventoryId("")
+                    setMatchingPreviewOpen(false)
+                  }}
+                >
+                  <div>
+                    <div className="flex items-start gap-3">
+                      <ReportPhotoThumbnail report={report} size="compact" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <Badge variant="outline" tone="warning" className="text-[10px] px-1.5 py-0">
+                            Laporan Kehilangan
+                          </Badge>
+                          <StatusBadge status={report.status} />
+                        </div>
+                        <h4 className="mt-1 font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                          {report.title}
+                        </h4>
+                        <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                          {report.location}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                          {report.eventDate}, {report.eventTime} WIB
+                        </p>
+                      </div>
+                    </div>
+
+                    {(report.description || report.characteristics) && (
+                      <p className="mt-3 text-xs text-muted-foreground line-clamp-2 leading-relaxed bg-muted/30 p-2 rounded-lg">
+                        {report.description || report.characteristics}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5">
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="h-8 text-xs gap-1.5 font-medium"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedLost(report.ticket)
+                        setSelectedFound("")
+                        setSelectedInventoryId("")
+                        setMatchingPreviewOpen(false)
+                      }}
+                    >
+                      <span>Pilih untuk Cocokkan</span>
+                      <ArrowRight className="size-3.5" aria-hidden="true" />
+                    </Button>
+                    <ReportDetailTrigger report={report} compact />
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        /* Step 2: Loss Report Selected -> Show Detail at Top, Candidate Section Below */
+        <div className="space-y-5">
+          {/* Top Card: Selected Loss Report Compact Summary */}
+          <Card className="rounded-2xl border-border bg-sidebar p-1.5 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-3 sm:px-4 shadow-2xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <ReportPhotoThumbnail report={loss} size="compact" />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" tone="warning" className="text-[10px] px-1.5 py-0 font-medium">
+                      Laporan Kehilangan
+                    </Badge>
+                    <StatusBadge status={loss.status} />
+                    <span className="text-xs text-muted-foreground truncate">
+                      {loss.location} · Pelapor: <strong className="text-foreground font-medium">{loss.reporter}</strong>
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-foreground truncate mt-0.5">
+                    {loss.title}
+                  </h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <ReportDetailTrigger report={loss} compact />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 bg-background h-8 text-xs"
+                  onClick={() => {
+                    setSelectedLost("")
+                    setSelectedFound("")
+                    setSelectedInventoryId("")
+                  }}
+                >
+                  <RotateCcw className="size-3.5" aria-hidden="true" />
+                  <span>Ganti Laporan</span>
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* Bottom Section: Candidates for Matching with Temuan / Inventory */}
+          <section className="rounded-xl border border-border/60 bg-background/50 p-4 space-y-4">
+            {/* Header Toolbar */}
+            <div className="flex flex-col gap-2 pb-3 border-b border-border/60 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Kandidat Barang Temuan & Inventaris Pos
+                  </h3>
+                  <Badge variant="secondary" className="text-xs">
+                    {totalCandidates} kandidat
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Pilih barang temuan atau inventaris pos di bawah ini yang cocok dengan laporan kehilangan di atas.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 bg-card text-xs h-8"
+                  onClick={() => setRegisterInventoryOpen(true)}
+                >
+                  <PackagePlus className="size-3.5 text-primary" aria-hidden="true" />
+                  <span>+ Tambah Inventaris</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 bg-card text-xs h-8"
+                  onClick={() => setRegisterFoundOpen(true)}
+                >
+                  <PlusCircle className="size-3.5 text-primary" aria-hidden="true" />
+                  <span>+ Catat Temuan</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Search and Filters Toolbar */}
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <Search
+                  className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  placeholder="Cari barang temuan / inventaris (nama, ciri, lokasi)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-9 text-xs"
+                />
+              </div>
+
+              {/* Filter Selects */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="w-full sm:w-[185px]">
+                  <Select
+                    value={sourceFilter}
+                    onValueChange={(val) => setSourceFilter(val as typeof sourceFilter)}
+                  >
+                    <SelectTrigger className="h-9 w-full text-xs bg-background">
+                      <SelectValue className="min-w-0 truncate">
+                        {sourceFilter === "semua"
+                          ? "Semua Sumber"
+                          : sourceFilter === "temuan"
+                          ? "Laporan Temuan"
+                          : "Inventaris Pos Satpam"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent matchTriggerWidth={false} className="min-w-52">
+                      <SelectItem value="semua">Semua Sumber</SelectItem>
+                      <SelectItem value="temuan">Laporan Temuan</SelectItem>
+                      <SelectItem value="inventaris">Inventaris Pos Satpam</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-full sm:w-[210px]">
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(val) => setStatusFilter(val as typeof statusFilter)}
+                  >
+                    <SelectTrigger className="h-9 w-full text-xs bg-background">
+                      <SelectValue className="min-w-0 truncate">
+                        {statusFilter === "diproses"
+                          ? "Diproses (Siap cocok)"
+                          : statusFilter === "baru"
+                          ? "Baru (Belum diverifikasi)"
+                          : "Semua Status"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent matchTriggerWidth={false} className="min-w-56">
+                      <SelectItem value="diproses">
+                        Diproses (Siap cocok)
+                      </SelectItem>
+                      <SelectItem value="baru">
+                        Baru (Belum diverifikasi)
+                      </SelectItem>
+                      <SelectItem value="semua">Semua Status</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Page Feedback */}
+            <SatpamPageFeedback
+              loading={foundPage.loading || inventoryResource.loading}
+              error={foundPage.error || inventoryResource.error}
+              nextCursor={foundPage.nextCursor}
+              loadMore={foundPage.loadMore}
+            />
+
+            {/* Candidate Items List */}
+            {totalCandidates === 0 && !foundPage.loading && !inventoryResource.loading ? (
+              <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 p-6 text-center">
+                <PackageSearch className="size-8 text-muted-foreground/60" aria-hidden="true" />
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  Tidak ada kandidat barang yang sesuai
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {statusFilter === "diproses"
+                    ? "Coba ubah filter status temuan ke 'Semua Status' atau daftarkan temuan/inventaris baru."
+                    : "Periksa kembali kata kunci pencarian atau daftarkan barang baru."}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Temuan Reports */}
+                {filteredTemuanReports.map((report) => (
+                  <article
+                    key={`report-${report.ticket}`}
+                    className={cn(
+                      "group flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-200 cursor-pointer",
+                      selectedFound === report.ticket
+                        ? "border-primary bg-primary/5 ring-2 ring-primary/25 shadow-xs"
+                        : "border-border/70 bg-card hover:-translate-y-0.5 hover:border-border hover:shadow-md"
+                    )}
+                    onClick={() => {
+                      setSelectedFound(report.ticket === selectedFound ? "" : report.ticket)
+                      setSelectedInventoryId("")
+                      setMatchingPreviewOpen(false)
+                    }}
+                  >
+                    <div>
+                      <div className="flex items-start gap-3">
+                        <ReportPhotoThumbnail report={report} size="compact" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <Badge variant="outline" tone="cyan" className="text-[10px] px-1.5 py-0">
+                              Laporan Temuan
+                            </Badge>
+                            {selectedFound === report.ticket && (
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0 gap-1 bg-primary text-primary-foreground">
+                                <Check className="size-2.5" />
+                                Dipilih
+                              </Badge>
+                            )}
+                          </div>
+                          <h4 className="mt-1 font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                            {report.title}
+                          </h4>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <StatusBadge status={report.status} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                        <p className="truncate">
+                          Lokasi: <span className="text-foreground">{report.location}</span>
+                        </p>
+                        <p className="truncate">
+                          Waktu: {report.submittedAt} WIB
+                        </p>
+                        {(report.description || report.characteristics) && (
+                          <p className="line-clamp-2 mt-1.5 bg-muted/30 p-2 rounded-lg leading-relaxed">
+                            {report.description || report.characteristics}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5">
+                      <Button
+                        type="button"
+                        variant={selectedFound === report.ticket ? "default" : "outline"}
+                        size="sm"
+                        className="h-8 text-xs font-medium gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedFound(report.ticket === selectedFound ? "" : report.ticket)
+                          setSelectedInventoryId("")
+                          setMatchingPreviewOpen(false)
+                        }}
+                      >
+                        {selectedFound === report.ticket ? (
+                          <>
+                            <Check className="size-3" />
+                            <span>Terpilih</span>
+                          </>
+                        ) : (
+                          <span>Pilih Pasangan</span>
+                        )}
+                      </Button>
+                      <ReportDetailTrigger report={report} compact />
+                    </div>
+                  </article>
+                ))}
+
+                {/* Inventory Items */}
+                {filteredInventoryItems.map((item) => (
+                  <article
+                    key={`inv-${item.id}`}
+                    className={cn(
+                      "group flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-200 cursor-pointer",
+                      selectedInventoryId === item.id
+                        ? "border-primary bg-primary/5 ring-2 ring-primary/25 shadow-xs"
+                        : "border-border/70 bg-card hover:-translate-y-0.5 hover:border-border hover:shadow-md"
+                    )}
+                    onClick={() => {
+                      setSelectedInventoryId(item.id === selectedInventoryId ? "" : item.id)
+                      setSelectedFound("")
+                      setMatchingPreviewOpen(false)
+                    }}
+                  >
+                    <div>
+                      <div className="flex items-start gap-3">
+                        <div className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/40">
+                          {item.photoUrl ? (
+                            <Image
+                              src={item.photoUrl}
+                              alt={item.itemName}
+                              fill
+                              className="object-cover"
+                              sizes="48px"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="flex size-full items-center justify-center text-muted-foreground">
+                              <PackageSearch className="size-5" aria-hidden="true" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <Badge variant="outline" tone="warning" className="text-[10px] px-1.5 py-0">
+                              Inventaris Pos
+                            </Badge>
+                            {selectedInventoryId === item.id && (
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0 gap-1 bg-primary text-primary-foreground">
+                                <Check className="size-2.5" />
+                                Dipilih
+                              </Badge>
+                            )}
+                          </div>
+                          <h4 className="mt-1 font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                            {item.itemName}
+                          </h4>
+                          <div className="mt-1">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] px-1.5 py-0",
+                                item.status === "tersimpan"
+                                  ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10 dark:text-emerald-400"
+                                  : "text-muted-foreground"
+                              )}
+                            >
+                              {item.status === "tersimpan" ? "Tersimpan" : "Diserahkan"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                        <p className="truncate">
+                          Lokasi Simpan: <span className="text-foreground">{item.storageLocation}</span>
+                        </p>
+                        {item.founderName && (
+                          <p className="truncate">
+                            Penemu: <span className="text-foreground">{item.founderName}</span>
+                          </p>
+                        )}
+                        <p className="truncate">
+                          Dicatat: {item.createdAt} WIB
+                        </p>
+                        {item.description && (
+                          <p className="line-clamp-2 mt-1.5 bg-muted/30 p-2 rounded-lg leading-relaxed">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5">
+                      <Button
+                        type="button"
+                        variant={selectedInventoryId === item.id ? "default" : "outline"}
+                        size="sm"
+                        className="h-8 text-xs font-medium gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedInventoryId(item.id === selectedInventoryId ? "" : item.id)
+                          setSelectedFound("")
+                          setMatchingPreviewOpen(false)
+                        }}
+                      >
+                        {selectedInventoryId === item.id ? (
+                          <>
+                            <Check className="size-3" />
+                            <span>Terpilih</span>
+                          </>
+                        ) : (
+                          <span>Pilih Pasangan</span>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 gap-1.5 bg-card hover:bg-muted h-8 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedInventoryDetail(item)
+                          setInventoryDetailOpen(true)
+                        }}
+                      >
+                        <Eye className="size-3.5" aria-hidden="true" />
+                        <span>Detail</span>
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {/* Bottom Action Shelf (Photo 4 Style) */}
+            {hasSelectedPair && canValidate ? (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 sm:p-4 shadow-xs">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary shadow-2xs">
+                      <BadgeCheck className="size-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">
+                        Lanjutkan pencocokan barang
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Kedua laporan berstatus &quot;Diproses&quot; dan siap dicocokkan. Konfirmasi untuk melanjutkan ke tahap penyerahan.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <Button
+                      type="button"
+                      className="gap-2 bg-primary text-primary-foreground font-medium"
+                      onClick={() => setMatchingPreviewOpen(true)}
+                    >
+                      <BadgeCheck className="size-4" aria-hidden="true" />
+                      <span>Catat kecocokan</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : hasSelectedPair && selectedInventoryItem ? (
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3.5 sm:p-4 shadow-xs">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-2xs">
+                      <PackageSearch className="size-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">
+                        Barang Inventaris Pos Satpam terpilih ({selectedInventoryItem.itemName})
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Buka detail barang untuk memeriksa kesesuaian fisik dan langsung mencatat penyerahan kepada pelapor.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2 bg-card text-foreground"
+                      onClick={() => {
+                        setSelectedInventoryDetail(selectedInventoryItem)
+                        setInventoryDetailOpen(true)
+                      }}
+                    >
+                      <Eye className="size-4" aria-hidden="true" />
+                      <span>Buka Detail Inventaris</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : hasSelectedPair && found && found.status !== "Diproses" ? (
+              <div className="rounded-xl border border-border/70 bg-muted/40 p-3.5 sm:p-4 shadow-xs">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-2xs">
+                      <ArrowLeftRight className="size-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">
+                        Laporan temuan belum berstatus Diproses
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Laporan temuan terpilih masih berstatus &quot;{found.status}&quot;. Laporan harus berstatus &quot;Diproses&quot; sebelum dapat dicatat kecocokan.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <ReportDetailTrigger report={found} compact />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/70 bg-muted/20 p-3.5 text-xs text-muted-foreground">
+                <ArrowLeftRight className="size-4 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+                <span>Pilih salah satu barang temuan atau inventaris pos di atas untuk dipasangkan dengan laporan kehilangan ini.</span>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* Pending Handover notification banner if any */}
+      {pendingCount > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/30 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <Handshake className="size-4 shrink-0 text-primary" aria-hidden="true" />
+            <p className="text-sm text-foreground">
+              <span className="font-medium">{pendingCount} pasangan</span> menunggu penyerahan
+            </p>
+          </div>
+          <Button type="button" variant="outline" size="sm" className="bg-card" onClick={onOpenHandover}>
+            Lihat penyerahan
+          </Button>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Matching Loss & Found Reports */}
+      <MatchingConfirmationDialog
+        loss={loss}
+        found={found}
+        canValidate={canValidate}
+        open={matchingPreviewOpen}
+        onOpenChange={setMatchingPreviewOpen}
+        onConfirm={async () => {
+          if (!loss || !found || !canValidate) return false
+          const ok = await onRecordMatch(loss.ticket, found.ticket)
+          if (ok) {
+            setSelectedLost("")
+            setSelectedFound("")
+            setMatchingPreviewOpen(false)
+          }
+          return ok
+        }}
+      />
+
+      {/* Register New Inventory Dialog */}
+      <RegisterInventoryDialog
+        open={registerInventoryOpen}
+        onOpenChange={setRegisterInventoryOpen}
+        onSuccess={handleInventoryCreated}
+      />
+
+      {/* Register New Found Report Dialog */}
+      <RegisterFoundReportDialog
+        open={registerFoundOpen}
+        onOpenChange={setRegisterFoundOpen}
+        onSuccess={handleFoundReportCreated}
+      />
+
+      {/* Inventory Item Detail & Handover Dialog */}
+      {selectedInventoryDetail && (
+        <InventoryDetailDialog
+          item={selectedInventoryDetail}
+          open={inventoryDetailOpen}
+          onOpenChange={(open) => {
+            setInventoryDetailOpen(open)
+            if (!open) setSelectedInventoryDetail(null)
+          }}
+          onUpdated={handleInventoryItemUpdated}
+        />
+      )}
     </div>
   )
 }
+
 
 function HandoverWorkspace({ officers, onConfirmHandover }: {
   officers: SecurityOfficer[]
@@ -523,23 +1304,7 @@ function HandoverWorkspace({ officers, onConfirmHandover }: {
   )
 }
 
-function MatchingReportList({ title, reports, selectedTicket, onSelect }: { title: string; reports: SatpamLostFoundReport[]; selectedTicket: string; onSelect: (ticket: string) => void }) {
-  return (
-    <section className="rounded-xl border border-border/60 bg-background/50 p-3.5">
-      <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-foreground">{title}</h3><span className="text-xs text-muted-foreground">{reports.length} laporan</span></div>
-      <div className="mt-3 space-y-2">
-        {reports.length === 0 ? <p className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">Belum ada laporan aktif untuk dibandingkan.</p> : reports.map((report) => <article key={report.ticket} className={cn("flex min-h-28 items-center gap-2 rounded-xl border p-2.5 transition-colors", selectedTicket === report.ticket ? "border-primary bg-primary/5" : "border-border bg-card")}>
-          <Button type="button" variant="ghost" className="h-auto min-w-0 flex-1 justify-start gap-3 rounded-lg p-0 text-left whitespace-normal hover:bg-transparent focus-visible:ring-3 focus-visible:ring-ring/50" aria-pressed={selectedTicket === report.ticket} onClick={() => onSelect(report.ticket)}>
-            <ReportPhotoThumbnail report={report} size="compact" />
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{report.title}</span><span className="mt-1 block truncate text-xs font-normal text-muted-foreground">Dikirim {report.submittedAt} WIB · {report.location}</span></span>
-            <StatusBadge status={report.status} />
-          </Button>
-          <ReportDetailTrigger report={report} compact />
-        </article>)}
-      </div>
-    </section>
-  )
-}
+
 
 function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { user: CurrentUser; data: SatpamWorkspaceData; ticket?: string; openDetail?: boolean }) {
   const { notify } = useActivityNotifications()
@@ -603,7 +1368,18 @@ function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { us
           </TabsList>
           <TabsContent value="kehilangan"><ReportList kind="kehilangan" /></TabsContent>
           <TabsContent value="temuan"><ReportList kind="temuan" /></TabsContent>
-          <TabsContent value="pencocokan"><MatchingWorkspace onRecordMatch={recordMatch} onOpenHandover={() => setActiveTab("penyerahan")} pendingCount={data.pending.total} /></TabsContent>
+          <TabsContent value="pencocokan">
+            <MatchingWorkspace
+              onRecordMatch={recordMatch}
+              onOpenHandover={() => setActiveTab("penyerahan")}
+              pendingCount={data.pending.total}
+              onRefresh={() => {
+                setRevision((value) => value + 1)
+                router.refresh()
+              }}
+            />
+          </TabsContent>
+
           <TabsContent value="penyerahan"><HandoverWorkspace officers={data.officers} onConfirmHandover={confirmHandover} /></TabsContent>
         </Tabs>
       </CardContent></div>

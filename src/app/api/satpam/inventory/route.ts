@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       const itemName = String(formData.get("itemName") ?? "")
       const description = String(formData.get("description") ?? "")
       const founderName = String(formData.get("founderName") ?? "")
+      const foundLocation = String(formData.get("foundLocation") ?? "")
       const photoUrl = String(formData.get("photoUrl") ?? "")
       const photoFile = formData.get("photo")
 
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
 
       return getSatpamService().createInventory(
         actor,
-        { itemName, description, founderName, photoUrl },
+        { itemName, description, founderName, foundLocation, photoUrl },
         uploadFile
       )
     }
