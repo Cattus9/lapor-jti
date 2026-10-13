@@ -563,6 +563,7 @@ function MatchingWorkspace({
     onRefresh?.()
     setSelectedInventoryId(item.id)
     setSelectedFound("")
+    setRegisterInventoryOpen(false)
   }
 
   function handleFoundReportCreated(report: FoundReport) {
@@ -571,6 +572,7 @@ function MatchingWorkspace({
       setSelectedFound(report.ticket)
       setSelectedInventoryId("")
     }
+    setRegisterFoundOpen(false)
   }
 
   function handleInventoryItemUpdated(item: InventoryItem) {

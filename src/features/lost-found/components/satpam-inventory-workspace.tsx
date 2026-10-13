@@ -362,7 +362,14 @@ export function RegisterInventoryDialog({
         </DialogHeader>
 
         <div className="pt-2">
-          <FoundItemForm idPrefix="inv" onSuccess={onSuccess} onCancel={() => onOpenChange(false)} />
+          <FoundItemForm
+            idPrefix="inv"
+            onSuccess={(item) => {
+              onOpenChange(false)
+              onSuccess(item)
+            }}
+            onCancel={() => onOpenChange(false)}
+          />
         </div>
       </DialogContent>
     </Dialog>

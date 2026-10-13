@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { ArrowRight, Calendar, CalendarDays, CheckCircle2, ChevronDown, Clock, History, Loader2, ScanSearch, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -37,7 +38,7 @@ export function ReportRow({ report, selected }: { report: ReportListItem; select
         isProcessing && "border-border bg-card/90 hover:border-primary/50 dark:border-border"
       )}
     >
-      {/* Ambient background glow on the right edge */}
+      {/* Ambient background glow & done watermark on the right edge */}
       {isDone ? (
         <>
           <div
@@ -48,6 +49,18 @@ export function ReportRow({ report, selected }: { report: ReportListItem; select
             aria-hidden="true"
             className="pointer-events-none absolute -right-4 top-1/2 size-24 -translate-y-1/2 rounded-full bg-emerald-500/20 blur-xl dark:bg-emerald-400/25"
           />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-4 top-1/2 size-32 -translate-y-1/2 opacity-20 blur-[2px] transition-all duration-300 group-hover:scale-105 group-hover:opacity-30 dark:opacity-25 sm:size-40"
+          >
+            <Image
+              src="/assets/DoneIcon.png"
+              alt=""
+              fill
+              sizes="(min-width: 640px) 160px, 128px"
+              className="object-contain"
+            />
+          </div>
         </>
       ) : isRejected ? (
         <div

@@ -4,7 +4,7 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { Archive, CalendarDays, Handshake, ImageIcon, Images, MapPin, Package, PackageSearch, Search, SlidersHorizontal, UserRound } from "lucide-react"
+import { Archive, ArrowRight, CalendarDays, Handshake, ImageIcon, Images, MapPin, Package, PackageSearch, Search, SlidersHorizontal, UserRound } from "lucide-react"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
@@ -18,18 +18,25 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { cn } from "cn"
 import type { SatpamHandoverHistoryItem, SecurityOfficer } from "../types"
 import { useSatpamPage, useDebouncedSatpamQuery } from "./use-satpam-data"
 import { SatpamPageFeedback } from "./satpam-page-feedback"
 import { getTodayInWib } from "../../reports/domain/report-date"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
-function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
+function HistoryDetailDialog({ item, trigger }: { item: SatpamHandoverHistoryItem; trigger?: React.ReactElement }) {
   return (
     <Dialog>
-      <DialogTrigger render={<Button type="button" variant="outline" size="sm" className="shrink-0 bg-card hover:bg-muted" />}>
-        Lihat detail
-      </DialogTrigger>
+      <DialogTrigger
+        render={
+          trigger ?? (
+            <Button type="button" variant="outline" size="sm" className="shrink-0 bg-card hover:bg-muted">
+              Lihat detail
+            </Button>
+          )
+        }
+      />
       <DialogContent>
         <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -206,26 +213,95 @@ function TimelineItem({ label, value }: { label: string; value: string }) {
 }
 
 function HistoryRow({ item }: { item: SatpamHandoverHistoryItem }) {
-  return (
-    <article className="rounded-xl border border-border bg-background/60 p-4 transition-colors hover:border-primary/40 md:p-5">
-      <div className="flex items-start justify-between gap-3">
+  const isDone = item.status.toLowerCase() === "selesai"
+
+  const cardTrigger = (
+    <article
+      tabIndex={0}
+      role="button"
+      aria-label={`Buka detail riwayat: ${item.title}`}
+      className={cn(
+        "group relative w-full overflow-hidden rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer select-none md:p-5",
+        "hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        isDone
+          ? "border-emerald-500/30 bg-card/95 hover:border-emerald-500/60 dark:border-emerald-500/40"
+          : "border-border bg-card/90 hover:border-primary/50 dark:border-border"
+      )}
+    >
+      {/* Ambient background glow & done watermark on the right edge */}
+      {isDone ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 top-1/2 size-44 -translate-y-1/2 rounded-full bg-emerald-500/15 blur-2xl dark:bg-emerald-400/20"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-4 top-1/2 size-24 -translate-y-1/2 rounded-full bg-emerald-500/20 blur-xl dark:bg-emerald-400/25"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-4 top-1/2 size-32 -translate-y-1/2 opacity-20 blur-[2px] transition-all duration-300 group-hover:scale-105 group-hover:opacity-30 dark:opacity-25 sm:size-40"
+          >
+            <Image
+              src="/assets/DoneIcon.png"
+              alt=""
+              fill
+              sizes="(min-width: 640px) 160px, 128px"
+              className="object-contain"
+            />
+          </div>
+        </>
+      ) : (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-12 top-1/2 size-36 -translate-y-1/2 rounded-full bg-primary/10 blur-2xl dark:bg-primary/15"
+        />
+      )}
+
+      {/* Main card info */}
+      <div className="relative flex flex-col gap-3.5 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-2xs">
+          <span
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-xl border transition-colors shadow-2xs",
+              isDone
+                ? "border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : "border-border bg-card text-foreground"
+            )}
+          >
             <PackageSearch className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground md:text-base">{item.title}</h2>
+            <h2 className="truncate text-sm font-semibold transition-colors group-hover:text-primary md:text-base">
+              {item.title}
+            </h2>
             <p className="mt-1 text-xs text-muted-foreground">Penerima: {item.recipient}</p>
           </div>
         </div>
-        <StatusBadge className="shrink-0" status={item.status} />
+
+        {/* Status pill & hover detail affordance */}
+        <div className="flex flex-row items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
+          <StatusBadge className="shrink-0" status={item.status} />
+          <div className="flex items-center gap-1 text-xs font-medium text-primary opacity-80 transition-all duration-200 sm:translate-x-1 sm:opacity-0 sm:group-hover:translate-x-0 sm:group-hover:opacity-100">
+            <span>Lihat detail</span>
+            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+          </div>
+        </div>
       </div>
-      <div className="mt-4 border-t border-border/60 pt-4">
+
+      {/* Description & submission timestamps */}
+      <div className="relative mt-4 border-t border-border/60 pt-4">
         <p className="text-xs font-medium text-muted-foreground">Deskripsi barang</p>
         <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap text-foreground">{item.itemDescription}</p>
-        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2"><p>Kehilangan dikirim {item.lostSubmittedAt} WIB</p><p>Temuan dikirim {item.foundSubmittedAt} WIB</p></div>
+        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+          <p>Kehilangan dikirim {item.lostSubmittedAt} WIB</p>
+          <p>Temuan dikirim {item.foundSubmittedAt} WIB</p>
+        </div>
       </div>
-      <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+
+      {/* Bottom meta badges */}
+      <div className="relative mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline" tone="primary" className="h-auto min-h-7 gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-normal whitespace-normal">
             <Handshake className="size-3.5" aria-hidden="true" />
@@ -240,10 +316,11 @@ function HistoryRow({ item }: { item: SatpamHandoverHistoryItem }) {
             <span>{item.handler}</span>
           </Badge>
         </div>
-        <HistoryDetailDialog item={item} />
       </div>
     </article>
   )
+
+  return <HistoryDetailDialog item={item} trigger={cardTrigger} />
 }
 
 type DatePreset = "all" | "7d" | "30d" | "custom"

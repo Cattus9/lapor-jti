@@ -45,6 +45,15 @@ export function FoundItemForm({
   const [error, setError] = useState("")
   const photo = useItemPhoto()
 
+  function resetForm() {
+    setItemName("")
+    setDescription("")
+    setFoundLocation("")
+    setFounderName("")
+    setError("")
+    photo.remove()
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!itemName.trim()) {
@@ -80,6 +89,7 @@ export function FoundItemForm({
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || "Gagal menyimpan barang inventaris.")
 
+      resetForm()
       onSuccess?.(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan.")
@@ -159,7 +169,15 @@ export function FoundItemForm({
 
       <div className="flex items-center justify-end gap-2.5 border-t border-border/60 pt-4">
         {onCancel ? (
-          <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={() => {
+              resetForm()
+              onCancel()
+            }}
+          >
             Batal
           </Button>
         ) : null}
