@@ -300,6 +300,10 @@ Verifikasi mencakup lint, typecheck, production build, tes terkait Pelapor/Satpa
 
 Pemeriksaan source juga memastikan kode tiket tidak lagi tampil sebagai teks/label aksesibilitas. Build dan koneksi PostgreSQL diulang melalui eskalasi setelah penolakan akses sandbox, lalu berhasil. Pemeriksaan SQL khusus ini saat itu dijalankan langsung lewat Node/tsx; jangan mengasumsikan ada script npm baru untuknya. Tidak diperlukan migration/seed karena schema PostgreSQL tidak berubah. QA visual tetap diserahkan kepada pengguna dan commit/push menunggu permintaan eksplisit.
 
+## Catatan audit implementasi
+
+Temuan spesifik perubahan UI, bukti kode, dan rekomendasi normalisasi dicatat di [Audit frontend commit 06fd77d](Frontend-audit-06fd77d.md). Agent yang menangani Inventaris Satpam, Riwayat Pelapor, atau alignment sidebar wajib memeriksa laporan ini sebagai konteks. Temuan tetap terbuka sampai perbaikan implementasi dan verifikasinya dicatat; keberadaan dokumen audit bukan bukti bahwa kode telah diperbaiki.
+
 ## Aturan yang diwarisi dari AGENTS.md
 
 Aturan berikut disalin dari AGENTS.md agar tersedia juga dalam satu panduan onboarding. Jika aturan diperbarui, sinkronkan kedua dokumen.
