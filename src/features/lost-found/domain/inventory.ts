@@ -9,6 +9,7 @@ export type InventoryItem = {
   founderName?: string
   status: InventoryStatus
   storageLocation: string
+  foundLocation?: string
   photoUrl?: string
   hasStoredPhoto?: boolean
   handoverRecipient?: string
@@ -28,6 +29,7 @@ export type CreateInventoryInput = {
   itemName: string
   description?: string
   founderName?: string
+  foundLocation?: string
   photoUrl?: string
 }
 
@@ -56,6 +58,11 @@ export function validateCreateInventory(input: CreateInventoryInput) {
     throw new ReportError("Nama penemu maksimal 150 karakter.", 400)
   }
 
+  const foundLocation = input.foundLocation?.trim() || undefined
+  if (foundLocation && foundLocation.length > 200) {
+    throw new ReportError("Lokasi temuan maksimal 200 karakter.", 400)
+  }
+
   const photoUrl = input.photoUrl?.trim() || undefined
   if (photoUrl) {
     try {
@@ -72,6 +79,7 @@ export function validateCreateInventory(input: CreateInventoryInput) {
     itemName,
     description,
     founderName,
+    foundLocation,
     photoUrl,
   }
 }

@@ -34,6 +34,7 @@ test("Lost/found lifecycle cannot skip steps or reopen terminal status", () => {
 })
 test("Server filters reject malformed statuses, officers and calendar dates", () => {
   assert.equal(parseSatpamFilter({ kind: "temuan", matching: "1", q: "  kartu  " }).query, "kartu")
+  assert.equal(parseSatpamFilter({ status: "aktif" }).status, "aktif")
   for (const value of [{ kind: "fasilitas" }, { status: "admin" }, { q: "a".repeat(201) }]) assert.throws(() => parseSatpamFilter(value), ReportError)
   assert.deepEqual(parseHistoryFilter({ from: "2026-10-01", to: "2026-10-04", officerId: id }).from, "2026-10-01")
   for (const value of [{ from: "2026-02-30" }, { from: "2026-10-05", to: "2026-10-04" }, { officerId: "nama" }]) assert.throws(() => parseHistoryFilter(value), ReportError)

@@ -2,7 +2,10 @@ import { isUuid, ReportError, type AttachmentUpload, type ReportActor } from "..
 import type { AttachmentStorage } from "../../reports/application/ports"
 import { parseHistoryFilter, parseSatpamCommand, parseSatpamFilter, requireSatpam, requireTicket } from "../domain/satpam"
 import { validateCreateInventory, validateHandoverInventory, type CreateInventoryInput, type HandoverInventoryInput } from "../domain/inventory"
+import { validateCreateLossReport, type CreateLossReportInput } from "../domain/loss-report"
+import { validateCreateFoundReport, type CreateFoundReportInput } from "../domain/found-report"
 import type { SatpamRepository } from "./ports"
+
 
 
 export class SatpamService {
@@ -83,4 +86,63 @@ export class SatpamService {
     if (!item) throw new ReportError("Barang tidak ditemukan.", 404)
     return item
   }
+
+  listLossReports(actor: ReportActor) {
+    requireSatpam(actor)
+    return this.repository.listLossReports()
+  }
+
+  async createLossReport(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
+    requireSatpam(actor)
+    const validated = validateCreateLossReport(raw as CreateLossReportInput)
+    let storedPhoto: { storageKey: string; mimeType: string; name: string } | undefined
+    if (file) {
+      if (!file.mimeType.startsWith("image/")) {
+        throw new ReportError("File lampiran harus berupa gambar (JPG atau PNG).", 400)
+      }
+      if (file.bytes.length > 5 * 1024 * 1024) {
+        throw new ReportError("Ukuran foto maksimal 5 MB.", 400)
+      }
+      const [stored] = await this.storage.store([file])
+      storedPhoto = stored
+    }
+    try {
+      return await this.repository.createLossReport(actor, validated, storedPhoto)
+    } catch (error) {
+      if (storedPhoto) await this.storage.remove([{ ...storedPhoto, id: "", size: 0 }])
+      throw error
+    }
+  }
+
+  async downloadLossReportPhoto(actor: ReportActor, id: string) {
+    requireSatpam(actor)
+    if (!isUuid(id)) throw new ReportError("Foto tidak ditemukan.", 404)
+    const photo = await this.repository.getLossReportPhoto(id)
+    if (!photo) throw new ReportError("Foto tidak ditemukan.", 404)
+    const bytes = await this.storage.read({ id, name: photo.name, mimeType: photo.mimeType, size: 0, storageKey: photo.storageKey })
+    return { photo, bytes }
+  }
+
+  async createFoundReport(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
+    requireSatpam(actor)
+    const validated = validateCreateFoundReport(raw as CreateFoundReportInput)
+    let storedPhoto: { storageKey: string; mimeType: string; name: string } | undefined
+    if (file) {
+      if (!file.mimeType.startsWith("image/")) {
+        throw new ReportError("File lampiran harus berupa gambar (JPG atau PNG).", 400)
+      }
+      if (file.bytes.length > 5 * 1024 * 1024) {
+        throw new ReportError("Ukuran foto maksimal 5 MB.", 400)
+      }
+      const [stored] = await this.storage.store([file])
+      storedPhoto = stored
+    }
+    try {
+      return await this.repository.createFoundReport(actor, validated, storedPhoto)
+    } catch (error) {
+      if (storedPhoto) await this.storage.remove([{ ...storedPhoto, id: "", size: 0 }])
+      throw error
+    }
+  }
 }
+

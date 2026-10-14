@@ -47,6 +47,7 @@ export const satpamInventory = pgTable("satpam_inventory", {
   founderName: text("founder_name"),
   status: text("status").notNull().default("tersimpan"),
   storageLocation: text("storage_location").notNull().default("Pos Satpam"),
+  foundLocation: text("found_location"), // Optional: where the item was found, distinct from where it is stored.
   photoUrl: text("photo_url"),
   photoStorageKey: text("photo_storage_key"),
   photoMimeType: text("photo_mime_type"),
@@ -63,4 +64,31 @@ export const satpamInventory = pgTable("satpam_inventory", {
   index("satpam_inventory_status_created_idx").on(t.status, t.createdAt.desc(), t.id.desc()),
   check("satpam_inventory_name_check", sql`length(trim(${t.itemName})) between 1 and 200`),
   check("satpam_inventory_status_check", sql`${t.status} in ('tersimpan', 'diserahkan')`),
+  check("satpam_inventory_found_location_check", sql`${t.foundLocation} is null or length(trim(${t.foundLocation})) between 1 and 200`),
+])
+
+// Kehilangan reports recorded directly by Satpam at the post (separate from Pelapor submissions).
+export const satpamLossReports = pgTable("satpam_loss_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title"),
+  itemName: text("item_name").notNull(),
+  location: text("location"),
+  incidentDate: text("incident_date"),
+  incidentTime: text("incident_time"),
+  characteristics: text("characteristics").notNull(),
+  description: text("description").notNull(),
+  photoUrl: text("photo_url"),
+  photoStorageKey: text("photo_storage_key"),
+  photoMimeType: text("photo_mime_type"),
+  photoName: text("photo_name"),
+  registeredBy: uuid("registered_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  registeredByName: text("registered_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
+}, (t) => [
+  index("satpam_loss_reports_created_idx").on(t.createdAt.desc(), t.id.desc()),
+  check("satpam_loss_reports_name_check", sql`length(trim(${t.itemName})) between 1 and 200`),
+  check("satpam_loss_reports_title_check", sql`${t.title} is null or length(trim(${t.title})) between 1 and 200`),
+  check("satpam_loss_reports_location_check", sql`${t.location} is null or length(trim(${t.location})) between 1 and 200`),
+  check("satpam_loss_reports_characteristics_check", sql`length(trim(${t.characteristics})) between 1 and 2000`),
+  check("satpam_loss_reports_description_check", sql`length(trim(${t.description})) between 1 and 5000`),
 ])

@@ -1,6 +1,8 @@
 import type { ReportActor, StoredAttachment } from "../../reports/domain/report"
 import type { SatpamCommand } from "../domain/satpam"
 import type { InventoryFilter, InventoryItem } from "../domain/inventory"
+import type { LossReport } from "../domain/loss-report"
+import type { FoundReport } from "../domain/found-report"
 import type { SatpamDashboardData, SatpamDetail, SatpamHandoverHistoryItem, SatpamHistoryFilter, SatpamListFilter, SatpamNotifications, SatpamPage, SatpamLostFoundReport, SatpamWorkspaceData } from "../types"
 
 export interface SatpamRepository {
@@ -19,4 +21,9 @@ export interface SatpamRepository {
   handoverInventory(actor: ReportActor, raw: unknown): Promise<InventoryItem>
   getInventoryPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null>
   getInventoryItem(id: string): Promise<InventoryItem | null>
+  listLossReports(): Promise<{ items: LossReport[]; total: number }>
+  createLossReport(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<LossReport>
+  getLossReportPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null>
+  createFoundReport(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<FoundReport>
 }
+

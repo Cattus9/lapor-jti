@@ -21,11 +21,29 @@ test("validateCreateInventory requires itemName and trims fields", () => {
   const validated = validateCreateInventory({
     itemName: "  Kunci Motor Vario  ",
     founderName: "  Ahmad Yani  ",
+    foundLocation: "  Parkiran Motor Gedung Utama  ",
     description: "  Warna hitam dengan gantungan boneka  ",
   })
   assert.equal(validated.itemName, "Kunci Motor Vario")
   assert.equal(validated.founderName, "Ahmad Yani")
+  assert.equal(validated.foundLocation, "Parkiran Motor Gedung Utama")
   assert.equal(validated.description, "Warna hitam dengan gantungan boneka")
+})
+
+test("validateCreateLossReport requires itemName, characteristics, description and validates length", async () => {
+  const { validateCreateLossReport } = await import("../src/features/lost-found/domain/loss-report")
+  assert.throws(() => validateCreateLossReport({ itemName: "", characteristics: "Hitam", description: "Hilang di perpus" }), /Nama barang wajib diisi/)
+  assert.throws(() => validateCreateLossReport({ itemName: "Laptop", characteristics: "", description: "Hilang di perpus" }), /Ciri-ciri barang wajib diisi/)
+  assert.throws(() => validateCreateLossReport({ itemName: "Laptop", characteristics: "Hitam", description: "" }), /Detail\/kronologi kehilangan wajib diisi/)
+
+  const validated = validateCreateLossReport({
+    itemName: "  Laptop Asus  ",
+    characteristics: "  Warna perak ada stiker GitHub  ",
+    description: "  Tertinggal di meja laboratorium lantai 2  ",
+  })
+  assert.equal(validated.itemName, "Laptop Asus")
+  assert.equal(validated.characteristics, "Warna perak ada stiker GitHub")
+  assert.equal(validated.description, "Tertinggal di meja laboratorium lantai 2")
 })
 
 test("validateCreateInventory rejects invalid photoUrl protocols", () => {
@@ -52,11 +70,10 @@ test("SatpamService inventory endpoints enforce satpam role authorization", asyn
   const pelaporActor: ReportActor = { id: "user-1", role: "pelapor" }
   const satpamActor: ReportActor = { id: "user-2", role: "satpam" }
 
-
   await assert.rejects(() => service.listInventory(pelaporActor, {}), /Akses hanya untuk Satpam/)
   await assert.rejects(() => service.createInventory(pelaporActor, { itemName: "Tas" }), /Akses hanya untuk Satpam/)
   await assert.rejects(() => service.handoverInventory(pelaporActor, { id: "item-1", recipient: "Budi" }), /Akses hanya untuk Satpam/)
-
+  await assert.rejects(() => service.createLossReport(pelaporActor, { itemName: "Tas", characteristics: "Biru", description: "Hilang" }), /Akses hanya untuk Satpam/)
 
   // Satpam actor is authorized
   const list = await service.listInventory(satpamActor, {})

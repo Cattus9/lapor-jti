@@ -1,14 +1,19 @@
 import "server-only"
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm"
+import { randomUUID } from "node:crypto"
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { getDb } from "@/db"
-import { users, reports, reportLostFoundDetails, reportAttachments, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory } from "@/db/schema"
+import { users, reports, reportLostFoundDetails, reportAttachments, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory, satpamLossReports, reportTicketCounters } from "@/db/schema"
 import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor, type ReportStatus } from "../../reports/domain/report"
+import { getIncidentDateTimeInWib } from "../../reports/domain/report-date"
 import { DrizzleReportRepository } from "../../reports/infrastructure/drizzle-report-repository"
 import { defaultReportFilters, reportDateBounds } from "../../reports/domain/report-list-filters"
 import { expectedStatus, type SatpamCommand } from "../domain/satpam"
 import { validateCreateInventory, validateHandoverInventory, type CreateInventoryInput, type HandoverInventoryInput, type InventoryFilter, type InventoryItem } from "../domain/inventory"
+import { validateCreateLossReport, type CreateLossReportInput, type LossReport } from "../domain/loss-report"
+import { validateCreateFoundReport, type CreateFoundReportInput, type FoundReport } from "../domain/found-report"
 import type { SatpamRepository } from "../application/ports"
+
 import type { SatpamHandoverHistoryItem, SatpamHistoryFilter, SatpamListFilter, SatpamLostFoundReport, SatpamPage, SatpamPendingHandover, SatpamReportStatus } from "../types"
 
 
@@ -40,7 +45,13 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const criteria = and(scope,
       exactTicket ? eq(reports.ticketNumber, exactTicket) : undefined,
       filter.kind !== "semua" ? eq(reportLostFoundDetails.kind, filter.kind) : undefined,
-      filter.matching ? inArray(reports.status, ["baru", "diverifikasi", "diproses"]) : filter.status !== "semua" ? eq(reports.status, filter.status) : undefined,
+      filter.matching
+        ? inArray(reports.status, ["baru", "diverifikasi", "diproses"])
+        : filter.status === "aktif"
+          ? notInArray(reports.status, ["selesai", "ditolak"])
+          : filter.status !== "semua"
+            ? eq(reports.status, filter.status)
+            : undefined,
       bounds.from ? gte(reports.submittedAt, bounds.from) : undefined,
       bounds.until ? lt(reports.submittedAt, bounds.until) : undefined,
       filter.query ? or(ilike(reports.title, escaped(filter.query)), ilike(reports.ticketNumber, escaped(filter.query)), ilike(reports.locationText, escaped(filter.query)), ilike(reports.description, escaped(filter.query)), ilike(reportLostFoundDetails.itemName, escaped(filter.query)), ilike(reportLostFoundDetails.itemDetails, escaped(filter.query))) : undefined,
@@ -225,6 +236,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       founderName: r.founderName ?? undefined,
       status: r.status as "tersimpan" | "diserahkan",
       storageLocation: r.storageLocation,
+      foundLocation: r.foundLocation ?? undefined,
       photoUrl: r.photoStorageKey ? `/api/satpam/inventory/${r.id}/photo?preview=1` : r.photoUrl ?? undefined,
       hasStoredPhoto: Boolean(r.photoStorageKey),
       handoverRecipient: r.handoverRecipient ?? undefined,
@@ -278,6 +290,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         itemName: input.itemName,
         description: input.description,
         founderName: input.founderName,
+        foundLocation: input.foundLocation,
         photoUrl: input.photoUrl,
         photoStorageKey: storedPhoto?.storageKey,
         photoMimeType: storedPhoto?.mimeType,
@@ -294,6 +307,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       founderName: inserted.founderName ?? undefined,
       status: inserted.status as "tersimpan" | "diserahkan",
       storageLocation: inserted.storageLocation,
+      foundLocation: inserted.foundLocation ?? undefined,
       photoUrl: inserted.photoStorageKey
         ? `/api/satpam/inventory/${inserted.id}/photo?preview=1`
         : inserted.photoUrl ?? undefined,
@@ -339,6 +353,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       founderName: updated.founderName ?? undefined,
       status: updated.status as "tersimpan" | "diserahkan",
       storageLocation: updated.storageLocation,
+      foundLocation: updated.foundLocation ?? undefined,
       photoUrl: updated.photoStorageKey
         ? `/api/satpam/inventory/${updated.id}/photo?preview=1`
         : updated.photoUrl ?? undefined,
@@ -369,4 +384,262 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       name: row.photoName || "foto-inventaris",
     }
   }
+
+  private lossReportView(r: typeof satpamLossReports.$inferSelect): LossReport {
+    return {
+      id: r.id,
+      title: r.title ?? undefined,
+      itemName: r.itemName,
+      location: r.location ?? undefined,
+      incidentDate: r.incidentDate ?? undefined,
+      incidentTime: r.incidentTime ?? undefined,
+      characteristics: r.characteristics,
+      description: r.description,
+      photoUrl: r.photoStorageKey ? `/api/satpam/loss-reports/${r.id}/photo?preview=1` : r.photoUrl ?? undefined,
+      registeredByName: r.registeredByName,
+      createdAt: dateLabel(r.createdAt),
+    }
+  }
+
+  async listLossReports(): Promise<{ items: LossReport[]; total: number }> {
+    const [rows, [totals]] = await Promise.all([
+      this.db.select().from(satpamLossReports).orderBy(desc(satpamLossReports.createdAt), desc(satpamLossReports.id)).limit(pageSize),
+      this.db.select({ count: sql<number>`count(*)::integer` }).from(satpamLossReports),
+    ])
+    return { items: rows.map((r) => this.lossReportView(r)), total: totals.count }
+  }
+
+  async createLossReport(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string; size?: number }): Promise<LossReport> {
+    const input = validateCreateLossReport(raw as CreateLossReportInput)
+    const [account] = await this.db
+      .select({ name: users.name })
+      .from(users)
+      .where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true)))
+      .limit(1)
+    if (!account) throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
+
+    const now = new Date()
+    const currentWib = getIncidentDateTimeInWib(now)
+    const incidentDate = input.incidentDate || currentWib.incidentDate
+    const rawTime = input.incidentTime || currentWib.incidentTime
+    const incidentTime = rawTime.length === 5 ? `${rawTime}:00` : rawTime
+    const title = input.title?.trim() || `Kehilangan ${input.itemName}`
+    const locationText = input.location?.trim() || "Lingkungan Kampus JTI"
+
+    return await this.db.transaction(async (tx) => {
+      // 1. Generate unique sequential ticket code LJ-YYYY-XXXXX
+      const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Jakarta" }).format(now))
+      const [counter] = await tx
+        .insert(reportTicketCounters)
+        .values({ year, value: 1 })
+        .onConflictDoUpdate({ target: reportTicketCounters.year, set: { value: sql`${reportTicketCounters.value} + 1` } })
+        .returning()
+      const ticketNumber = `LJ-${year}-${String(counter.value).padStart(5, "0")}`
+
+      // 2. Insert into core reports table so it appears in /satpam/kehilangan-temuan and participates in lost-found lifecycle
+      const [reportRow] = await tx
+        .insert(reports)
+        .values({
+          ticketNumber,
+          submissionKey: randomUUID(),
+          reporterId: actor.id,
+          category: "kehilangan-temuan",
+          title,
+          description: input.description,
+          incidentDate,
+          incidentTime,
+          locationId: null,
+          locationText,
+          handlerRole: "satpam",
+          status: "baru",
+          submittedAt: now,
+        })
+        .returning()
+
+      // 3. Link lost-found item details
+      await tx.insert(reportLostFoundDetails).values({
+        reportId: reportRow.id,
+        kind: "kehilangan",
+        itemName: input.itemName,
+        itemDetails: input.characteristics || input.description,
+      })
+
+      // 4. Attach photo if available
+      if (storedPhoto) {
+        await tx.insert(reportAttachments).values({
+          id: randomUUID(),
+          ownerId: actor.id,
+          reportId: reportRow.id,
+          name: storedPhoto.name,
+          mimeType: storedPhoto.mimeType,
+          size: storedPhoto.size || 1024,
+          storageKey: storedPhoto.storageKey,
+          createdAt: now,
+        })
+      }
+
+      // 5. Create initial status history entry
+      await tx.insert(reportStatusHistory).values({
+        reportId: reportRow.id,
+        actorId: actor.id,
+        actorName: account.name,
+        fromStatus: null,
+        toStatus: "baru",
+        note: "Laporan kehilangan dicatat oleh Satpam di Pos.",
+        createdAt: now,
+      })
+
+      // 6. Record in satpamLossReports for audit
+      const [inserted] = await tx
+        .insert(satpamLossReports)
+        .values({
+          id: reportRow.id,
+          title: input.title,
+          itemName: input.itemName,
+          location: input.location,
+          incidentDate: input.incidentDate,
+          incidentTime: input.incidentTime,
+          characteristics: input.characteristics || input.description,
+          description: input.description,
+          photoUrl: input.photoUrl,
+          photoStorageKey: storedPhoto?.storageKey,
+          photoMimeType: storedPhoto?.mimeType,
+          photoName: storedPhoto?.name,
+          registeredBy: actor.id,
+          registeredByName: account.name,
+          createdAt: now,
+        })
+        .returning()
+
+      return {
+        ...this.lossReportView(inserted),
+        ticket: ticketNumber,
+        ticketNumber,
+      }
+    })
+  }
+
+  async getLossReportPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null> {
+    const [row] = await this.db
+      .select({ photoStorageKey: satpamLossReports.photoStorageKey, photoMimeType: satpamLossReports.photoMimeType, photoName: satpamLossReports.photoName })
+      .from(satpamLossReports)
+      .where(eq(satpamLossReports.id, id))
+      .limit(1)
+    if (!row || !row.photoStorageKey || !row.photoMimeType) return null
+    return { storageKey: row.photoStorageKey, mimeType: row.photoMimeType, name: row.photoName || "foto-kehilangan" }
+  }
+
+  async createFoundReport(
+    actor: ReportActor,
+    raw: unknown,
+    storedPhoto?: { storageKey: string; mimeType: string; name: string; size?: number }
+  ): Promise<FoundReport> {
+    const input = validateCreateFoundReport(raw as CreateFoundReportInput)
+    const [account] = await this.db
+      .select({ name: users.name })
+      .from(users)
+      .where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true)))
+      .limit(1)
+    if (!account) throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
+
+    const now = new Date()
+    const currentWib = getIncidentDateTimeInWib(now)
+    const incidentDate = input.incidentDate || currentWib.incidentDate
+    const rawTime = input.incidentTime || currentWib.incidentTime
+    const incidentTime = rawTime.length === 5 ? `${rawTime}:00` : rawTime
+    const title = input.title?.trim() || `Temuan ${input.itemName}`
+    const locationText = input.location?.trim() || "Lingkungan Kampus JTI"
+    const targetStatus = input.status === "baru" ? "baru" : "diproses"
+
+    return await this.db.transaction(async (tx) => {
+      // 1. Generate unique sequential ticket code LJ-YYYY-XXXXX
+      const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Jakarta" }).format(now))
+      const [counter] = await tx
+        .insert(reportTicketCounters)
+        .values({ year, value: 1 })
+        .onConflictDoUpdate({ target: reportTicketCounters.year, set: { value: sql`${reportTicketCounters.value} + 1` } })
+        .returning()
+      const ticketNumber = `LJ-${year}-${String(counter.value).padStart(5, "0")}`
+
+      // 2. Insert into core reports table
+      const [reportRow] = await tx
+        .insert(reports)
+        .values({
+          ticketNumber,
+          submissionKey: randomUUID(),
+          reporterId: actor.id,
+          category: "kehilangan-temuan",
+          title,
+          description: input.description,
+          incidentDate,
+          incidentTime,
+          locationId: null,
+          locationText,
+          handlerRole: "satpam",
+          status: targetStatus,
+          submittedAt: now,
+        })
+        .returning()
+
+      // 3. Link lost-found item details
+      await tx.insert(reportLostFoundDetails).values({
+        reportId: reportRow.id,
+        kind: "temuan",
+        itemName: input.itemName,
+        itemDetails: [
+          input.founderName ? `Penemu: ${input.founderName}` : null,
+          input.characteristics || input.description,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      })
+
+      // 4. Attach photo if available
+      if (storedPhoto) {
+        await tx.insert(reportAttachments).values({
+          id: randomUUID(),
+          ownerId: actor.id,
+          reportId: reportRow.id,
+          name: storedPhoto.name,
+          mimeType: storedPhoto.mimeType,
+          size: storedPhoto.size || 1024,
+          storageKey: storedPhoto.storageKey,
+          createdAt: now,
+        })
+      }
+
+      // 5. Create initial status history entry
+      await tx.insert(reportStatusHistory).values({
+        reportId: reportRow.id,
+        actorId: actor.id,
+        actorName: account.name,
+        fromStatus: null,
+        toStatus: targetStatus,
+        note:
+          targetStatus === "diproses"
+            ? "Laporan temuan barang dicatat oleh Satpam dan siap dicocokkan."
+            : "Laporan temuan baru dicatat oleh Satpam.",
+        createdAt: now,
+      })
+
+      return {
+        id: reportRow.id,
+        ticket: ticketNumber,
+        ticketNumber,
+        title,
+        itemName: input.itemName,
+        location: locationText,
+        incidentDate,
+        incidentTime,
+        founderName: input.founderName,
+        characteristics: input.characteristics || input.description,
+        description: input.description,
+        status: targetStatus,
+        photoUrl: storedPhoto ? `/api/satpam/attachments/${reportRow.id}?preview=1` : input.photoUrl,
+        registeredByName: account.name,
+        createdAt: dateLabel(now),
+      }
+    })
+  }
 }
+

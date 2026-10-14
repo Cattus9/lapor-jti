@@ -78,6 +78,20 @@
       "when": 1791794841298,
       "tag": "0010_satpam_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791816633261,
+      "tag": "0011_satpam_pelaporan",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791817257503,
+      "tag": "0012_satpam_loss_report_details",
+      "breakpoints": true
     }
   ]
 }

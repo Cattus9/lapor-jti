@@ -22,7 +22,7 @@ export type SatpamHandoverHistoryItem = {
 export type SatpamPage<T> = { items: T[]; nextCursor: string | null; total: number }
 export type SatpamReportPeriod = keyof typeof satpamReportPeriods
 export type SatpamReportSort = keyof typeof satpamReportSorts
-export type SatpamListFilter = { kind: SatpamReportKind | "semua"; status: ReportStatus | "semua"; query: string; matching: boolean; period: SatpamReportPeriod; sort: SatpamReportSort; cursor?: string }
+export type SatpamListFilter = { kind: SatpamReportKind | "semua"; status: ReportStatus | "semua" | "aktif"; query: string; matching: boolean; period: SatpamReportPeriod; sort: SatpamReportSort; cursor?: string }
 export type SatpamHistoryFilter = { query: string; officerId?: string; from?: string; to?: string; cursor?: string }
 export type SatpamWorkspaceData = {
   officers: SecurityOfficer[]; historyOfficers: SecurityOfficer[]; pending: SatpamPage<SatpamPendingHandover>
