@@ -9,11 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } 
 import { Skeleton } from "@/components/ui/skeleton"
 import { FieldError } from "@/components/ui/field"
 import { lifecycleByCategory, statusLabels as statusLabel } from "../domain/report"
+import { getReportLocationPresentation } from "../domain/report-location-presentation"
 import type { ReportCategory, ReportListItem, ReportSummary } from "../types"
 
 const categoryMeta: Record<ReportCategory, { label: string; icon: LucideIcon }> = {
   "kehilangan-temuan": { label: "Kehilangan & Temuan", icon: PackageSearch },
-  fasilitas: { label: "Fasilitas", icon: Wrench },
+  fasilitas: { label: "Kerusakan Fasilitas", icon: Wrench },
   layanan: { label: "Layanan", icon: Headphones },
   lainnya: { label: "Lainnya", icon: FileText },
 }
@@ -48,6 +49,7 @@ function ReportDetailContent({ report, submittedAt }: { report: ReportSummary; s
   const meta = categoryMeta[report.category]
   const Icon = meta.icon
   const { detail } = report
+  const locationPresentation = getReportLocationPresentation(report.category, detail.fields.find((field) => field.label === "Jenis layanan")?.value)
 
   return (
     <DialogContent>
@@ -104,10 +106,10 @@ function ReportDetailContent({ report, submittedAt }: { report: ReportSummary; s
                 <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 className="size-3.5" aria-hidden="true" />Waktu kejadian</dt>
                 <dd className="mt-1.5 text-sm font-medium text-foreground">{detail.incidentTime}</dd>
               </div>
-              <div className="p-4 sm:col-span-2">
-                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3.5" aria-hidden="true" />Lokasi kejadian</dt>
+              {detail.location ? <div className="p-4 sm:col-span-2">
+                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3.5" aria-hidden="true" />{locationPresentation.label}</dt>
                 <dd className="mt-1.5 text-sm font-medium text-foreground">{detail.location}</dd>
-              </div>
+              </div> : null}
             </dl>
             <dl className="mt-3 grid overflow-hidden rounded-xl border border-border/60 sm:grid-cols-2">
               {detail.fields.map((field, index) => <div key={field.label} className={`p-4 ${index < detail.fields.length - 1 ? "border-b border-border/60 sm:border-b-0" : ""} ${index % 2 === 0 && index < detail.fields.length - 1 ? "sm:border-r sm:border-border/60" : ""}`}><dt className="text-xs text-muted-foreground">{field.label}</dt><dd className="mt-1.5 text-sm font-medium leading-relaxed text-foreground">{field.value}</dd></div>)}

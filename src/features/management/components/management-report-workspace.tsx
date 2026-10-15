@@ -39,7 +39,7 @@ function ReportList({ page, openReport, retry }: { page: ReturnType<typeof useMa
                 <p className="truncate text-sm font-medium">{report.title}</p>
                 <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <MapPin className="size-3 shrink-0" aria-hidden="true" />
-                  <span className="break-words">{report.context} · {report.location}</span>
+                  <span className="break-words">{report.context}{report.location ? ` · ${report.location}` : ""}</span>
                 </p>
               </div>
             </div>

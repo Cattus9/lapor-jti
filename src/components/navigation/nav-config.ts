@@ -44,6 +44,12 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
     { title: "Notifikasi", url: "/manajemen/notifikasi", icon: BellRing, group: "Akun" },
     { title: "Profil", url: "/manajemen/profil", icon: UserRoundCog, group: "Akun" },
   ],
+  tefa: [
+    { title: "Ringkasan", url: "/tefa/dashboard", icon: ChartNoAxesCombined, group: "Layanan JTI" },
+    { title: "Kelola Laporan", url: "/tefa/laporan", icon: Inbox, group: "Layanan JTI" },
+    { title: "Riwayat", url: "/tefa/riwayat", icon: Archive, group: "Layanan JTI" },
+    { title: "Profil", url: "/tefa/profil", icon: UserRoundCog, group: "Akun" },
+  ],
   admin: [
     { title: "Ringkasan", url: "/admin/dashboard", icon: ChartNoAxesCombined },
     { title: "Pengguna", url: "#", icon: UserRoundCog },

@@ -6,5 +6,5 @@ import { requireRole } from "@/lib/auth/require-role"
 
 export default async function UserManagementPage() {
   const user = await requireRole("manajemen")
-  return <DashboardLayout role="manajemen" user={user}><ContentShell><PageHeader title="Kelola Pengguna" description="Kelola akun Pelapor, Satpam, Teknisi, dan Manajemen Jurusan." /><UserManagement actorId={user.id} /></ContentShell></DashboardLayout>
+  return <DashboardLayout role="manajemen" user={user}><ContentShell><PageHeader title="Kelola Pengguna" description="Kelola akun Pelapor, Satpam, Teknisi, TEFA, dan Manajemen Jurusan." /><UserManagement actorId={user.id} /></ContentShell></DashboardLayout>
 }

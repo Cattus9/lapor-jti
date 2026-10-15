@@ -55,12 +55,13 @@ Aturan penerapan:
 
 - **Better Auth adalah engine autentikasi proyek** dan terintegrasi dengan Drizzle. Jangan membuat sistem password/session/token sendiri atau melakukan query password dari UI.
 - Baca konfigurasi di `src/lib/auth` dan skema auth di `src/db` sebelum mengubah alur login, session, akun, role, atau provider. Perubahan auth/provider memerlukan evaluasi schema, migration, environment, callback/origin, tes, dan deployment bersama.
-- Role internal (`pelapor`, `satpam`, `teknisi`, `manajemen`) dan status aktif bersumber dari database aplikasi, bukan dari nilai browser atau klaim provider. Periksa role dan status terkini di server pada setiap akses sensitif.
+- Role internal (`pelapor`, `satpam`, `teknisi`, `manajemen`, `tefa`) dan status aktif bersumber dari database aplikasi, bukan dari nilai browser atau klaim provider. Periksa role dan status terkini di server pada setiap akses sensitif. Role `admin` yang tersisa di schema bukan izin untuk memberi TEFA akses administrasi sistem.
 - Pendaftaran publik email/password saat ini dinonaktifkan. Jangan mengaktifkannya atau mengubah siapa yang dapat menetapkan role tanpa permintaan dan desain otorisasi eksplisit.
 - Password email/password saat ini harus 12–128 karakter. Password di-hash melalui Better Auth; jangan menyimpan atau mengirimkannya dalam bentuk teks setelah input.
 - `BETTER_AUTH_SECRET` adalah secret server runtime dan wajib minimal 32 karakter. `BETTER_AUTH_URL` harus origin HTTP(S) yang tepat, tanpa path/query/fragment; production wajib HTTPS. Hostname dan port browser harus cocok persis dengan URL auth agar cookie/origin tidak salah.
 - Provider Google Workspace belum dikonfigurasi saat ini. Jangan mengklaim SSO aktif atau menaruh kredensial OAuth di client. Bila provider ditambahkan, rahasia OAuth hanya di server dan role aplikasi tetap dikelola database.
 - Perubahan role/status harus mempertimbangkan pencabutan session, aturan agar pengelola aktif terakhir tidak terkunci, pemeriksaan origin, audit tanpa kredensial, dan perlindungan update bersamaan.
+- TEFA tahap pertama hanya memiliki auth/akses role nyata serta frontend simulasi berlabel Data contoh. Jangan menghubungkan contoh TEFA ke laporan, lampiran, atau notifikasi nyata. Routing layanan JTI masih ke Manajemen sampai backend penanganan TEFA diimplementasikan dan diuji secara terpisah; lihat OPERATIONS.md.
 
 ## Database: PostgreSQL di Docker wajib
 
@@ -303,6 +304,8 @@ Pemeriksaan source juga memastikan kode tiket tidak lagi tampil sebagai teks/lab
 ## Catatan audit implementasi
 
 Temuan spesifik perubahan UI, bukti kode, dan rekomendasi normalisasi dicatat di [Audit frontend commit 06fd77d](Frontend-audit-06fd77d.md). Agent yang menangani Inventaris Satpam, Riwayat Pelapor, atau alignment sidebar wajib memeriksa laporan ini sebagai konteks. Temuan tetap terbuka sampai perbaikan implementasi dan verifikasinya dicatat; keberadaan dokumen audit bukan bukti bahwa kode telah diperbaiki.
+
+Audit lanjutan terhadap commit `e968fa0` dan `38b0a96` tersedia di [Audit flow Satpam, backend/database, dan UI terkait](docs/audit-satpam-e968fa0-38b0a96.md). Dokumen ini memisahkan bug yang terverifikasi, pelanggaran standar, dan risiko desain yang perlu keputusan pemilik proyek, serta menyediakan checklist QA manual. Seluruh temuan masih terbuka dan belum merupakan instruksi untuk langsung melakukan perbaikan; tunggu hasil review dan arahan pemilik proyek.
 
 ## Aturan yang diwarisi dari AGENTS.md
 

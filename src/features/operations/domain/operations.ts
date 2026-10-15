@@ -1,9 +1,9 @@
 import { isUuid, ReportError } from "../../reports/domain/report"
 import { isFacilityCategory, type FacilityCategory } from "./facility-categories"
 
-export const operationalRoles = ["pelapor", "satpam", "teknisi", "manajemen"] as const
+export const operationalRoles = ["pelapor", "satpam", "teknisi", "manajemen", "tefa"] as const
 export type OperationalRole = typeof operationalRoles[number]
-export const roleLabels: Record<OperationalRole, string> = { pelapor: "Pelapor", satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan" }
+export const roleLabels: Record<OperationalRole, string> = { pelapor: "Pelapor", satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan", tefa: "TEFA" }
 export type MasterKind = "areas" | "locations" | "objects" | "services" | "officers"
 export type MasterRecord = { id: string; name: string; isActive: boolean; revision: number; kind?: string; sortOrder?: number; areaId?: string; group?: string; objectIds?: string[] }
 export type OperationalCatalog = Record<MasterKind, MasterRecord[]>

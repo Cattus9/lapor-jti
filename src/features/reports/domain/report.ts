@@ -1,5 +1,6 @@
 // Domain values are independent of Next.js, React, Drizzle, and the login provider.
 import { getIncidentDateTimeInWib, getTodayInWib } from "./report-date"
+import { getReportServicePolicy } from "./service-policy"
 
 export const reportCategories = ["kehilangan-temuan", "fasilitas", "layanan", "lainnya"] as const
 export const reportStatuses = ["baru", "diverifikasi", "diproses", "barang_teridentifikasi", "diserahkan", "selesai", "ditolak"] as const
@@ -67,8 +68,14 @@ export function parsePayload(raw: unknown, submitted: boolean, now = new Date())
   if (payload.incidentDate && (!/^\d{4}-\d{2}-\d{2}$/.test(payload.incidentDate) || !Number.isFinite(Date.parse(payload.incidentDate + "T00:00:00Z")) || new Date(payload.incidentDate + "T00:00:00Z").toISOString().slice(0, 10) !== payload.incidentDate)) throw new ReportError("Tanggal kejadian tidak valid.")
   if (payload.incidentDate && payload.incidentDate > getTodayInWib(now)) throw new ReportError("Tanggal kejadian tidak boleh melebihi hari ini (WIB).")
   if (payload.incidentTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(payload.incidentTime)) throw new ReportError("Waktu kejadian tidak valid.")
+  const servicePolicy = getReportServicePolicy(payload.service)
+  if (payload.category === "layanan") {
+    if (!servicePolicy.requiresProgram) payload.program = ""
+    if (servicePolicy.locationMode === "hidden") payload.location = ""
+  }
   if (submitted) {
-    const required: (keyof ReportPayload)[] = ["title", "description", "incidentDate", "incidentTime", "location"]
+    const required: (keyof ReportPayload)[] = ["title", "description", "incidentDate", "incidentTime"]
+    if (payload.category !== "layanan" || servicePolicy.locationMode === "required") required.push("location")
     if (payload.category === "kehilangan-temuan") required.push("reportType", "itemName")
     if (payload.category === "fasilitas") {
       if (!payload.facilities.length) throw new ReportError("Pilih minimal satu objek fasilitas.")
@@ -77,7 +84,10 @@ export function parsePayload(raw: unknown, submitted: boolean, now = new Date())
       const names = payload.facilities.map((name) => (name === "Lainnya" ? payload.otherFacility : name).toLocaleLowerCase("id-ID"))
       if (new Set(names).size !== names.length) throw new ReportError("Objek fasilitas yang sama tidak perlu dipilih dua kali.")
     }
-    if (payload.category === "layanan") required.push("service", "program")
+    if (payload.category === "layanan") {
+      required.push("service")
+      if (getReportServicePolicy(payload.service).requiresProgram) required.push("program")
+    }
     if (payload.category === "lainnya") required.push("otherCategory")
     if (required.some((key) => !payload[key])) throw new ReportError("Lengkapi informasi laporan sebelum mengirim.")
   }

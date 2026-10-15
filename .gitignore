@@ -46,7 +46,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/docs
+/docs/*
+!/docs/audit-satpam-e968fa0-38b0a96.md
 /CLAUDE.md
 
 # Private report uploads, never commit personal data.

@@ -4,6 +4,17 @@ import type { CurrentUser } from "../../src/lib/auth/current-user"
 
 // Development fixtures only. These IDs never become authenticated database identities.
 export const demoUsers: Record<string, CurrentUser> = {
+  "tefa@gmail.com": {
+    id: "dummy-tefa-001",
+    name: "Nadia Rahmawati",
+    email: "tefa@gmail.com",
+    identifier: "TEFA-001",
+    username: "tefa",
+    unit: "Tim Layanan JTI",
+    studyProgram: "Tidak berlaku",
+    status: "Aktif",
+    role: "tefa",
+  },
   "pelapor@gmail.com": {
     id: "dummy-pelapor-001",
     name: "Ayu Santoso",

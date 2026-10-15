@@ -206,7 +206,7 @@ export class DrizzleReportRepository implements ReportRepository {
       fields = [{ label: "Objek fasilitas", value: objects.map((object) => object.name).join(", ") }]
     } else if (row.category === "layanan") {
       const [detail] = await this.db.select().from(reportServiceDetails).where(eq(reportServiceDetails.reportId, id))
-      if (detail) fields = [{ label: "Jenis layanan", value: detail.serviceName }, { label: "Unit atau program studi", value: detail.program }]
+      if (detail) fields = [{ label: "Jenis layanan", value: detail.serviceName }, ...(detail.program ? [{ label: "Unit atau program studi", value: detail.program }] : [])]
     } else {
       const [detail] = await this.db.select().from(reportOtherDetails).where(eq(reportOtherDetails.reportId, id))
       if (detail) fields = [{ label: "Kategori umum", value: detail.categoryText }]

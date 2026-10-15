@@ -1,5 +1,7 @@
 import type { PublicAttachment } from "../application/ports"
 import { getIncidentTimeMode, isUuid, parsePayload, ReportError, type ReportPayload } from "../domain/report"
+import { getReportServicePolicy } from "../domain/service-policy"
+import { getReportLocationPresentation } from "../domain/report-location-presentation"
 
 export type ReportSubmissionSnapshot = {
   payload: ReportPayload
@@ -36,14 +38,17 @@ export function reportSubmissionRows(payload: ReportPayload) {
     { label: "Tanggal kejadian", value: new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(`${payload.incidentDate}T00:00:00+07:00`)) },
     { label: "Waktu kejadian", value: `${payload.incidentTime.replace(":", ".")} WIB` },
     ]),
-    { label: "Lokasi kejadian", value: payload.category === "fasilitas" && payload.location === "Lainnya" ? payload.otherLocation : payload.location },
+    ...(payload.location && getReportLocationPresentation(payload.category, payload.service).visible ? [{ label: getReportLocationPresentation(payload.category, payload.service).label, value: payload.category === "fasilitas" && payload.location === "Lainnya" ? payload.otherLocation : payload.location }] : []),
   ]
   if (payload.category === "kehilangan-temuan") rows.push(
     { label: "Jenis laporan", value: payload.reportType },
     { label: "Nama barang", value: payload.itemName },
   )
   if (payload.category === "fasilitas") rows.push({ label: "Objek fasilitas", value: payload.facilities.map((name) => name === "Lainnya" ? payload.otherFacility : name).join(", ") })
-  if (payload.category === "layanan") rows.push({ label: "Jenis layanan", value: payload.service }, { label: "Unit / program studi", value: payload.program })
+  if (payload.category === "layanan") {
+    rows.push({ label: "Jenis layanan", value: payload.service })
+    if (getReportServicePolicy(payload.service).requiresProgram && payload.program) rows.push({ label: "Unit / program studi", value: payload.program })
+  }
   if (payload.category === "lainnya") rows.push({ label: "Kategori umum", value: payload.otherCategory })
   rows.push({ label: "Deskripsi laporan", value: payload.description })
   return rows

@@ -7,8 +7,8 @@ import { PageHeader } from "@/components/layout/page-header"
 
 const categories = [
   { title: "Kehilangan & Temuan", description: "Laporkan barang hilang atau barang yang ditemukan.", icon: PackageSearch, href: "/pelapor/buat-laporan/kehilangan-temuan" },
-  { title: "Laporan Fasilitas", description: "Laporkan kerusakan atau masalah fasilitas JTI.", icon: Construction, href: "/pelapor/buat-laporan/fasilitas" },
-  { title: "Laporan Layanan", description: "Laporkan kendala layanan internal JTI.", icon: Globe2, href: "/pelapor/buat-laporan/layanan" },
+  { title: "Kerusakan Fasilitas", description: "Laporkan objek rusak atau tidak berfungsi. Kebersihan area termasuk Laporan Layanan.", icon: Construction, href: "/pelapor/buat-laporan/fasilitas" },
+  { title: "Laporan Layanan", description: "Laporkan kendala administrasi, kebersihan, keamanan, atau layanan JTI.", icon: Globe2, href: "/pelapor/buat-laporan/layanan" },
   { title: "Laporan Lainnya", description: "Sampaikan laporan umum di luar kategori utama.", icon: ClipboardCheck, href: "/pelapor/buat-laporan/lainnya" },
 ]
 

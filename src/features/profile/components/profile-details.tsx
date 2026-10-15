@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
-const roleLabel = { pelapor: "Pelapor", satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan", admin: "Admin Sistem" } as const
+const roleLabel = { pelapor: "Pelapor", satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan", admin: "Admin Sistem", tefa: "TEFA" } as const
 
 function DetailItem({ label, value, icon: Icon }: { label: string; value: string; icon: typeof UserRound }) {
   return <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/40 p-3.5"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Icon className="size-4" aria-hidden="true" /></span><div className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 truncate text-sm font-medium text-foreground">{value}</dd></div></div>

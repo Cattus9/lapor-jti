@@ -10,7 +10,11 @@ import { ReportSubmissionPreview } from "./report-submission-preview"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
 import { useReportSubmissionFeedback } from "@/components/report-submission-feedback-provider"
 import { formatCalendarDate, getIncidentDateTimeInWib, getTodayInWib } from "../domain/report-date"
-import { studyPrograms } from "../domain/catalog"
+import { getReportServicePolicy } from "../domain/service-policy"
+import { ServiceReportFields } from "./service-report-fields"
+import { ReportLocationField } from "./report-location-field"
+import { getReportDescriptionPresentation, getReportDraftDescription, getReportServiceTitlePlaceholder } from "../domain/report-form-copy"
+import { getReportLocationPresentation } from "../domain/report-location-presentation"
 import { FacilityMappingFields } from "./facility-mapping-fields"
 import { availableFacilities, type OperationalCatalog } from "@/features/operations/domain/operations"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
@@ -53,8 +57,8 @@ import { ReportStepper, reportSteps } from "./report-stepper"
 
 const categories = [
   { value: "kehilangan-temuan", label: "Kehilangan & Temuan", icon: PackageSearch, hint: "Barang hilang atau barang yang ditemukan", iconClassName: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300" },
-  { value: "fasilitas", label: "Laporan Fasilitas", icon: Wrench, hint: "Kerusakan atau masalah fasilitas JTI", iconClassName: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300" },
-  { value: "layanan", label: "Laporan Layanan", icon: Headphones, hint: "Kendala layanan internal JTI", iconClassName: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300" },
+  { value: "fasilitas", label: "Kerusakan Fasilitas", icon: Wrench, hint: "Objek rusak atau tidak berfungsi, bukan kebersihan area", iconClassName: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300" },
+  { value: "layanan", label: "Laporan Layanan", icon: Headphones, hint: "Administrasi, kebersihan, keamanan, dan layanan JTI", iconClassName: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300" },
   { value: "lainnya", label: "Laporan Lainnya", icon: FileText, hint: "Laporan umum di luar kategori utama", iconClassName: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300" },
 ]
 
@@ -174,9 +178,11 @@ function CategoryCard({ value, selected, onSelect }: { value: (typeof categories
   )
 }
 
-function ReportGuidance({ category }: { category: string }) {
+function ReportGuidance({ category, service }: { category: string; service: string }) {
   const selectedCategory = categories.find((item) => item.value === category)
-  const guidance = [[MapPin, "Sebutkan lokasi yang jelas"], [Clock3, "Atur waktu khusus bila kejadian lebih awal"], [ImagePlus, "Tambahkan foto bila membantu"]] as const
+  const locationPresentation = getReportLocationPresentation(category, service)
+  const locationGuidance = !locationPresentation.visible ? "Jelaskan kendala pada deskripsi" : locationPresentation.required ? "Sebutkan lokasi yang jelas" : "Tambahkan lokasi atau kanal jika membantu"
+  const guidance = [[MapPin, locationGuidance], [Clock3, "Atur waktu khusus bila kejadian lebih awal"], [ImagePlus, "Tambahkan foto bila membantu"]] as const
   return (
     <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
       <Card className="rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardHeader className="gap-3 p-5 pb-4"><div className="flex size-10 items-center justify-center rounded-xl border border-border bg-background shadow-2xs"><ShieldCheck className="size-5 text-primary" aria-hidden="true" /></div><div className="space-y-1"><CardTitle className="text-base">Sebelum mengirim</CardTitle><CardDescription>Lengkapi detail agar laporan lebih cepat ditangani.</CardDescription></div></CardHeader><CardContent className="space-y-4 p-5 pt-0"><div className="space-y-3 border-t border-border/60 pt-4">{guidance.map(([Icon, text]) => <div key={text} className="flex items-start gap-2.5 text-sm text-muted-foreground"><Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{text}</span></div>)}</div>{selectedCategory ? <div className="rounded-lg bg-muted/60 p-3 text-sm"><p className="font-medium text-foreground">Pengelola otomatis</p><p className="mt-1 text-muted-foreground">Laporan <span className="font-medium text-foreground">{selectedCategory.label}</span> akan diteruskan ke {category === "kehilangan-temuan" ? "Satpam" : category === "fasilitas" ? "Teknisi" : "Manajemen Jurusan"}.</p></div> : <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">Pilih kategori untuk melihat pengelola laporan.</div>}</CardContent></div></Card>
@@ -212,7 +218,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>(initialDraft?.payload.facilities ?? [])
   const [otherFacility, setOtherFacility] = useState(initialDraft?.payload.otherFacility ?? "")
   const [service, setService] = useState(initialDraft?.payload.service ?? "")
-  const [program, setProgram] = useState(initialDraft?.payload.program ?? "")
+  const [program, setProgram] = useState(() => getReportServicePolicy(initialDraft?.payload.service ?? "").requiresProgram ? initialDraft?.payload.program ?? "" : "")
   const [attachments, setAttachments] = useState<File[]>([])
   const [useCustomTime, setUseCustomTime] = useState(() => Boolean(initialDraft && getIncidentTimeMode(initialDraft.payload) === "custom"))
   const [incidentDate, setIncidentDate] = useState<Date | undefined>(() => initialDraft?.payload.incidentDate ? new Date(initialDraft.payload.incidentDate + "T00:00:00") : undefined)
@@ -230,7 +236,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
     const fields = new FormData(formRef.current!)
     const text = (name: string) => String(fields.get(name) ?? "")
     const date = useCustomTime && incidentDate ? formatCalendarDate(incidentDate) : ""
-    return { category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program, otherCategory: text("other-category") }
+    return { category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location: category === "layanan" && getReportServicePolicy(service).locationMode === "hidden" ? "" : location, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program: getReportServicePolicy(service).requiresProgram ? program : "", otherCategory: text("other-category") }
   }
   async function save(submit: boolean, confirmed?: ReportSubmissionSnapshot) {
     // Only the preview's explicit confirmation can initiate a report submission.
@@ -286,7 +292,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   }
   const validFacilityCatalog = Boolean(catalog && (location === "Lainnya" || catalog.locations.some((row) => row.name === location)) && selectedFacilities.every((name) => name === "Lainnya" || availableFacilities(catalog, location).some((row) => row.name === name)))
   const hasCompleteFacilityDetails = Boolean(validFacilityCatalog && location && selectedFacilities.length && (location !== "Lainnya" || otherLocation.trim()) && (!selectedFacilities.includes("Lainnya") || otherFacility.trim()))
-  const canSubmit = Boolean(category && (!useCustomTime || incidentDate && incidentTime && !incidentDateError)) && (category !== "kehilangan-temuan" || Boolean(reportType)) && (category !== "fasilitas" || hasCompleteFacilityDetails) && (category !== "layanan" || Boolean(catalog && services.includes(service) && program))
+  const canSubmit = Boolean(category && (!useCustomTime || incidentDate && incidentTime && !incidentDateError)) && (category !== "kehilangan-temuan" || Boolean(reportType)) && (category !== "fasilitas" || hasCompleteFacilityDetails) && (category !== "layanan" || Boolean(catalog && services.includes(service) && (!getReportServicePolicy(service).requiresProgram || program)))
   const titlePlaceholder = category === "kehilangan-temuan"
     ? reportType === "Kehilangan"
       ? "Contoh: Dompet hilang di Ruang 3.4"
@@ -296,7 +302,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
     : category === "fasilitas"
       ? "Contoh: Proyektor di Lab Multimedia tidak menyala"
       : category === "layanan"
-        ? "Contoh: Tidak dapat mengakses JTI E-Learning"
+        ? getReportServiceTitlePlaceholder(service)
         : "Contoh: Usulan perbaikan papan informasi digital"
 
   function addLinkedFile(file: File) {
@@ -304,11 +310,13 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   }
   const remainingAttachments = Math.max(0, 4 - retained.length - attachments.length)
   const stepIndex = reportSteps.findIndex((item) => item.id === step)
+  const descriptionPresentation = getReportDescriptionPresentation(category, service)
 
   return (
     <div className="space-y-6">
       <ReportStepper current={stepIndex} />
-      <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><FileText className="size-4 text-primary" aria-hidden="true" />Formulir laporan</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-5 md:p-6">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-(--report-form-desktop-columns)">
+      <Card className="min-w-0 gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><FileText className="size-4 text-primary" aria-hidden="true" />Formulir laporan</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-5 md:p-6">
         <form ref={formRef} tabIndex={-1} className={cn("space-y-7", step === "review" && "hidden")} onSubmit={handleSubmit} aria-busy={pending}>
           <fieldset disabled={pending || Boolean(preview)} className="space-y-7">
             <div hidden={step !== "category"} className="space-y-6">
@@ -322,12 +330,12 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
                 {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field></> : null}
                 {category === "fasilitas" && catalog ? <FacilityMappingFields key={draftId} disabled={pending || Boolean(preview)} catalog={catalog} location={location} onLocationChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} facilities={selectedFacilities} onFacilitiesChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /> : null}
                 {category === "fasilitas" || category === "layanan" ? catalogResource.loading ? <p role="status" className="text-sm text-muted-foreground">Memuat katalog operasional...</p> : catalogResource.error ? <div className="space-y-2"><FieldError>{catalogResource.error}</FieldError><Button type="button" variant="outline" onClick={() => setCatalogRevision((value) => value + 1)}>Coba lagi</Button></div> : null : null}
-                {category === "layanan" ? <div className="grid gap-5 sm:grid-cols-2"><SelectField id="service" label="Jenis layanan" placeholder="Pilih layanan" value={service} onValueChange={setService} options={services} /><SelectField id="program" label="Unit atau program studi" placeholder="Pilih unit terkait" value={program} onValueChange={setProgram} options={studyPrograms} /></div> : null}
+                {category === "layanan" ? <ServiceReportFields services={services} service={service} program={program} disabled={pending || Boolean(preview)} onServiceChange={(next) => { if (getReportServicePolicy(next).locationMode === "hidden") setLocation(""); setService(next) }} onProgramChange={setProgram} /> : null}
                 {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak lagi tersedia. Pilih layanan yang aktif atau gunakan kategori Laporan Lainnya.</FieldError> : null}
                 {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
-                {category !== "fasilitas" ? <Field><FieldLabel htmlFor="location">Lokasi kejadian</FieldLabel><Input id="location" name="location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-11 bg-background/70" placeholder="Contoh: Gedung JTI, Ruang 3.4" required /></Field> : null}
+                {category !== "fasilitas" ? <ReportLocationField category={category} service={service} value={location} onValueChange={setLocation} disabled={pending || Boolean(preview)} /> : null}
                 <Field>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
                     <FieldLabel htmlFor="custom-incident-time">Gunakan tanggal &amp; waktu tertentu</FieldLabel>
                     <Switch id="custom-incident-time" checked={useCustomTime} disabled={pending || Boolean(preview)} aria-describedby="incident-time-mode-description" onCheckedChange={(checked) => {
                       if (checked) {
@@ -338,7 +346,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
                       setUseCustomTime(checked)
                     }} />
                   </div>
-                  <FieldDescription id="incident-time-mode-description">{useCustomTime ? "Pilih tanggal dan waktu kejadian yang sesuai (WIB)." : "Tanggal dan waktu kejadian otomatis dicatat saat laporan dikirim (WIB). Aktifkan jika kejadian berlangsung pada waktu lain."}</FieldDescription>
+                  <FieldDescription id="incident-time-mode-description">Aktifkan jika kejadian berlangsung pada waktu lain.</FieldDescription>
                 </Field>
                 {useCustomTime ? (
                   <div className="grid gap-5 sm:grid-cols-2">
@@ -362,12 +370,12 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
                   </div>
                 ) : null}
                 <Field>
-                  <FieldLabel htmlFor="description">Deskripsi laporan</FieldLabel>
+                  <FieldLabel htmlFor="description">{descriptionPresentation.label}</FieldLabel>
                   <Textarea
                     id="description"
                     name="description"
-                    defaultValue={sourceDraft ? [sourceDraft.payload.description, sourceDraft.payload.category === "kehilangan-temuan" ? sourceDraft.payload.itemDetails : ""].filter(Boolean).join("\n\n") : undefined}
-                    placeholder={category === "kehilangan-temuan" ? "Jelaskan ciri barang dan kronologi kehilangan atau penemuan." : "Jelaskan kronologi, kondisi, atau kendala secara singkat dan jelas."}
+                    defaultValue={getReportDraftDescription(sourceDraft?.payload)}
+                    placeholder={descriptionPresentation.placeholder}
                     required
                   />
                   <FieldDescription>
@@ -411,7 +419,8 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
         </form>
         {step === "review" && preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} onClose={() => { if (!busy.current) { releasePreview(); setPreview(null); setError(""); setStep("details") } }} onConfirm={() => { void save(true, preview) }} /> : null}
       </CardContent></div></Card>
-      {step === "review" ? <ReportGuidance category={category} /> : null}
+      <ReportGuidance category={category} service={service} />
+      </div>
     </div>
   )
 }

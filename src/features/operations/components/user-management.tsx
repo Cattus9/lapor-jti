@@ -20,6 +20,7 @@ const roleTones: Record<OperationalRole, BadgeTone> = {
   satpam: "teal",
   teknisi: "warning",
   manajemen: "violet",
+  tefa: "teal",
 }
 const managedUsersKey = "laporjti:managed-user-ids"
 const managedUsersChanged = "laporjti:managed-users-changed"

@@ -11,9 +11,10 @@ import { accounts, sessions, users, verifications } from "@/db/schema"
 import { getAuthEnvironment } from "./environment"
 import { appRoles } from "./roles"
 
-function createAuth() {
+// Injectable database keeps integration checks on one rollback-only transaction.
+// Runtime callers continue using the lazy singleton below.
+export function createAuth(db = getDb()) {
   const environment = getAuthEnvironment()
-  const db = getDb()
   return betterAuth({
     appName: "AspirasiJTI",
     ...environment,
