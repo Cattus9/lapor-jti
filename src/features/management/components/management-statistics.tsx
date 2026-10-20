@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react"
 import Link from "next/link"
 import {
   Armchair,
+  Headphones,
   Building2,
   CalendarDays,
   ChartNoAxesCombined,
@@ -339,17 +340,17 @@ function CategoryComposition({ summary, totalReports, periodLabel }: { summary: 
   )
 }
 
-const handlerIcons = { satpam: ShieldCheck, teknisi: Wrench, manajemen: Building2 }
+const handlerIcons = { satpam: ShieldCheck, teknisi: Wrench, manajemen: Building2, tefa: Headphones }
 
 export function ManagementHandlerOverview({ handlers, total }: { handlers: ManagementStatisticsData["handlers"]; total: number }) {
-  const handlerSummary = (["satpam", "teknisi", "manajemen"] as const).map((role) => ({ role, handler: handlerLabels[role], active: handlers.find((r) => r.handler === role)?.active ?? 0, total: handlers.find((r) => r.handler === role)?.total ?? 0 })).sort((a, b) => b.active - a.active)
+  const handlerSummary = (["satpam", "teknisi", "manajemen", "tefa"] as const).map((role) => ({ role, handler: handlerLabels[role], active: handlers.find((r) => r.handler === role)?.active ?? 0, total: handlers.find((r) => r.handler === role)?.total ?? 0 })).sort((a, b) => b.active - a.active)
   const highestHandlerCount = Math.max(1, ...handlerSummary.map((item) => item.active))
   const activeReports = handlerSummary.reduce((sum, item) => sum + item.active, 0)
 
   return (
     <AnalyticsCard icon={ListChecks} title="Aktif per penanggung jawab" description="Bandingkan jumlah tiket yang belum selesai di tiap peran.">
       {total ? <>
-      <dl className="grid gap-6 md:grid-cols-3">
+      <dl className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         {handlerSummary.map((item) => {
           const Icon = handlerIcons[item.role]
           return (

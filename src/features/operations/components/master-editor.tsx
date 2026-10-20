@@ -18,6 +18,7 @@ export function MasterEditor({ entity, record, catalog, onClose, onSaved }: { en
   const { notify } = useActivityNotifications(), busy = useRef(false)
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(record?.name ?? ""), [isActive, setActive] = useState(record?.isActive ?? true)
+  const [handlerRole, setHandlerRole] = useState(record?.handlerRole ?? "manajemen")
   const [kind, setKind] = useState(record?.kind ?? "floor"), [order, setOrder] = useState(String(record?.sortOrder ?? 0))
   const [areaId, setAreaId] = useState(record?.areaId ?? ""), [group, setGroup] = useState<string>(isFacilityCategory(record?.group) ? record.group : "")
   const legacyCategory = record?.group && !isFacilityCategory(record.group) ? record.group : undefined
@@ -37,7 +38,7 @@ export function MasterEditor({ entity, record, catalog, onClose, onSaved }: { en
     if (entity === "objects" && !isFacilityCategory(group)) { setError("Pilih kategori fasilitas dari daftar yang tersedia."); return }
     busy.current = true; setPending(true); setError("")
     try {
-      await saveOperation("/api/manajemen/configuration", { entity, id: record?.id, revision: record?.revision, name, isActive, kind, sortOrder: Number(order), areaId, group, objectIds })
+      await saveOperation("/api/manajemen/configuration", { entity, id: record?.id, revision: record?.revision, name, isActive, kind, sortOrder: Number(order), areaId, group, objectIds, ...(entity === "services" ? { handlerRole } : {}) })
       notify({ title: "Konfigurasi tersimpan", description: `${name.trim()} telah diperbarui. Laporan lama tetap tersimpan.`, tone: "success" }); onSaved(); setOpen(false)
     } catch (error) { setError(error instanceof Error ? error.message : "Perubahan belum tersimpan.") }
     finally { busy.current = false; setPending(false) }
@@ -46,6 +47,7 @@ export function MasterEditor({ entity, record, catalog, onClose, onSaved }: { en
     <DialogHeader className="border-b p-5 pr-12"><DialogTitle>{record ? "Ubah" : "Tambah"} {sectionNames[entity].toLowerCase()}</DialogTitle><DialogDescription>{entity === "locations" ? "Petakan lokasi dan fasilitas yang benar-benar tersedia." : "Perubahan katalog tidak mengubah laporan atau riwayat yang sudah tercatat."}</DialogDescription></DialogHeader>
     <form onSubmit={submit} className="space-y-5 p-5" aria-busy={pending}><fieldset disabled={pending} className="space-y-5">
       <MasterNameField entity={entity} value={name} onChange={setName} />
+      {entity === "services" ? <Field><FieldLabel htmlFor="service-handler">Pengelola laporan</FieldLabel><ConfigSelect id="service-handler" descriptionId="service-handler-hint" label="Pilih pengelola" value={handlerRole} onChange={(value) => setHandlerRole(value as "manajemen" | "tefa")} options={[{ value: "manajemen", label: "Manajemen Jurusan" }, { value: "tefa", label: "TEFA" }]} /><FieldDescription id="service-handler-hint">Berlaku untuk laporan baru. Mengubah nama atau pengelola tidak memindahkan laporan dan riwayat yang sudah ada.</FieldDescription></Field> : null}
       {entity === "areas" ? <div className="grid gap-4 sm:grid-cols-2"><Field><FieldLabel htmlFor="area-kind">Jenis</FieldLabel><ConfigSelect disabled={pending} id="area-kind" label="Jenis area" value={kind} onChange={setKind} options={[{ value: "floor", label: "Lantai gedung" }, { value: "area", label: "Area (tanpa lantai)" }]} /></Field><Field><FieldLabel htmlFor="area-order">Urutan tampilan</FieldLabel><Input id="area-order" type="number" min={0} max={999} step={1} value={order} onChange={(event) => setOrder(event.target.value)} required /></Field></div> : null}
       {entity === "objects" ? <FacilityCategoryField value={group} onChange={setGroup} disabled={pending} legacyCategory={legacyCategory} /> : null}
       {entity === "locations" ? <>

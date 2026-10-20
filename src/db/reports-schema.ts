@@ -5,7 +5,7 @@ import { reportCategories, reportStatuses, type ReportPayload } from "../feature
 
 export const reportCategory = pgEnum("report_category", reportCategories)
 export const reportStatus = pgEnum("report_status", reportStatuses)
-export const reportHandler = pgEnum("report_handler", ["satpam", "teknisi", "manajemen"])
+export const reportHandler = pgEnum("report_handler", ["satpam", "teknisi", "manajemen", "tefa"])
 const auditDates = () => ({ createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true, precision: 3 }).notNull().defaultNow().$onUpdate(() => new Date()) })
 const revision = () => integer("revision").notNull().default(0)
 export const locationAreas = pgTable("location_areas", {
@@ -14,7 +14,7 @@ export const locationAreas = pgTable("location_areas", {
 }, (t) => [check("location_area_kind_check", sql`${t.kind} in ('floor', 'area')`), uniqueIndex("location_areas_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
 export const locations = pgTable("locations", { id: text("id").primaryKey(), name: text("name").notNull().unique(), group: text("group_name").notNull(), areaId: text("area_id").notNull().references(() => locationAreas.id, { onDelete: "restrict" }), isActive: boolean("is_active").notNull().default(true), revision: revision() }, (t) => [index("locations_area_active_idx").on(t.areaId, t.isActive), uniqueIndex("locations_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
 export const facilityObjects = pgTable("facility_objects", { id: text("id").primaryKey(), name: text("name").notNull().unique(), group: text("group_name").notNull(), isActive: boolean("is_active").notNull().default(true), revision: revision() }, (t) => [uniqueIndex("facility_objects_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
-export const services = pgTable("services", { id: text("id").primaryKey(), name: text("name").notNull().unique(), isActive: boolean("is_active").notNull().default(true), revision: revision() }, (t) => [uniqueIndex("services_name_lower_unique").on(sql`lower(trim(${t.name}))`)])
+export const services = pgTable("services", { id: text("id").primaryKey(), name: text("name").notNull().unique(), handlerRole: text("handler_role").$type<"manajemen" | "tefa">().notNull().default("manajemen"), isActive: boolean("is_active").notNull().default(true), revision: revision() }, (t) => [uniqueIndex("services_name_lower_unique").on(sql`lower(trim(${t.name}))`), check("services_handler_check", sql`${t.handlerRole} in ('manajemen', 'tefa')`), index("services_handler_active_idx").on(t.handlerRole, t.isActive, t.id)])
 export const locationFacilityObjects = pgTable("location_facility_objects", {
   locationId: text("location_id").notNull().references(() => locations.id, { onDelete: "restrict" }),
   objectId: text("object_id").notNull().references(() => facilityObjects.id, { onDelete: "restrict" }),
@@ -42,14 +42,14 @@ export const reports = pgTable("reports", {
   check("reports_completion_status_check", sql`(${t.status} = 'selesai') = (${t.completedAt} is not null)`),
   check("reports_title_check", sql`length(trim(${t.title})) between 1 and 200`),
   check("reports_description_check", sql`length(trim(${t.description})) between 1 and 5000`),
-  check("reports_handler_category_check", sql`(${t.category} = 'kehilangan-temuan' and ${t.handlerRole} = 'satpam') or (${t.category} = 'fasilitas' and ${t.handlerRole} = 'teknisi') or (${t.category} in ('layanan', 'lainnya') and ${t.handlerRole} = 'manajemen')`),
+  check("reports_handler_category_check", sql`(${t.category} = 'kehilangan-temuan' and ${t.handlerRole} = 'satpam') or (${t.category} = 'fasilitas' and ${t.handlerRole} = 'teknisi') or (${t.category} = 'layanan' and ${t.handlerRole} in ('manajemen', 'tefa')) or (${t.category} = 'lainnya' and ${t.handlerRole} = 'manajemen')`),
   check("reports_status_category_check", sql`${t.status} in ('baru', 'diproses', 'selesai', 'ditolak') or (${t.category} in ('kehilangan-temuan', 'fasilitas') and ${t.status} = 'diverifikasi') or (${t.category} = 'kehilangan-temuan' and ${t.status} in ('barang_teridentifikasi', 'diserahkan'))`),
 ])
 // Atomic per-year counter, not MAX(ticket)+1. Incremented in the submission transaction.
 export const reportTicketCounters = pgTable("report_ticket_counters", { year: integer("year").primaryKey(), value: bigint("value", { mode: "number" }).notNull() })
 export const reportLostFoundDetails = pgTable("report_lost_found_details", { reportId: uuid("report_id").primaryKey().references(() => reports.id, { onDelete: "cascade" }), kind: text("kind").notNull(), itemName: text("item_name").notNull(), itemDetails: text("item_details").notNull() }, (t) => [check("lost_found_kind_check", sql`${t.kind} in ('kehilangan', 'temuan')`)])
 export const reportFacilityObjects = pgTable("report_facility_objects", { id: uuid("id").defaultRandom().primaryKey(), reportId: uuid("report_id").notNull().references(() => reports.id, { onDelete: "cascade" }), objectId: text("object_id").references(() => facilityObjects.id, { onDelete: "restrict" }), objectText: text("object_text").notNull() }, (t) => [uniqueIndex("report_object_unique").on(t.reportId, t.objectText), index("report_facility_object_idx").on(t.objectId)])
-export const reportServiceDetails = pgTable("report_service_details", { reportId: uuid("report_id").primaryKey().references(() => reports.id, { onDelete: "cascade" }), serviceId: text("service_id").notNull().references(() => services.id, { onDelete: "restrict" }), serviceName: text("service_name").notNull(), program: text("program").notNull() })
+export const reportServiceDetails = pgTable("report_service_details", { reportId: uuid("report_id").primaryKey().references(() => reports.id, { onDelete: "cascade" }), serviceId: text("service_id").notNull().references(() => services.id, { onDelete: "restrict" }), serviceName: text("service_name").notNull(), program: text("program").notNull() }, (t) => [index("report_service_details_service_report_idx").on(t.serviceId, t.reportId)])
 export const reportOtherDetails = pgTable("report_other_details", { reportId: uuid("report_id").primaryKey().references(() => reports.id, { onDelete: "cascade" }), categoryText: text("category_text").notNull() })
 export const reportDrafts = pgTable("report_drafts", {
   id: uuid("id").primaryKey(), reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "restrict" }),

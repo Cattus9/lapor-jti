@@ -5,11 +5,11 @@ export const operationalRoles = ["pelapor", "satpam", "teknisi", "manajemen", "t
 export type OperationalRole = typeof operationalRoles[number]
 export const roleLabels: Record<OperationalRole, string> = { pelapor: "Pelapor", satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan", tefa: "TEFA" }
 export type MasterKind = "areas" | "locations" | "objects" | "services" | "officers"
-export type MasterRecord = { id: string; name: string; isActive: boolean; revision: number; kind?: string; sortOrder?: number; areaId?: string; group?: string; objectIds?: string[] }
+export type MasterRecord = { id: string; name: string; isActive: boolean; revision: number; kind?: string; sortOrder?: number; areaId?: string; group?: string; objectIds?: string[]; handlerRole?: "manajemen" | "tefa" }
 export type OperationalCatalog = Record<MasterKind, MasterRecord[]>
 export type UserRecord = { id: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; updatedAt: string }
 export type UsersPage = { items: UserRecord[]; total: number; page: number; pageSize: number }
-export type MasterCommand = { entity: MasterKind; id?: string; revision?: number; name: string; isActive: boolean; kind: "floor" | "area"; sortOrder: number; areaId: string; group: FacilityCategory | ""; objectIds: string[] }
+export type MasterCommand = { entity: MasterKind; id?: string; revision?: number; name: string; isActive: boolean; kind: "floor" | "area"; sortOrder: number; areaId: string; group: FacilityCategory | ""; objectIds: string[]; handlerRole?: "manajemen" | "tefa" }
 export type UserCommand = { id?: string; updatedAt?: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; password?: string }
 function object(raw: unknown) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new ReportError("Isian tidak valid.")
@@ -44,7 +44,8 @@ export function parseMasterCommand(raw: unknown): MasterCommand {
     if (!isFacilityCategory(category)) throw new ReportError("Pilih kategori fasilitas dari daftar yang tersedia.")
     group = category
   }
-  return { entity, id, revision: revision as number | undefined, name, isActive: active(value.isActive), kind: kind as "floor" | "area", sortOrder: Number(sortOrder), areaId: entity === "locations" ? text(value.areaId, "Area/lantai", 150) : "", group, objectIds }
+  if (entity === "services" && value.handlerRole !== undefined && value.handlerRole !== "manajemen" && value.handlerRole !== "tefa") throw new ReportError("Pengelola layanan tidak valid.")
+  return { entity, id, revision: revision as number | undefined, name, isActive: active(value.isActive), kind: kind as "floor" | "area", sortOrder: Number(sortOrder), areaId: entity === "locations" ? text(value.areaId, "Area/lantai", 150) : "", group, objectIds, ...(entity === "services" && value.handlerRole !== undefined ? { handlerRole: value.handlerRole as "manajemen" | "tefa" } : {}) }
 }
 export function parseUserCommand(raw: unknown): UserCommand {
   const value = object(raw), id = value.id as string | undefined, role = value.role as OperationalRole

@@ -178,14 +178,14 @@ function CategoryCard({ value, selected, onSelect }: { value: (typeof categories
   )
 }
 
-function ReportGuidance({ category, service }: { category: string; service: string }) {
+function ReportGuidance({ category, service, handlerRole }: { category: string; service: string; handlerRole?: "manajemen" | "tefa" }) {
   const selectedCategory = categories.find((item) => item.value === category)
   const locationPresentation = getReportLocationPresentation(category, service)
   const locationGuidance = !locationPresentation.visible ? "Jelaskan kendala pada deskripsi" : locationPresentation.required ? "Sebutkan lokasi yang jelas" : "Tambahkan lokasi atau kanal jika membantu"
   const guidance = [[MapPin, locationGuidance], [Clock3, "Atur waktu khusus bila kejadian lebih awal"], [ImagePlus, "Tambahkan foto bila membantu"]] as const
   return (
     <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-      <Card className="rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardHeader className="gap-3 p-5 pb-4"><div className="flex size-10 items-center justify-center rounded-xl border border-border bg-background shadow-2xs"><ShieldCheck className="size-5 text-primary" aria-hidden="true" /></div><div className="space-y-1"><CardTitle className="text-base">Sebelum mengirim</CardTitle><CardDescription>Lengkapi detail agar laporan lebih cepat ditangani.</CardDescription></div></CardHeader><CardContent className="space-y-4 p-5 pt-0"><div className="space-y-3 border-t border-border/60 pt-4">{guidance.map(([Icon, text]) => <div key={text} className="flex items-start gap-2.5 text-sm text-muted-foreground"><Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{text}</span></div>)}</div>{selectedCategory ? <div className="rounded-lg bg-muted/60 p-3 text-sm"><p className="font-medium text-foreground">Pengelola otomatis</p><p className="mt-1 text-muted-foreground">Laporan <span className="font-medium text-foreground">{selectedCategory.label}</span> akan diteruskan ke {category === "kehilangan-temuan" ? "Satpam" : category === "fasilitas" ? "Teknisi" : "Manajemen Jurusan"}.</p></div> : <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">Pilih kategori untuk melihat pengelola laporan.</div>}</CardContent></div></Card>
+      <Card className="rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardHeader className="gap-3 p-5 pb-4"><div className="flex size-10 items-center justify-center rounded-xl border border-border bg-background shadow-2xs"><ShieldCheck className="size-5 text-primary" aria-hidden="true" /></div><div className="space-y-1"><CardTitle className="text-base">Sebelum mengirim</CardTitle><CardDescription>Lengkapi detail agar laporan lebih cepat ditangani.</CardDescription></div></CardHeader><CardContent className="space-y-4 p-5 pt-0"><div className="space-y-3 border-t border-border/60 pt-4">{guidance.map(([Icon, text]) => <div key={text} className="flex items-start gap-2.5 text-sm text-muted-foreground"><Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{text}</span></div>)}</div>{selectedCategory ? <div className="rounded-lg bg-muted/60 p-3 text-sm"><p className="font-medium text-foreground">Pengelola otomatis</p><p className="mt-1 text-muted-foreground">Laporan <span className="font-medium text-foreground">{selectedCategory.label}</span> akan diteruskan ke {category === "kehilangan-temuan" ? "Satpam" : category === "fasilitas" ? "Teknisi" : category === "layanan" ? handlerRole === "tefa" ? "TEFA" : handlerRole === "manajemen" ? "Manajemen Jurusan" : "pengelola layanan terpilih" : "Manajemen Jurusan"}.</p></div> : <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">Pilih kategori untuk melihat pengelola laporan.</div>}</CardContent></div></Card>
       <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-sm shadow-2xs"><Building2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><p className="leading-relaxed text-muted-foreground">Laporan yang dikirim dapat dipantau melalui menu Laporan Saya.</p></div>
     </aside>
   )
@@ -419,7 +419,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
         </form>
         {step === "review" && preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} onClose={() => { if (!busy.current) { releasePreview(); setPreview(null); setError(""); setStep("details") } }} onConfirm={() => { void save(true, preview) }} /> : null}
       </CardContent></div></Card>
-      <ReportGuidance category={category} service={service} />
+      <ReportGuidance category={category} service={service} handlerRole={catalog?.services.find((row) => row.name === service)?.handlerRole} />
       </div>
     </div>
   )

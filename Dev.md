@@ -61,7 +61,7 @@ Aturan penerapan:
 - `BETTER_AUTH_SECRET` adalah secret server runtime dan wajib minimal 32 karakter. `BETTER_AUTH_URL` harus origin HTTP(S) yang tepat, tanpa path/query/fragment; production wajib HTTPS. Hostname dan port browser harus cocok persis dengan URL auth agar cookie/origin tidak salah.
 - Provider Google Workspace belum dikonfigurasi saat ini. Jangan mengklaim SSO aktif atau menaruh kredensial OAuth di client. Bila provider ditambahkan, rahasia OAuth hanya di server dan role aplikasi tetap dikelola database.
 - Perubahan role/status harus mempertimbangkan pencabutan session, aturan agar pengelola aktif terakhir tidak terkunci, pemeriksaan origin, audit tanpa kredensial, dan perlindungan update bersamaan.
-- TEFA tahap pertama hanya memiliki auth/akses role nyata serta frontend simulasi berlabel Data contoh. Jangan menghubungkan contoh TEFA ke laporan, lampiran, atau notifikasi nyata. Routing layanan JTI masih ke Manajemen sampai backend penanganan TEFA diimplementasikan dan diuji secara terpisah; lihat OPERATIONS.md.
+- Backend TEFA kini memakai metadata pengelola layanan di PostgreSQL dan frontend operasional nyata. Jangan mengembalikan data simulasi sebagai fallback runtime. Pertahankan snapshot pemilik laporan lama, batas API/lampiran/notifikasi antar-role, lock/transaksi status, dan routing dari katalog aktif. Rincian migration 0014, indeks, relasi, serta tes rollback/HTTP/fresh-install ada di OPERATIONS.md.
 
 ## Database: PostgreSQL di Docker wajib
 

@@ -12,9 +12,9 @@ test("Handler labels and metrics stay together in responsive definition-list gro
   const html = renderToStaticMarkup(createElement(ManagementHandlerOverview, {
     handlers: [{ handler: "satpam", active: 2, total: 3 }, { handler: "teknisi", active: 4, total: 6 }], total: 9,
   }))
-  assert.match(html, /<dl class="grid gap-6 md:grid-cols-3">/)
+  assert.match(html, /<dl class="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">/)
   const groups = [...html.matchAll(/<dt[^>]*>(.*?)<\/dt>\s*<dd[^>]*>(.*?)<\/dd>/g)]
-  assert.equal(groups.length, 3)
+  assert.equal(groups.length, 4)
   assert.match(groups[0][1], /Teknisi/)
   assert.match(groups[0][2], />4<\/span>/)
   assert.match(groups[0][2], /aktif.*dari 6 tiket/)
@@ -22,6 +22,7 @@ test("Handler labels and metrics stay together in responsive definition-list gro
   assert.match(groups[1][2], />2<\/span>/)
   assert.match(groups[1][2], /aktif.*dari 3 tiket/)
   assert.match(groups[2][1], /Manajemen Jurusan/)
+  assert.match(groups[3][1], /TEFA/)
   assert.match(groups[2][2], /text-muted-foreground">0<\/span>/)
   assert.match(html, /width:100%/)
   assert.match(html, /width:50%/)
@@ -36,7 +37,7 @@ test("A closed workload shows zero active tickets; an empty period stays an empt
     handlers: [{ handler: "satpam", active: 0, total: 3 }], total: 3,
   }))
   assert.match(closed, /0 dari 3 tiket masih aktif/)
-  assert.equal((closed.match(/width:0%/g) ?? []).length, 3)
+  assert.equal((closed.match(/width:0%/g) ?? []).length, 4)
   assert.doesNotMatch(closed, /NaN|Infinity|Tidak ada laporan pada periode ini/)
   const empty = renderToStaticMarkup(createElement(ManagementHandlerOverview, { handlers: [], total: 0 }))
   assert.match(empty, /Tidak ada laporan pada periode ini/)

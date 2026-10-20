@@ -6,9 +6,11 @@ export const reportCategories = ["kehilangan-temuan", "fasilitas", "layanan", "l
 export const reportStatuses = ["baru", "diverifikasi", "diproses", "barang_teridentifikasi", "diserahkan", "selesai", "ditolak"] as const
 export type ReportCategory = typeof reportCategories[number]
 export type ReportStatus = typeof reportStatuses[number]
-export type ReportHandler = "satpam" | "teknisi" | "manajemen"
+export type ReportHandler = "satpam" | "teknisi" | "manajemen" | "tefa"
 export type ReportActor = { id: string; role: string }
 export const statusLabels: Record<ReportStatus, string> = { baru: "Baru", diverifikasi: "Diverifikasi", diproses: "Diproses", barang_teridentifikasi: "Barang teridentifikasi", diserahkan: "Diserahkan", selesai: "Selesai", ditolak: "Ditolak" }
+// Defaults for non-service categories. Service submissions resolve their actual
+// owner from the validated services row inside the repository transaction.
 export const handlerByCategory: Record<ReportCategory, ReportHandler> = { "kehilangan-temuan": "satpam", fasilitas: "teknisi", layanan: "manajemen", lainnya: "manajemen" }
 export const lifecycleByCategory: Record<ReportCategory, readonly ReportStatus[]> = {
   "kehilangan-temuan": ["baru", "diverifikasi", "diproses", "barang_teridentifikasi", "diserahkan", "selesai"],

@@ -5,7 +5,7 @@ import type { ManagementFilter, MonitoringReportCategory } from "../types"
 
 export const managementCategories = ["layanan", "lainnya"] as const
 export const categoryLabels: Record<ReportCategory, MonitoringReportCategory> = { "kehilangan-temuan": "Kehilangan & Temuan", fasilitas: "Fasilitas", layanan: "Layanan", lainnya: "Lainnya" }
-export const handlerLabels = { satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan" } as const
+export const handlerLabels = { satpam: "Satpam", teknisi: "Teknisi", manajemen: "Manajemen Jurusan", tefa: "TEFA" } as const
 export function requireManagement(actor: ReportActor) {
   if (actor.role !== "manajemen") throw new ReportError("Akses hanya untuk Manajemen.", 403)
 }

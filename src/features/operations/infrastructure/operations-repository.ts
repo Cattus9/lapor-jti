@@ -80,7 +80,8 @@ export class OperationsRepository {
         const [saved] = before ? await tx.update(facilityObjects).set(values).where(eq(facilityObjects.id, id)).returning() : await tx.insert(facilityObjects).values(values).returning()
         after = saved
       } else if (input.entity === "services") {
-        const [saved] = before ? await tx.update(services).set(base).where(eq(services.id, id)).returning() : await tx.insert(services).values(base).returning()
+        const values = { ...base, ...(input.handlerRole ? { handlerRole: input.handlerRole } : {}) }
+        const [saved] = before ? await tx.update(services).set(values).where(eq(services.id, id)).returning() : await tx.insert(services).values(values).returning()
         after = saved
       } else {
         const [saved] = before ? await tx.update(securityOfficers).set(base).where(eq(securityOfficers.id, id)).returning() : await tx.insert(securityOfficers).values(base).returning()

@@ -46,7 +46,7 @@ test("Service program policy persists drafts/submissions, retains legacy snapsho
         const [detail] = await tx.select().from(reportServiceDetails).where(eq(reportServiceDetails.reportId, reportId))
         assert.equal(detail.program, "")
         const [core] = await tx.select().from(reports).where(eq(reports.id, reportId))
-        assert.equal(core.handlerRole, "manajemen")
+        assert.equal(core.handlerRole, jti.handlerRole)
         assert.equal(core.locationText, "")
         assert.ok(!(await service.detail(actor, reportId)).detail.fields.some((field) => field.label === "Unit atau program studi"))
         const retry = await service.write(actor, request, [], true)

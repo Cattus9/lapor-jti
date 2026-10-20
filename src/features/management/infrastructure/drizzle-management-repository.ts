@@ -1,6 +1,7 @@
 import "server-only"
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
+import { sequentialQueries } from "@/db/sequential"
 import { users, reports, reportAttachments, reportStatusHistory, reportFacilityObjects, reportServiceDetails, reportOtherDetails, reportLostFoundDetails } from "@/db/schema"
 import { notifications } from "@/db/reports-schema"
 import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor } from "../../reports/domain/report"
@@ -8,10 +9,11 @@ import { defaultReportFilters, reportDateBounds } from "../../reports/domain/rep
 import { DrizzleReportRepository } from "../../reports/infrastructure/drizzle-report-repository"
 import { categoryLabels, handlerLabels, managementCategories, managementExpectedStatus, type ManagementCommand } from "../domain/management"
 import type { ManagementRepository } from "../application/ports"
-import type { ManagementDetail, ManagementFilter, ManagementPage, ManagementReport, ManagementStatisticsData, MonitoringReportStatus } from "../types"
+import type { ManagementDashboard, ManagementDetail, ManagementFilter, ManagementPage, ManagementReport, ManagementStatisticsData, MonitoringReportStatus } from "../types"
 
 const pageSize = 20
-const scope = and(eq(reports.handlerRole, "manajemen"), inArray(reports.category, [...managementCategories]))!
+type Operator = "manajemen" | "tefa"
+const operatorScope = (operator: Operator) => and(eq(reports.handlerRole, operator), inArray(reports.category, operator === "tefa" ? ["layanan"] : [...managementCategories]))!
 const active = notInArray(reports.status, ["selesai", "ditolak"])
 const dateLabel = (value: Date) => new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(value)
 const dayLabel = (value: Date) => new Date(value.getTime() + 7 * 3600000).toISOString().slice(0, 10)
@@ -27,11 +29,13 @@ function cursorValue(value?: string) {
 }
 type Database = ReturnType<typeof getDb>
 type Row = { report: typeof reports.$inferSelect; reporter: string; unit: string | null }
-function criteria(filter: ManagementFilter, operational: boolean, withDates = true) {
+function criteria(filter: ManagementFilter, operational: boolean, withDates = true, operator: Operator = "manajemen") {
   const bounds = reportDateBounds({ ...defaultReportFilters, period: filter.period, from: filter.from, to: filter.to })
   const q = escaped(filter.query)
   const date = filter.dateBasis === "completed" ? reports.completedAt : reports.submittedAt
-  return and(operational ? scope : undefined,
+  return and(operational || operator === "tefa" ? operatorScope(operator) : undefined,
+    filter.lifecycle === "active" ? active : filter.lifecycle === "closed" ? inArray(reports.status, ["selesai", "ditolak"]) : undefined,
+    filter.serviceId ? sql`exists (select 1 from ${reportServiceDetails} where ${reportServiceDetails.reportId} = ${reports.id} and ${reportServiceDetails.serviceId} = ${filter.serviceId})` : undefined,
     filter.category !== "semua" ? eq(reports.category, filter.category) : undefined,
     filter.status === "belum-selesai" ? active : filter.status === "dalam-penanganan" ? and(active, sql`${reports.status} <> 'baru'`) : filter.status !== "semua" ? eq(reports.status, filter.status) : undefined,
     withDates && bounds.from ? gte(date, bounds.from) : undefined, withDates && bounds.until ? lt(date, bounds.until) : undefined,
@@ -43,12 +47,17 @@ function criteria(filter: ManagementFilter, operational: boolean, withDates = tr
 }
 
 export class DrizzleManagementRepository implements ManagementRepository {
-  constructor(private readonly db: Database = getDb()) {}
+  constructor(protected readonly db: Database = getDb(), private readonly operator: Operator = "manajemen", private readonly inReadSnapshot = false) {}
+  private snapshot<T>(read: (repository: DrizzleManagementRepository) => Promise<T>) {
+    return this.db.transaction((tx) => read(new DrizzleManagementRepository(tx as unknown as Database, this.operator, true)), { isolationLevel: "repeatable read", accessMode: "read only" })
+  }
+  private get scope() { return operatorScope(this.operator) }
+  private criteria(filter: ManagementFilter, operational: boolean, withDates = true) { return criteria(filter, operational, withDates, this.operator) }
   private async hydrate(rows: Row[]): Promise<ManagementReport[]> {
     if (!rows.length) return []
     const ids = rows.map((r) => r.report.id)
     // One bounded batch per relation. Never join the object/file collections onto paginated reports.
-    const [services, others, lostFound, facilities, attachments] = await Promise.all([
+    const [services, others, lostFound, facilities, attachments] = await sequentialQueries([
       this.db.select().from(reportServiceDetails).where(inArray(reportServiceDetails.reportId, ids)),
       this.db.select().from(reportOtherDetails).where(inArray(reportOtherDetails.reportId, ids)),
       this.db.select().from(reportLostFoundDetails).where(inArray(reportLostFoundDetails.reportId, ids)),
@@ -70,50 +79,56 @@ export class DrizzleManagementRepository implements ManagementRepository {
     })
   }
   async list(filter: ManagementFilter, operational: boolean): Promise<ManagementPage> {
-    const after = cursorValue(filter.cursor), where = criteria(filter, operational)
+    if (!this.inReadSnapshot) return this.snapshot((repository) => repository.list(filter, operational))
+    const limit = this.operator === "tefa" ? 6 : pageSize
+    const after = cursorValue(filter.cursor), where = this.criteria(filter, operational)
     const date = filter.dateBasis === "completed" ? reports.completedAt : reports.submittedAt
     const compare = filter.sort === "terlama" ? gt : lt, order = filter.sort === "terlama" ? asc : desc
-    const [rows, totals] = await Promise.all([
+    const [rows, totals] = await sequentialQueries([
       this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId))
         .where(and(where, after ? or(compare(date, after.date), and(eq(date, after.date), compare(reports.id, after.id))) : undefined))
-        .orderBy(order(date), order(reports.id)).limit(pageSize + 1),
+        .orderBy(order(date), order(reports.id)).limit(limit + 1),
       this.db.select({ count: sql<number>`count(*)::integer`,
         lostFound: sql<number>`count(*) filter (where ${reports.category} = 'kehilangan-temuan')::integer`, facilities: sql<number>`count(*) filter (where ${reports.category} = 'fasilitas')::integer`,
         services: sql<number>`count(*) filter (where ${reports.category} = 'layanan')::integer`, others: sql<number>`count(*) filter (where ${reports.category} = 'lainnya')::integer`,
         satpam: sql<number>`count(*) filter (where ${reports.handlerRole} = 'satpam' and ${filter.category === "semua" ? sql`true` : eq(reports.category, filter.category)})::integer`,
         teknisi: sql<number>`count(*) filter (where ${reports.handlerRole} = 'teknisi' and ${filter.category === "semua" ? sql`true` : eq(reports.category, filter.category)})::integer`,
         manajemen: sql<number>`count(*) filter (where ${reports.handlerRole} = 'manajemen' and ${filter.category === "semua" ? sql`true` : eq(reports.category, filter.category)})::integer`,
-      }).from(reports).where(criteria({ ...filter, category: "semua" }, operational)),
+        tefa: sql<number>`count(*) filter (where ${reports.handlerRole} = 'tefa' and ${filter.category === "semua" ? sql`true` : eq(reports.category, filter.category)})::integer`,
+      }).from(reports).where(this.criteria({ ...filter, category: "semua" }, operational)),
     ])
-    const page = rows.slice(0, pageSize), last = page.at(-1)
+    const page = rows.slice(0, limit), last = page.at(-1)
     const categoryCounts = { semua: totals[0].count, "kehilangan-temuan": totals[0].lostFound, fasilitas: totals[0].facilities, layanan: totals[0].services, lainnya: totals[0].others }
-    return { items: await this.hydrate(page), total: categoryCounts[filter.category], categoryCounts, handlerCounts: { satpam: totals[0].satpam, teknisi: totals[0].teknisi, manajemen: totals[0].manajemen }, nextCursor: rows.length > pageSize && last ? cursorFor(filter.dateBasis === "completed" ? last.report.completedAt! : last.report.submittedAt, last.report.id) : null }
+    return { items: await this.hydrate(page), total: categoryCounts[filter.category], categoryCounts, handlerCounts: { satpam: totals[0].satpam, teknisi: totals[0].teknisi, manajemen: totals[0].manajemen, tefa: totals[0].tefa }, nextCursor: rows.length > limit && last ? cursorFor(filter.dateBasis === "completed" ? last.report.completedAt! : last.report.submittedAt, last.report.id) : null }
   }
   async detail(ticket: string, operational: boolean): Promise<ManagementDetail | null> {
-    const rows = await this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(operational ? scope : undefined, eq(reports.ticketNumber, ticket))).limit(1)
+    if (!this.inReadSnapshot) return this.snapshot((repository) => repository.detail(ticket, operational))
+    const rows = await this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(operational || this.operator === "tefa" ? this.scope : undefined, eq(reports.ticketNumber, ticket))).limit(1)
     if (!rows.length) return null
     const id = rows[0].report.id
-    const [[report], history, files] = await Promise.all([
+    const [[report], history, files] = await sequentialQueries([
       this.hydrate(rows),
       this.db.select().from(reportStatusHistory).where(eq(reportStatusHistory.reportId, id)).orderBy(asc(reportStatusHistory.createdAt), asc(reportStatusHistory.id)),
       this.db.select().from(reportAttachments).where(eq(reportAttachments.reportId, id)).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)),
     ])
     return { report, history: history.map((entry) => ({ status: statusLabels[entry.toStatus] as MonitoringReportStatus, actor: entry.actorName, timestamp: dateLabel(entry.createdAt), note: entry.note })),
-      files: files.map((file) => ({ id: file.id, name: file.name, mimeType: file.mimeType, url: `/api/manajemen/attachments/${file.id}`, previewUrl: file.mimeType.startsWith("image/") ? `/api/manajemen/attachments/${file.id}?preview=1` : undefined })) }
+      files: files.map((file) => ({ id: file.id, name: file.name, mimeType: file.mimeType, url: `/api/${this.operator}/attachments/${file.id}`, previewUrl: file.mimeType.startsWith("image/") ? `/api/${this.operator}/attachments/${file.id}?preview=1` : undefined })) }
   }
-  async dashboard() {
+  async dashboard(): Promise<ManagementDashboard> {
+    if (!this.inReadSnapshot) return this.snapshot((repository) => repository.dashboard())
     const month = reportDateBounds({ ...defaultReportFilters, period: "bulan-ini" })
-    const [totals, queue] = await Promise.all([
+    const [totals, queue] = await sequentialQueries([
       this.db.select({ newReports: sql<number>`count(*) filter (where ${reports.status} = 'baru')::integer`, inProgress: sql<number>`count(*) filter (where ${reports.status} = 'diproses')::integer`,
         completedThisMonth: sql<number>`count(*) filter (where ${reports.completedAt} >= ${month.from} and ${reports.completedAt} < ${month.until})::integer`,
         activeServiceReports: sql<number>`count(*) filter (where ${reports.category} = 'layanan' and ${active})::integer`,
-      }).from(reports).where(scope),
-      this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(scope, active)).orderBy(asc(reports.submittedAt), asc(reports.id)).limit(5),
+      }).from(reports).where(this.scope),
+      this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(this.scope, active)).orderBy(asc(reports.submittedAt), asc(reports.id)).limit(5),
     ])
     return { ...totals[0], queue: await this.hydrate(queue), updatedAt: dateLabel(new Date()) }
   }
   async statistics(filter: ManagementFilter): Promise<ManagementStatisticsData> {
-    const where = criteria(filter, false), withoutDates = criteria(filter, false, false)
+    if (!this.inReadSnapshot) return this.snapshot((repository) => repository.statistics(filter))
+    const where = this.criteria(filter, false), withoutDates = this.criteria(filter, false, false)
     const bounds = reportDateBounds({ ...defaultReportFilters, period: filter.period, from: filter.from, to: filter.to })
     // Bounds come from the database and WIB calendar, not hard-coded sample dates.
     const [span] = await this.db.select({ first: sql<Date | null>`min(${reports.submittedAt})` }).from(reports).where(withoutDates)
@@ -124,7 +139,7 @@ export class DrizzleManagementRepository implements ManagementRepository {
     const bucketUnit = sql.raw(`'${granularity}'`)
     const dateBucket = (column: typeof reports.submittedAt | typeof reports.completedAt) => sql<string>`to_char(date_trunc(${bucketUnit}, ${column} at time zone 'Asia/Jakarta'), 'YYYY-MM-DD')`
     const roomKey = sql<string>`coalesce(${reports.locationId}, 'text:' || ${reports.locationText})`
-    const [totals, categories, handlers, incoming, completed, rooms, objects, unclassified] = await Promise.all([
+    const [totals, categories, handlers, incoming, completed, rooms, objects, unclassified] = await sequentialQueries([
       this.db.select({ total: sql<number>`count(*)::integer`, newReports: sql<number>`count(*) filter (where ${reports.status} = 'baru')::integer`,
         inProgress: sql<number>`count(*) filter (where ${active} and ${reports.status} <> 'baru')::integer`, completed: sql<number>`count(*) filter (where ${reports.status} = 'selesai')::integer`, rejected: sql<number>`count(*) filter (where ${reports.status} = 'ditolak')::integer` }).from(reports).where(where),
       this.db.select({ category: reports.category, total: sql<number>`count(*)::integer` }).from(reports).where(where).groupBy(reports.category),
@@ -153,34 +168,36 @@ export class DrizzleManagementRepository implements ManagementRepository {
     return { ...totals[0], from: dayLabel(from), to: end, granularity, categories, handlers, trend,
       rooms: rooms.map((room) => ({ ...room, location: room.room, facilities: objects.filter((object) => object.roomId === room.id).map(({ facility, totalReports, activeReports }) => ({ facility, totalReports, activeReports })) })), unclassifiedActive: unclassified[0].count }
   }
-  async export(filter: ManagementFilter) {
+  async export(filter: ManagementFilter): Promise<ManagementReport[]> {
+    if (!this.inReadSnapshot) return this.snapshot((repository) => repository.export(filter))
     const order = filter.sort === "terlama" ? asc : desc
     const date = filter.dateBasis === "completed" ? reports.completedAt : reports.submittedAt
     // Export all matching rows, not just the loaded UI page; explicitly cap resource consumption.
-    const rows = await this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(criteria(filter, true)).orderBy(order(date), order(reports.id)).limit(5001)
+    const rows = await this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(this.criteria(filter, true)).orderBy(order(date), order(reports.id)).limit(5001)
     if (rows.length > 5000) throw new ReportError("Ekspor maksimal 5.000 laporan. Persempit periode atau filter.", 422)
     return this.hydrate(rows)
   }
   async execute(actor: ReportActor, command: ManagementCommand) {
     await this.db.transaction(async (tx) => {
       // [AUTH-ROLE] Revalidate the live account and lock the report in the same transaction.
-      const [account] = await tx.select({ name: users.name }).from(users).where(and(eq(users.id, actor.id), eq(users.role, "manajemen"), eq(users.isActive, true))).for("share")
-      if (!account) throw new ReportError("Akun tidak memiliki akses Manajemen.", 403)
-      const [report] = await tx.select().from(reports).where(and(scope, eq(reports.ticketNumber, command.ticket))).for("update")
-      if (!report) throw new ReportError("Laporan Manajemen tidak ditemukan.", 404)
+      if (actor.role !== this.operator) throw new ReportError("Akun tidak memiliki akses penanganan.", 403)
+      const [account] = await tx.select({ name: users.name }).from(users).where(and(eq(users.id, actor.id), eq(users.role, this.operator), eq(users.isActive, true))).for("share")
+      if (!account) throw new ReportError("Akun tidak memiliki akses penanganan.", 403)
+      const [report] = await tx.select().from(reports).where(and(this.scope, eq(reports.ticketNumber, command.ticket))).for("update")
+      if (!report) throw new ReportError("Laporan tidak ditemukan.", 404)
       if (report.status !== managementExpectedStatus(command.status)) throw new ReportError("Status laporan telah berubah. Muat ulang sebelum melanjutkan.", 409)
       assertTransition(report.category, report.status, command.status)
-      const now = new Date(), note = command.note || "Penanganan laporan oleh Manajemen dimulai."
+      const now = new Date(), note = command.note || `Penanganan laporan oleh ${handlerLabels[this.operator]} dimulai.`
       await tx.update(reports).set({ status: command.status, updatedAt: now, completedAt: command.status === "selesai" ? now : null }).where(eq(reports.id, report.id))
       await tx.insert(reportStatusHistory).values({ reportId: report.id, actorId: actor.id, actorName: account.name, fromStatus: report.status, toStatus: command.status, note, createdAt: now })
-      await tx.insert(notifications).values({ recipientId: report.reporterId, reportId: report.id, kind: "status", title: `Laporan ${statusLabels[command.status].toLowerCase()}`, description: `${report.ticketNumber}: ${note}`, createdAt: now })
+      await tx.insert(notifications).values({ recipientId: report.reporterId, reportId: report.id, kind: "status", title: `Laporan ${statusLabels[command.status].toLowerCase()}`, description: `${report.title}: ${note}`, createdAt: now })
     })
   }
   async attachment(id: string) {
     // Management monitoring may read submitted cross-role reports, never anyone's draft attachments.
-    const [row] = await this.db.select({ file: reportAttachments }).from(reportAttachments).innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(eq(reportAttachments.id, id)).limit(1)
+    const [row] = await this.db.select({ file: reportAttachments }).from(reportAttachments).innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(and(eq(reportAttachments.id, id), this.operator === "tefa" ? this.scope : undefined)).limit(1)
     return row?.file ?? null
   }
-  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor) }
-  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id) }
+  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor, this.operator === "tefa" ? "tefa" : undefined) }
+  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id, this.operator === "tefa" ? "tefa" : undefined) }
 }

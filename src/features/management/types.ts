@@ -9,7 +9,7 @@ export type ManagementReportStatus = Extract<MonitoringReportStatus, "Baru" | "D
 export type MonitoringStatusFilter = MonitoringReportStatus | "semua" | "dalam-penanganan"
 export type ManagementReport = {
   id: string; ticket: string; title: string; category: MonitoringReportCategory; categoryKey: ReportCategory
-  status: MonitoringReportStatus; statusKey: ReportStatus; handler: "Satpam" | "Teknisi" | "Manajemen Jurusan"
+  status: MonitoringReportStatus; statusKey: ReportStatus; handler: "Satpam" | "Teknisi" | "Manajemen Jurusan" | "TEFA"
   reporter: string; reporterUnit: string; program?: string; service: string; context: string; location: string
   submittedAt: string; submittedAtIso: string; updatedAt: string; reportedOn: string; completedOn?: string; completedAt?: string
   eventDate: string; eventTime: string; description: string; attachments: number
@@ -19,6 +19,7 @@ export type ManagementFilter = {
   query: string; category: ReportCategory | "semua"; status: ReportStatus | "semua" | "dalam-penanganan" | "belum-selesai"
   dateBasis: "submitted" | "completed"
   period: keyof typeof reportPeriods; from: string; to: string; sort: "terbaru" | "terlama"; cursor?: string
+  serviceId?: string; lifecycle?: "active" | "closed"
 }
 export type ManagementPage = { items: ManagementReport[]; total: number; nextCursor: string | null; categoryCounts: Record<ReportCategory | "semua", number>; handlerCounts: Record<ReportHandler, number> }
 export type ManagementDetail = {

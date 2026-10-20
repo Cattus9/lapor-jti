@@ -1,6 +1,7 @@
 import "server-only"
 import { and, desc, eq, gte, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
+import { sequentialQueries } from "@/db/sequential"
 import { users } from "@/db/schema"
 import { facilityObjects, locationAreas, locationFacilityObjects, locations, notifications, reportAttachments, reportDrafts, reportFacilityObjects, reportLostFoundDetails, reportOtherDetails, reports, reportServiceDetails, reportStatusHistory, reportTicketCounters, services } from "@/db/reports-schema"
 import { handlerByCategory, isUuid, ReportError, type ReportActor, type StoredAttachment } from "../domain/report"
@@ -84,12 +85,15 @@ export class DrizzleReportRepository implements ReportRepository {
         return { created: true, draft: draftView(saved, [...kept, ...files]), removed }
       }
       const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Jakarta" }).format(now))
+      // Resolve from the validated catalog row, never a client role or name prefix.
+      if (payload.category === "layanan" && !service) throw new ReportError("Layanan tidak tersedia.")
+      const handlerRole = payload.category === "layanan" ? service!.handlerRole : handlerByCategory[payload.category]
       const [counter] = await tx.insert(reportTicketCounters).values({ year, value: 1 }).onConflictDoUpdate({ target: reportTicketCounters.year, set: { value: sql`${reportTicketCounters.value} + 1` } }).returning()
       const [report] = await tx.insert(reports).values({
         ticketNumber: `LJ-${year}-${String(counter.value).padStart(5, "0")}`, submissionKey: input.id, reporterId: actor.id,
         category: payload.category, title: payload.title, description: payload.description, incidentDate: payload.incidentDate, incidentTime: payload.incidentTime,
         locationId: location?.id, locationText: payload.location === "Lainnya" ? payload.otherLocation : payload.location,
-        handlerRole: handlerByCategory[payload.category], status: "baru", submittedAt: now,
+        handlerRole, status: "baru", submittedAt: now,
       }).returning({ id: reports.id, ticketNumber: reports.ticketNumber })
       if (payload.category === "kehilangan-temuan") await tx.insert(reportLostFoundDetails).values({ reportId: report.id, kind: payload.reportType.toLowerCase(), itemName: payload.itemName, itemDetails: payload.itemDetails })
       if (payload.category === "fasilitas") await tx.insert(reportFacilityObjects).values(payload.facilities.map((name) => ({ reportId: report.id, objectId: objectRows.find((object) => object.name === name)?.id, objectText: name === "Lainnya" ? payload.otherFacility : name })))
@@ -101,11 +105,11 @@ export class DrizzleReportRepository implements ReportRepository {
       if (kept.length) await tx.update(reportAttachments).set({ reportId: report.id, draftId: null }).where(inArray(reportAttachments.id, kept.map((file) => file.id)))
       if (files.length) await tx.insert(reportAttachments).values(files.map((file) => ({ ...file, ownerId: actor.id, reportId: report.id })))
       await tx.insert(reportStatusHistory).values({ reportId: report.id, actorId: actor.id, actorName: user.name, toStatus: "baru", note: "Laporan dikirim oleh Pelapor.", createdAt: now })
-      await tx.insert(notifications).values({ recipientId: actor.id, reportId: report.id, kind: "status", title: "Laporan berhasil dikirim", description: `${report.ticketNumber} telah diteruskan ke pengelola sesuai kategorinya.`, createdAt: now })
+      await tx.insert(notifications).values({ recipientId: actor.id, reportId: report.id, kind: "status", title: "Laporan berhasil dikirim", description: `${payload.title} telah diteruskan ke pengelola sesuai layanannya.`, createdAt: now })
       {
-        const recipients = await tx.select({ id: users.id }).from(users).where(and(eq(users.role, handlerByCategory[payload.category]), eq(users.isActive, true)))
+        const recipients = await tx.select({ id: users.id }).from(users).where(and(eq(users.role, handlerRole), eq(users.isActive, true)))
         const title = payload.category === "fasilitas" ? "Laporan fasilitas baru" : payload.category === "kehilangan-temuan" ? "Laporan kehilangan/temuan baru" : payload.category === "layanan" ? "Laporan layanan baru" : "Laporan lainnya baru"
-        if (recipients.length) await tx.insert(notifications).values(recipients.map((user) => ({ recipientId: user.id, reportId: report.id, kind: "status", title, description: `${report.ticketNumber}: ${payload.title}`, createdAt: now })))
+        if (recipients.length) await tx.insert(notifications).values(recipients.map((user) => ({ recipientId: user.id, reportId: report.id, kind: "status", title, description: `${payload.title}`, createdAt: now })))
       }
       await tx.update(reportDrafts).set({ payload, submittedReportId: report.id, revision: draft.revision + 1, updatedAt: now }).where(eq(reportDrafts.id, draft.id))
       return { created: true, report, removed }
@@ -149,7 +153,7 @@ export class DrizzleReportRepository implements ReportRepository {
       lt(reports.submittedAt, monthStart),
     ) : undefined
 
-    const [rows, drafts, selected, olderRow] = await Promise.all([
+    const [rows, drafts, selected, olderRow] = await sequentialQueries([
       this.db.select(listColumns).from(reports).where(conditions).orderBy(desc(reports.submittedAt), desc(reports.id)).limit(pageSize + 1),
       this.db.select({ id: reportDrafts.id, payload: reportDrafts.payload, updatedAt: reportDrafts.updatedAt }).from(reportDrafts).where(and(eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId), draftAfter ? or(lt(reportDrafts.updatedAt, draftAfter.date), and(eq(reportDrafts.updatedAt, draftAfter.date), lt(reportDrafts.id, draftAfter.id))) : undefined)).orderBy(desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(pageSize + 1),
       ticket ? this.db.select(listColumns).from(reports).where(and(eq(reports.reporterId, ownerId), eq(reports.ticketNumber, ticket))).limit(1) : Promise.resolve([]),
@@ -193,7 +197,7 @@ export class DrizzleReportRepository implements ReportRepository {
   async detail(ownerId: string, id: string): Promise<ReportSummary | null> {
     const [row] = await this.db.select().from(reports).where(and(eq(reports.id, id), eq(reports.reporterId, ownerId))).limit(1)
     if (!row) return null
-    const [files, history] = await Promise.all([
+    const [files, history] = await sequentialQueries([
       this.db.select({ id: reportAttachments.id, name: reportAttachments.name, mimeType: reportAttachments.mimeType }).from(reportAttachments).where(eq(reportAttachments.reportId, id)),
       this.db.select().from(reportStatusHistory).where(eq(reportStatusHistory.reportId, id)).orderBy(desc(reportStatusHistory.createdAt)),
     ])
@@ -218,7 +222,7 @@ export class DrizzleReportRepository implements ReportRepository {
     }, history: history.map((item) => ({ status: item.toStatus, actor: item.actorName, note: item.note, createdAt: dateLabel(item.createdAt) })) }
   }
   async dashboard(ownerId: string) {
-    const [totals, rows] = await Promise.all([
+    const [totals, rows] = await sequentialQueries([
       this.db.select({ total: sql<number>`count(*)::integer`, active: sql<number>`count(*) filter (where ${reports.status} not in ('selesai', 'ditolak'))::integer`, completed: sql<number>`count(*) filter (where ${reports.status} = 'selesai')::integer` }).from(reports).where(eq(reports.reporterId, ownerId)),
       this.db.select(listColumns).from(reports).where(eq(reports.reporterId, ownerId)).orderBy(desc(reports.updatedAt), desc(reports.id)).limit(5),
     ])
@@ -228,11 +232,12 @@ export class DrizzleReportRepository implements ReportRepository {
     const [file] = await this.db.select().from(reportAttachments).where(and(eq(reportAttachments.id, id), eq(reportAttachments.ownerId, ownerId))).limit(1)
     return file ?? null
   }
-  async notifications(ownerId: string, cursor?: string) {
+  async notifications(ownerId: string, cursor?: string, handler?: "tefa") {
     const after = cursorValue(cursor)
-    const [rows, counts] = await Promise.all([
-      this.db.select({ id: notifications.id, kind: notifications.kind, title: notifications.title, description: notifications.description, createdAt: notifications.createdAt, readAt: notifications.readAt, ticket: reports.ticketNumber, reportTitle: reports.title }).from(notifications).innerJoin(reports, eq(reports.id, notifications.reportId)).where(and(eq(notifications.recipientId, ownerId), after ? or(lt(notifications.createdAt, after.date), and(eq(notifications.createdAt, after.date), lt(notifications.id, after.id))) : undefined)).orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(pageSize + 1),
-      this.db.select({ value: sql<number>`count(*)::integer` }).from(notifications).where(and(eq(notifications.recipientId, ownerId), isNull(notifications.readAt))),
+    const notificationScope = and(eq(notifications.recipientId, ownerId), handler ? sql`${notifications.reportId} in (select ${reports.id} from ${reports} where ${reports.handlerRole} = ${handler} and ${reports.category} = 'layanan')` : undefined)
+    const [rows, counts] = await sequentialQueries([
+      this.db.select({ id: notifications.id, kind: notifications.kind, title: notifications.title, description: notifications.description, createdAt: notifications.createdAt, readAt: notifications.readAt, ticket: reports.ticketNumber, reportTitle: reports.title }).from(notifications).innerJoin(reports, eq(reports.id, notifications.reportId)).where(and(notificationScope, after ? or(lt(notifications.createdAt, after.date), and(eq(notifications.createdAt, after.date), lt(notifications.id, after.id))) : undefined)).orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(pageSize + 1),
+      this.db.select({ value: sql<number>`count(*)::integer` }).from(notifications).where(and(notificationScope, isNull(notifications.readAt))),
     ])
     const items = rows.slice(0, pageSize)
     const last = items.at(-1)
@@ -240,7 +245,7 @@ export class DrizzleReportRepository implements ReportRepository {
     const today = day(new Date()); const yesterday = day(new Date(Date.now() - 86400000))
     return { items: items.map((row) => ({ id: row.id, kind: row.kind === "response" ? "response" as const : "status" as const, title: row.title, description: row.description, ticketNumber: row.ticket, reportTitle: row.reportTitle, createdAt: dateLabel(row.createdAt), group: day(row.createdAt) === today ? "Hari ini" as const : day(row.createdAt) === yesterday ? "Kemarin" as const : "Sebelumnya" as const, read: row.readAt !== null })), unread: counts[0].value, nextCursor: rows.length > pageSize && last ? nextCursor(last.createdAt, last.id) : null }
   }
-  async markRead(ownerId: string, id?: string) {
-    await this.db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.recipientId, ownerId), isNull(notifications.readAt), id ? eq(notifications.id, id) : undefined))
+  async markRead(ownerId: string, id?: string, handler?: "tefa") {
+    await this.db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.recipientId, ownerId), isNull(notifications.readAt), id ? eq(notifications.id, id) : undefined, handler ? sql`${notifications.reportId} in (select ${reports.id} from ${reports} where ${reports.handlerRole} = ${handler} and ${reports.category} = 'layanan')` : undefined))
   }
 }

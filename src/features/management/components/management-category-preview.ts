@@ -27,5 +27,5 @@ export function resolveManagementCategoryPreview(cache: ManagementCategoryPrevie
   const all = cache.pages.semua
   const items = all?.items.filter((report) => category === "semua" || report.categoryKey === category) ?? []
   if (items.length !== total) return undefined
-  return { items, total, nextCursor: null, categoryCounts: cache.counts, handlerCounts: { satpam: 0, teknisi: 0, manajemen: total } }
+  return { items, total, nextCursor: null, categoryCounts: cache.counts, handlerCounts: { satpam: 0, teknisi: 0, manajemen: total, tefa: 0 } }
 }

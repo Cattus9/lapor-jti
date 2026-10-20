@@ -5,7 +5,7 @@ import { OperationalRefreshContext, useOperationalResource } from "@/components/
 import type { ManagementPage } from "../types"
 import { managementCategoryScope, resolveManagementCategoryPreview, type ManagementCategoryPreview } from "./management-category-preview"
 
-const emptyPage: ManagementPage = { items: [], total: 0, nextCursor: null, categoryCounts: { semua: 0, "kehilangan-temuan": 0, fasilitas: 0, layanan: 0, lainnya: 0 }, handlerCounts: { satpam: 0, teknisi: 0, manajemen: 0 } }
+const emptyPage: ManagementPage = { items: [], total: 0, nextCursor: null, categoryCounts: { semua: 0, "kehilangan-temuan": 0, fasilitas: 0, layanan: 0, lainnya: 0 }, handlerCounts: { satpam: 0, teknisi: 0, manajemen: 0, tefa: 0 } }
 // Preserve server aggregates across appended pages; counts must not be inferred from loaded rows.
 export function useManagementPage(url: string, options: { keepCategoryPreview?: boolean } = {}) {
   const revision = useContext(OperationalRefreshContext), base = `${url}&revision=${revision}`

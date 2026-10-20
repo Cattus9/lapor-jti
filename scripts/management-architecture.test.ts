@@ -15,7 +15,8 @@ test("API routes require session guards; monitoring exposes no mutations", () =>
 })
 test("Operational mutations are scoped, locked and atomically audited", () => {
   const source = read("src/features/management/infrastructure/drizzle-management-repository.ts")
-  assert.match(source, /eq\(reports.handlerRole, "manajemen"\)/)
+  assert.match(source, /eq\(reports.handlerRole, operator\)/)
+  assert.match(source, /actor.role !== this.operator/)
   assert.match(source, /this.db.transaction/); assert.match(source, /\.for\("update"\)/); assert.match(source, /\.for\("share"\)/)
   assert.match(source, /managementExpectedStatus/); assert.match(source, /tx.insert\(reportStatusHistory\)/); assert.match(source, /tx.insert\(notifications\)/)
   assert.match(source, /actorName: account.name/)
@@ -25,7 +26,8 @@ test("Aggregation counts distinct multi-object reports, and excludes rejected re
   assert.match(source, /count\(distinct \$\{reports.id\}\)/)
   assert.match(source, /notInArray\(reports.status, \["selesai", "ditolak"\]\)/)
   assert.match(source, /gte\(reports.completedAt, from\)/)
-  assert.match(source, /limit\(pageSize \+ 1\)/); assert.match(source, /limit\(5001\)/)
+  assert.match(source, /this.operator === "tefa" \? 6 : pageSize/)
+  assert.match(source, /limit\(limit \+ 1\)/); assert.match(source, /limit\(5001\)/)
 })
 test("Historical facility aggregation retains closed rooms and counts objects across the same submitted-period scope", () => {
   const source = read("src/features/management/infrastructure/drizzle-management-repository.ts")

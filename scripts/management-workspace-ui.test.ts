@@ -12,7 +12,7 @@ const report = (id: string, categoryKey: "layanan" | "lainnya") => ({ id, catego
 const data = (items: ManagementReport[], services = 1, others = 1, nextCursor: string | null = null): ManagementPage => ({
   items, total: services + others, nextCursor,
   categoryCounts: { semua: services + others, layanan: services, lainnya: others, fasilitas: 0, "kehilangan-temuan": 0 },
-  handlerCounts: { satpam: 0, teknisi: 0, manajemen: services + others },
+  handlerCounts: { satpam: 0, teknisi: 0, manajemen: services + others, tefa: 0 },
 })
 const scope = managementCategoryScope("/api/manajemen/reports?category=semua&status=semua&q=&period=semua", 0).scope
 
