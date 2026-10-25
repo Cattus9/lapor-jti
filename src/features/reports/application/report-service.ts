@@ -23,6 +23,7 @@ export class ReportService {
     }
     // Idempotent retries reuse the committed report and discard newly staged files.
     await this.storage.remove(result.created ? result.removed : attachments)
+    if (result.clearedDraftId) return { clearedDraftId: result.clearedDraftId }
     return result.report ? { report: result.report } : { draft: result.draft }
   }
   list(actor: ReportActor, cursor?: string, ticket?: string, draftCursor?: string, filters?: unknown, month?: string) {
@@ -32,6 +33,7 @@ export class ReportService {
     return this.repository.list(actor.id, cursor, ticket, draftCursor, parseReportListFilters(filters), month)
   }
   dashboard(actor: ReportActor) { requireReporter(actor); return this.repository.dashboard(actor.id) }
+  categoryDrafts(actor: ReportActor) { requireReporter(actor); return this.repository.categoryDrafts(actor.id) }
   async detail(actor: ReportActor, id: string) {
     requireReporter(actor)
     if (!isUuid(id)) throw new ReportError("Laporan tidak ditemukan.", 404)

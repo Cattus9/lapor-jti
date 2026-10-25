@@ -1,9 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import type { DraftView, PublicAttachment } from "../application/ports"
-import type { ReportPayload } from "../domain/report"
+import type { ReportCategory, ReportPayload } from "../domain/report"
 import { getIncidentTimeMode, parsePayload } from "../domain/report"
 import { createReportSubmissionSnapshot, reportSubmissionBody, type ReportSubmissionSnapshot } from "./report-submission-state"
 import { ReportSubmissionPreview } from "./report-submission-preview"
@@ -19,7 +18,6 @@ import { FacilityMappingFields } from "./facility-mapping-fields"
 import { availableFacilities, type OperationalCatalog } from "@/features/operations/domain/operations"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
 import {
-  ArrowLeft,
   ArrowRight,
   Building2,
   CalendarDays,
@@ -40,6 +38,9 @@ import {
   Wrench,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge, type BadgeTone } from "@/components/ui/badge"
+import { Dialog } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { FileDropzone } from "@/components/ui/file-dropzone"
@@ -53,19 +54,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "cn"
 import { AttachmentLinkField } from "./attachment-link-field"
 import { FilePreviewList } from "@/components/ui/file-preview-list"
-import { ReportStepper, reportSteps } from "./report-stepper"
+import { ReportCategoryDrafts, hasDraftContent, type CategoryDraft } from "./report-category-drafts"
 
-const categories = [
-  { value: "kehilangan-temuan", label: "Kehilangan & Temuan", icon: PackageSearch, hint: "Barang hilang atau barang yang ditemukan", iconClassName: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300" },
-  { value: "fasilitas", label: "Kerusakan Fasilitas", icon: Wrench, hint: "Objek rusak atau tidak berfungsi, bukan kebersihan area", iconClassName: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300" },
-  { value: "layanan", label: "Laporan Layanan", icon: Headphones, hint: "Administrasi, kebersihan, keamanan, dan layanan JTI", iconClassName: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300" },
-  { value: "lainnya", label: "Laporan Lainnya", icon: FileText, hint: "Laporan umum di luar kategori utama", iconClassName: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300" },
+const categories: Array<{ value: ReportCategory; label: string; icon: typeof FileText; hint: string; tone: BadgeTone }> = [
+  { value: "kehilangan-temuan", label: "Kehilangan & Temuan", icon: PackageSearch, hint: "Barang hilang atau barang yang ditemukan", tone: "info" },
+  { value: "fasilitas", label: "Kerusakan Fasilitas", icon: Wrench, hint: "Objek rusak atau tidak berfungsi, bukan kebersihan area", tone: "success" },
+  { value: "layanan", label: "Laporan Layanan", icon: Headphones, hint: "Administrasi, kebersihan, keamanan, dan layanan JTI", tone: "violet" },
+  { value: "lainnya", label: "Laporan Lainnya", icon: FileText, hint: "Laporan umum di luar kategori utama", tone: "warning" },
 ]
-
-function nowInWib() {
-  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date())
-  return { date: new Date(`${getTodayInWib()}T00:00:00`), time }
-}
 
 function SelectField({ id, label, placeholder, value, onValueChange, options, description }: { id: string; label: string; placeholder: string; value: string; onValueChange: (value: string) => void; options: string[]; description?: string }) {
   return (
@@ -168,13 +164,28 @@ function TimePickerField({ value, onValueChange }: { value: string; onValueChang
   )
 }
 
-function CategoryCard({ value, selected, onSelect }: { value: (typeof categories)[number]; selected: boolean; onSelect: () => void }) {
+function CategoryCard({ value, selected, onSelect, draft, disabled, onRetry }: { value: (typeof categories)[number]; selected: boolean; onSelect: () => void; draft?: CategoryDraft; disabled: boolean; onRetry: () => void }) {
   const Icon = value.icon
+  const [notice, setNotice] = useState(0)
+  useEffect(() => {
+    if (!draft?.notice) return
+    const timeout = setTimeout(() => setNotice(draft.notice), 3000)
+    return () => clearTimeout(timeout)
+  }, [draft?.notice])
   return (
-    <Button type="button" variant="outline" onClick={onSelect} aria-pressed={selected} className={`group flex h-auto w-full min-h-24 whitespace-normal items-start gap-3 rounded-xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${selected ? "border-primary bg-primary/5 shadow-xs" : "border-border bg-background/60 hover:border-primary/50 hover:bg-muted/40"}`}>
-      <span className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border", value.iconClassName)}><Icon className="size-4" aria-hidden="true" /></span>
-      <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2 text-sm font-semibold text-foreground">{value.label}{selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground/70">{value.hint}</span></span>
-    </Button>
+    <div className="min-w-0">
+    <Tooltip open={Boolean(draft && hasDraftContent(draft) && draft.notice && draft.notice !== notice)}>
+    <TooltipTrigger render={<Button type="button" variant="outline" disabled={disabled} onClick={onSelect} aria-pressed={selected} className={cn("group flex h-auto w-full min-h-24 whitespace-normal items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none", selected ? "border-primary bg-primary/5 shadow-none" : "border-border bg-background/60 hover:border-primary/50 hover:bg-muted/40")} />}>
+      <Badge variant="outline" tone={value.tone} className="mt-0.5 size-9 rounded-lg p-0"><span><Icon className="size-4" aria-hidden="true" /></span></Badge>
+      <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2 text-sm font-semibold text-foreground">{value.label}{selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{value.hint}</span>
+        {draft?.status === "saving" ? <Badge variant="outline" className="mt-2">{hasDraftContent(draft) ? "Menyimpan…" : "Mengosongkan…"}</Badge> : draft?.status === "error" ? <Badge tone="warning" variant="outline" className="mt-2">Belum tersimpan</Badge> : draft?.savedKey && hasDraftContent(draft) ? <Badge tone="info" variant="outline" className="mt-2">Draft</Badge> : null}
+      </span>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="motion-reduce:animate-none"><CheckCircle2 className="size-3.5" aria-hidden="true" />Tersimpan sebagai draft</TooltipContent>
+    </Tooltip>
+    <span className="sr-only" role="status">{draft?.status === "saving" ? `Menyimpan draft ${value.label}` : draft?.status === "error" ? `${value.label}: ${draft.error}` : draft?.notice ? `${value.label}: tersimpan sebagai draft` : ""}</span>
+    {draft?.status === "error" ? <Button type="button" variant="link" size="sm" disabled={disabled} onClick={onRetry}>Coba simpan lagi</Button> : null}
+    </div>
   )
 }
 
@@ -191,8 +202,10 @@ function ReportGuidance({ category, service, handlerRole }: { category: string; 
   )
 }
 
-export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
-  const router = useRouter()
+export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft?: DraftView; categoryDrafts?: DraftView[] }) {
+  const [drafts] = useState(() => new ReportCategoryDrafts(categoryDrafts, initialDraft))
+  useSyncExternalStore(drafts.subscribe, drafts.getVersion, drafts.getVersion)
+  const activeCategory = useRef(initialDraft?.payload.category ?? "")
   const [catalogRevision, setCatalogRevision] = useState(0)
   const catalogResource = useOperationalResource<OperationalCatalog>(`/api/pelapor/catalog?revision=${catalogRevision}`)
   const catalog = catalogResource.data
@@ -207,13 +220,14 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   const [sourceDraft, setSourceDraft] = useState(initialDraft)
   const [revision, setRevision] = useState(initialDraft?.revision ?? 0)
   const [retained, setRetained] = useState<PublicAttachment[]>(initialDraft?.attachments ?? [])
-  const [pending, setPending] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [preview, setPreview] = useState<(ReportSubmissionSnapshot & { uploadUrls: string[] }) | null>(null)
-  const [step, setStep] = useState<(typeof reportSteps)[number]["id"]>(initialDraft ? "details" : "category")
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [category, setCategory] = useState(initialDraft?.payload.category ?? "")
   const [reportType, setReportType] = useState(initialDraft?.payload.reportType ?? "")
   const [location, setLocation] = useState(initialDraft?.payload.location ?? "")
+  const [facilityAreaId, setFacilityAreaId] = useState(initialDraft?.payload.facilityAreaId ?? "")
   const [otherLocation, setOtherLocation] = useState(initialDraft?.payload.otherLocation ?? "")
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>(initialDraft?.payload.facilities ?? [])
   const [otherFacility, setOtherFacility] = useState(initialDraft?.payload.otherFacility ?? "")
@@ -224,24 +238,61 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
   const [incidentDate, setIncidentDate] = useState<Date | undefined>(() => initialDraft?.payload.incidentDate ? new Date(initialDraft.payload.incidentDate + "T00:00:00") : undefined)
   const [incidentTime, setIncidentTime] = useState(initialDraft?.payload.incidentTime ?? "")
   const [datePickerOpen, setDatePickerOpen] = useState(false)
-  const [savedState, setSavedState] = useState<"idle" | "draft">(initialDraft ? "draft" : "idle")
+  const currentDraft = category ? drafts.get(category as ReportCategory) : undefined
+  const pending = submitting || currentDraft?.status === "saving"
   const today = new Date(`${getTodayInWib()}T00:00:00`)
   const incidentDateError = useCustomTime && incidentDate && formatCalendarDate(incidentDate) > getTodayInWib() ? "Tanggal kejadian tidak boleh melebihi hari ini (WIB)." : ""
   // Blob URLs belong to this form, never to a persisted report or API payload.
   useEffect(() => () => { for (const url of previewUrls.current) URL.revokeObjectURL(url) }, [])
   function releasePreview() { for (const url of previewUrls.current) URL.revokeObjectURL(url); previewUrls.current = [] }
 
-  function resetCategory(nextCategory: string) { const now = nowInWib(); setCategory(nextCategory); setReportType(""); setLocation(""); setOtherLocation(""); setSelectedFacilities([]); setOtherFacility(""); setService(""); setProgram(""); setAttachments([]); setRetained([]); setIncidentDate(now.date); setIncidentTime(now.time); setSavedState("idle"); setError("") }
+  function showDraft(draft: CategoryDraft) {
+    const payload = draft.payload
+    activeCategory.current = payload.category
+    setCategory(payload.category); setDraftId(draft.id); setRevision(draft.revision)
+    setSourceDraft({ id: draft.id, revision: draft.revision, payload, attachments: draft.retained, updatedAt: "" })
+    setReportType(payload.reportType); setLocation(payload.location); setFacilityAreaId(payload.facilityAreaId ?? ""); setOtherLocation(payload.otherLocation)
+    setSelectedFacilities([...payload.facilities]); setOtherFacility(payload.otherFacility); setService(payload.service); setProgram(payload.program)
+    setAttachments([...draft.files]); setRetained([...draft.retained]); setUseCustomTime(getIncidentTimeMode(payload) === "custom")
+    setIncidentDate(payload.incidentDate ? new Date(`${payload.incidentDate}T00:00:00`) : undefined); setIncidentTime(payload.incidentTime)
+    setDatePickerOpen(false); setError(draft.error)
+    const url = new URL(window.location.href)
+    if (draft.savedKey) url.searchParams.set("draft", draft.id); else url.searchParams.delete("draft")
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
+  }
+  function captureDraft() {
+    if (!category || !formRef.current) return
+    return drafts.capture(category as ReportCategory, currentPayload(), retained, attachments)
+  }
+  async function persistDraft(target: ReportCategory) {
+    const result = await drafts.save(target, async (draft) => {
+      const snapshot = { payload: parsePayload(draft.payload, false), retained: draft.retained, files: draft.files }
+      const response = await fetch("/api/pelapor/drafts", { method: "POST", body: reportSubmissionBody(snapshot, draft.id, draft.revision) })
+      const body = await response.json().catch(() => null)
+      if (response.ok && typeof body?.clearedDraftId === "string") return { clearedDraftId: body.clearedDraftId }
+      if (!response.ok || !body?.draft || !Array.isArray(body.draft.attachments)) throw new Error(body?.error || "Draft belum tersimpan. Isian dan lampiran tetap tersedia; coba kembali.")
+      return body.draft as DraftView
+    })
+    // The user can already be in another category. Never replace that form.
+    if (activeCategory.current === target) showDraft(result)
+  }
+  function changeCategory(next: ReportCategory) {
+    if (next === category || busy.current || preview) return
+    const previous = captureDraft()
+    showDraft(drafts.ensure(next))
+    if (previous) void persistDraft(previous.payload.category)
+  }
   function currentPayload(): ReportPayload {
     const fields = new FormData(formRef.current!)
     const text = (name: string) => String(fields.get(name) ?? "")
     const date = useCustomTime && incidentDate ? formatCalendarDate(incidentDate) : ""
-    return { category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location: category === "layanan" && getReportServicePolicy(service).locationMode === "hidden" ? "" : location, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program: getReportServicePolicy(service).requiresProgram ? program : "", otherCategory: text("other-category") }
+    return { category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location: category === "layanan" && getReportServicePolicy(service).locationMode === "hidden" ? "" : location, facilityAreaId, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program: getReportServicePolicy(service).requiresProgram ? program : "", otherCategory: text("other-category") }
   }
   async function save(submit: boolean, confirmed?: ReportSubmissionSnapshot) {
     // Only the preview's explicit confirmation can initiate a report submission.
     if (!formRef.current || busy.current || (submit && (!confirmed || confirmed !== preview))) return
-    busy.current = true; setPending(true); setError("")
+    if (!submit) { captureDraft(); await persistDraft(category as ReportCategory); return }
+    busy.current = true; setSubmitting(true); setError("")
     try {
       const snapshot = confirmed ?? { payload: parsePayload(currentPayload(), false), retained, files: attachments }
       // Revalidate the frozen preview at confirmation, including after midnight WIB.
@@ -255,8 +306,8 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
         const sourceRect = submitButtonRef.current?.getBoundingClientRect()
         const source = sourceRect && sourceRect.width > 0 ? sourceRect : undefined
         // Reset only after confirmed success. Failed/ambiguous requests retain the same id for safe retries.
-        setDraftId(crypto.randomUUID()); setRevision(0); setSourceDraft(undefined)
-        resetCategory(category); setDatePickerOpen(false); releasePreview(); setPreview(null); setStep("category")
+        drafts.remove(category as ReportCategory)
+        showDraft(drafts.ensure(category as ReportCategory)); setPreviewOpen(false)
         // A submitted draft cannot be resumed; keep refresh from requesting its old URL.
         const url = new URL(window.location.href)
         url.searchParams.delete("draft")
@@ -264,15 +315,13 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
         notify({ title: "Laporan berhasil dikirim", description: "Laporan telah diterima. Pantau perkembangannya di Laporan Saya.", tone: "success" })
         submissionSucceeded(source)
       }
-      else { setRevision(result.draft.revision); setRetained(result.draft.attachments); setAttachments([]); setSavedState("draft"); router.replace(`/pelapor/buat-laporan?draft=${draftId}`, { scroll: false }) }
-      if (!submit) router.refresh()
     } catch (error) {
       const message = error instanceof TypeError ? "Koneksi bermasalah. Silakan coba lagi; sistem mencegah laporan ganda." : error instanceof Error ? error.message : "Koneksi bermasalah. Silakan coba lagi."
       setError(message)
       if (submit && (category === "fasilitas" || category === "layanan")) setCatalogRevision((value) => value + 1)
       notify({ title: submit ? "Pengiriman belum berhasil" : "Draft belum tersimpan", description: message, tone: "warning" })
     }
-    finally { busy.current = false; setPending(false) }
+    finally { busy.current = false; setSubmitting(false) }
   }
   function handleDraft() { void save(false) }
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -282,7 +331,7 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
       if (category === "fasilitas" && !validFacilityCatalog || category === "layanan" && (!catalog || !services.includes(service))) throw new Error("Periksa pilihan lokasi, fasilitas, atau layanan yang tersedia sebelum mengirim.")
       const snapshot = createReportSubmissionSnapshot(currentPayload(), retained, attachments)
       for (const file of snapshot.files) previewUrls.current.push(URL.createObjectURL(file))
-      setError(""); setPreview({ ...snapshot, uploadUrls: [...previewUrls.current] }); setStep("review"); window.scrollTo({ top: 0, behavior: "smooth" })
+      setError(""); setPreview({ ...snapshot, uploadUrls: [...previewUrls.current] }); setPreviewOpen(true)
     } catch (error) {
       releasePreview()
       const message = error instanceof Error ? error.message : "Periksa kembali isian laporan Anda."
@@ -309,35 +358,30 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
     setAttachments((files) => files.some((item) => item.name === file.name && item.size === file.size) ? files : [...files, file])
   }
   const remainingAttachments = Math.max(0, 4 - retained.length - attachments.length)
-  const stepIndex = reportSteps.findIndex((item) => item.id === step)
   const descriptionPresentation = getReportDescriptionPresentation(category, service)
 
   return (
     <div className="space-y-6">
-      <ReportStepper current={stepIndex} />
       <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-(--report-form-desktop-columns)">
       <Card className="min-w-0 gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><FileText className="size-4 text-primary" aria-hidden="true" />Formulir laporan</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-5 md:p-6">
-        <form ref={formRef} tabIndex={-1} className={cn("space-y-7", step === "review" && "hidden")} onSubmit={handleSubmit} aria-busy={pending}>
-          <fieldset disabled={pending || Boolean(preview)} className="space-y-7">
-            <div hidden={step !== "category"} className="space-y-6">
-              <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih satu kategori untuk menampilkan kolom yang relevan.</FieldDescription><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} onSelect={() => resetCategory(item.value)} />)}</div></Field>
-              <div className="flex justify-end border-t border-border/60 pt-5"><Button type="button" disabled={!category} onClick={() => { setStep("details"); window.scrollTo({ top: 0, behavior: "smooth" }) }}>Lanjut isi informasi<ArrowRight /></Button></div>
-            </div>
-            {category ? <div hidden={step !== "details"} className="space-y-7">
-              <div key={draftId} className="space-y-5"><div className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileText className="size-4" aria-hidden="true" /></span><h2 className="text-sm font-semibold">Informasi laporan</h2></div><FieldGroup>
+        <form ref={formRef} tabIndex={-1} className="space-y-7" onSubmit={handleSubmit} aria-busy={pending}>
+          <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih kategori untuk mengisi laporan. Isian disimpan sebagai draft saat Anda berganti kategori.</FieldDescription><TooltipProvider><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} disabled={submitting || Boolean(preview)} draft={drafts.get(item.value)} onSelect={() => changeCategory(item.value)} onRetry={() => { if (category === item.value) captureDraft(); void persistDraft(item.value) }} />)}</div></TooltipProvider></Field>
+          <fieldset disabled={pending || previewOpen} className="space-y-7">
+            {category ? <div key={draftId} className="space-y-7">
+              <div className="space-y-5 border-t border-border/60 pt-6"><FieldGroup>
                 {category === "kehilangan-temuan" ? <SelectField id="report-type" label="Jenis laporan" placeholder="Pilih jenis laporan" value={reportType} onValueChange={setReportType} options={["Kehilangan", "Temuan"]} /> : null}
                 <Field><FieldLabel htmlFor="title" className="font-semibold text-foreground">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
                 {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field></> : null}
-                {category === "fasilitas" && catalog ? <FacilityMappingFields key={draftId} disabled={pending || Boolean(preview)} catalog={catalog} location={location} onLocationChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} facilities={selectedFacilities} onFacilitiesChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /> : null}
+                {category === "fasilitas" && catalog ? <FacilityMappingFields key={draftId} disabled={pending || previewOpen} catalog={catalog} selectedAreaId={facilityAreaId} onAreaChange={setFacilityAreaId} location={location} onLocationChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} facilities={selectedFacilities} onFacilitiesChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /> : null}
                 {category === "fasilitas" || category === "layanan" ? catalogResource.loading ? <p role="status" className="text-sm text-muted-foreground">Memuat katalog operasional...</p> : catalogResource.error ? <div className="space-y-2"><FieldError>{catalogResource.error}</FieldError><Button type="button" variant="outline" onClick={() => setCatalogRevision((value) => value + 1)}>Coba lagi</Button></div> : null : null}
-                {category === "layanan" ? <ServiceReportFields services={services} service={service} program={program} disabled={pending || Boolean(preview)} onServiceChange={(next) => { if (getReportServicePolicy(next).locationMode === "hidden") setLocation(""); setService(next) }} onProgramChange={setProgram} /> : null}
+                {category === "layanan" ? <ServiceReportFields services={services} service={service} program={program} disabled={pending || previewOpen} onServiceChange={(next) => { if (getReportServicePolicy(next).locationMode === "hidden") setLocation(""); setService(next) }} onProgramChange={setProgram} /> : null}
                 {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak lagi tersedia. Pilih layanan yang aktif atau gunakan kategori Laporan Lainnya.</FieldError> : null}
                 {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
-                {category !== "fasilitas" ? <ReportLocationField category={category} service={service} value={location} onValueChange={setLocation} disabled={pending || Boolean(preview)} /> : null}
+                {category !== "fasilitas" ? <ReportLocationField category={category} service={service} value={location} onValueChange={setLocation} disabled={pending || previewOpen} /> : null}
                 <Field>
                   <div className="flex items-center gap-3">
                     <FieldLabel htmlFor="custom-incident-time">Gunakan tanggal &amp; waktu tertentu</FieldLabel>
-                    <Switch id="custom-incident-time" checked={useCustomTime} disabled={pending || Boolean(preview)} aria-describedby="incident-time-mode-description" onCheckedChange={(checked) => {
+                    <Switch id="custom-incident-time" checked={useCustomTime} disabled={pending || previewOpen} aria-describedby="incident-time-mode-description" onCheckedChange={(checked) => {
                       if (checked) {
                         const current = getIncidentDateTimeInWib()
                         if (!incidentDate) setIncidentDate(new Date(current.incidentDate + "T00:00:00"))
@@ -405,22 +449,22 @@ export function ReportForm({ initialDraft }: { initialDraft?: DraftView }) {
                 <div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Data laporan hanya digunakan untuk penanganan internal JTI.</span></div>
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                    <Button type="button" variant="outline" onClick={() => setStep("category")}><ArrowLeft />Ganti kategori</Button>
                     <Button type="button" variant="outline" onClick={handleDraft}><Save />Simpan draft</Button>
                     <Button ref={submitButtonRef} type="submit" disabled={!canSubmit}>Periksa laporan<ArrowRight className="ml-0.5" /></Button>
                   </div>
                 </div>
               </div>
-            </div> : null}
+            </div> : <p className="rounded-xl border border-dashed border-border bg-muted/30 p-5 text-sm text-muted-foreground">Pilih kategori laporan untuk mulai mengisi formulir.</p>}
           </fieldset>
-          {pending ? <p className="text-sm text-muted-foreground" role="status">Menyimpan laporan...</p> : null}
-          {error && step !== "review" ? <FieldError>{error}</FieldError> : null}
-          {savedState === "draft" ? <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><CheckCircle2 className="size-4 text-primary" />Draft terakhir tersimpan. Simpan lagi setelah melakukan perubahan.</p> : null}
+          {pending ? <p className="text-sm text-muted-foreground" role="status">{submitting ? "Mengirim laporan…" : "Menyimpan draft…"}</p> : null}
+          {error && !previewOpen ? <FieldError>{error}</FieldError> : null}
         </form>
-        {step === "review" && preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} onClose={() => { if (!busy.current) { releasePreview(); setPreview(null); setError(""); setStep("details") } }} onConfirm={() => { void save(true, preview) }} /> : null}
       </CardContent></div></Card>
       <ReportGuidance category={category} service={service} handlerRole={catalog?.services.find((row) => row.name === service)?.handlerRole} />
       </div>
+      <Dialog open={previewOpen} onOpenChange={(open, details) => { if (busy.current) { details.cancel(); return }; setPreviewOpen(open) }} onOpenChangeComplete={(open) => { if (!open) { releasePreview(); setPreview(null) } }} disablePointerDismissal={pending}>
+        {preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} finalFocus={() => submitButtonRef.current ?? formRef.current} onClose={() => { if (!busy.current) setPreviewOpen(false) }} onConfirm={() => { void save(true, preview) }} /> : null}
+      </Dialog>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -12,6 +12,7 @@ import {
   FileText,
   Inbox,
   Loader2,
+  ListChecks,
   MapPin,
   MapPinned,
   Package,
@@ -27,6 +28,8 @@ import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { SectionCard } from "@/components/ui/section-card"
 import { Card } from "@/components/ui/card"
 import { FieldError } from "@/components/ui/field"
 import type { CurrentUser } from "@/lib/auth/current-user"
@@ -45,6 +48,7 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
   const [lossData, setLossData] = useState<LossFormData | null>(null)
   const [foundData, setFoundData] = useState<FoundFormData | null>(null)
 
+  const inventoryCommand = useRef<{ signature: string; key: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submittedSuccess, setSubmittedSuccess] = useState<{
@@ -57,6 +61,7 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
   const currentStepIndex = stepOrder.indexOf(currentStep)
 
   function handleReset() {
+    inventoryCommand.current = null
     setSubmittedSuccess(null)
     setLossData(null)
     setFoundData(null)
@@ -77,6 +82,8 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
     try {
       if (selectedType === "kehilangan" && lossData) {
         const formData = new FormData()
+        formData.set("ownerName", lossData.ownerName ?? "")
+        formData.set("ownerContact", lossData.ownerContact ?? "")
         formData.set("title", lossData.title)
         formData.set("itemName", lossData.itemName)
         formData.set("location", lossData.location)
@@ -95,11 +102,14 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
 
         setSubmittedSuccess({
           type: "kehilangan",
-          title: data.ticketNumber || data.title || data.itemName,
-          detail: `Laporan kehilangan berhasil dicatat dan diteruskan ke menu Kehilangan & Temuan${data.ticketNumber ? ` (Tiket: ${data.ticketNumber})` : ""}.`,
+          title: data.title || data.itemName,
+          detail: "Laporan kehilangan berhasil dicatat dan diteruskan ke menu Kehilangan & Temuan.",
         })
       } else if (selectedType === "temuan" && foundData) {
+        const signature = JSON.stringify([foundData.itemName, foundData.description, foundData.foundLocation, foundData.founderName, foundData.photoFile?.name, foundData.photoFile?.size, foundData.photoFile?.lastModified])
+        if (!inventoryCommand.current || inventoryCommand.current.signature !== signature) inventoryCommand.current = { signature, key: crypto.randomUUID() }
         const formData = new FormData()
+        formData.set("submissionKey", inventoryCommand.current.key)
         formData.set("itemName", foundData.itemName)
         if (foundData.description) formData.set("description", foundData.description)
         if (foundData.foundLocation) formData.set("foundLocation", foundData.foundLocation)
@@ -137,15 +147,15 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
         {submittedSuccess ? (
           <Card className="rounded-2xl border-border bg-sidebar p-1.5 shadow-xs">
             <div className="flex flex-col items-center justify-center space-y-4 rounded-xl border border-border/60 bg-card p-8 text-center sm:p-12">
-              <div className="flex size-14 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 shadow-xs dark:text-emerald-400">
+              <div className="flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
                 <CheckCircle2 className="size-7" aria-hidden="true" />
               </div>
               <div className="max-w-md space-y-2">
-                <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                <Badge variant="outline" tone="success">
                   {submittedSuccess.type === "temuan"
                     ? "Temuan Masuk Inventaris"
                     : "Laporan Kehilangan Tersimpan"}
-                </span>
+                </Badge>
                 <h3 className="text-lg font-bold text-foreground">
                   {submittedSuccess.title}
                 </h3>
@@ -197,125 +207,22 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
 
             {/* STEP 1: Pilih Jenis Pelaporan */}
             {currentStep === "type" ? (
-              <Card className="rounded-2xl border-border bg-sidebar p-1.5 shadow-xs">
-                <div className="space-y-6 rounded-xl border border-border/60 bg-card p-5 sm:p-7 shadow-2xs">
-                  <div>
-                    <h2 className="text-base font-semibold tracking-tight text-foreground">
-                      Pilih Jenis Pelaporan
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Pilih jenis laporan yang ingin dicatat. Pelaporan kehilangan diatur secara default.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {/* Option: Kehilangan (Default) */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedType("kehilangan")}
-                      className={cn(
-                        "group relative flex flex-col text-left rounded-2xl border p-1.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        selectedType === "kehilangan"
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border bg-sidebar hover:border-primary/40 hover:bg-sidebar/80 shadow-2xs"
-                      )}
-                      aria-pressed={selectedType === "kehilangan"}
-                    >
-                      <div className="flex flex-1 flex-col justify-between rounded-xl border border-border/60 bg-card p-4 sm:p-5">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span
-                              className={cn(
-                                "flex size-11 items-center justify-center rounded-xl border transition-colors",
-                                selectedType === "kehilangan"
-                                  ? "border-primary/40 bg-primary/10 text-primary"
-                                  : "border-border bg-background text-muted-foreground group-hover:text-primary"
-                              )}
-                            >
-                              <PackageSearch className="size-5" aria-hidden="true" />
-                            </span>
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-                                selectedType === "kehilangan"
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "bg-muted text-muted-foreground border-border/60"
-                              )}
-                            >
-                              {selectedType === "kehilangan" ? "Terpilih (Default)" : "Pilih"}
-                            </span>
-                          </div>
-
-                          <div className="space-y-1">
-                            <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
-                              Laporan Kehilangan
-                            </h3>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                              Catat laporan kehilangan barang dari civitas kampus (judul, nama barang, lokasi, waktu, ciri-ciri, dan foto).
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex items-center gap-1.5 text-xs font-medium text-primary">
-                          <span>Formulir pelapor tanpa pilihan ganda</span>
-                          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Option: Temuan */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedType("temuan")}
-                      className={cn(
-                        "group relative flex flex-col text-left rounded-2xl border p-1.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        selectedType === "temuan"
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border bg-sidebar hover:border-primary/40 hover:bg-sidebar/80 shadow-2xs"
-                      )}
-                      aria-pressed={selectedType === "temuan"}
-                    >
-                      <div className="flex flex-1 flex-col justify-between rounded-xl border border-border/60 bg-card p-4 sm:p-5">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span
-                              className={cn(
-                                "flex size-11 items-center justify-center rounded-xl border transition-colors",
-                                selectedType === "temuan"
-                                  ? "border-primary/40 bg-primary/10 text-primary"
-                                  : "border-border bg-background text-muted-foreground group-hover:text-primary"
-                              )}
-                            >
-                              <PackagePlus className="size-5" aria-hidden="true" />
-                            </span>
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-                                selectedType === "temuan"
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "bg-muted text-muted-foreground border-border/60"
-                              )}
-                            >
-                              {selectedType === "temuan" ? "Terpilih" : "Pilih"}
-                            </span>
-                          </div>
-
-                          <div className="space-y-1">
-                            <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
-                              Laporan Temuan (Inventaris Pos)
-                            </h3>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                              Catat barang temuan yang diserahkan ke Pos Satpam. Barang otomatis terdaftar di inventaris pos.
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex items-center gap-1.5 text-xs font-medium text-primary">
-                          <span>Formulir temuan dengan lokasi &amp; penemu</span>
-                          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                        </div>
-                      </div>
-                    </button>
+              <SectionCard title="Jenis pelaporan" icon={ListChecks} contentClassName="space-y-5">
+                  <p className="text-sm text-muted-foreground">Pilih jenis pencatatan sesuai kondisi di pos Satpam.</p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {([
+                      { value: "kehilangan", title: "Laporan Kehilangan", icon: PackageSearch, description: "Catat kehilangan yang dilaporkan langsung oleh pemilik ke pos Satpam." },
+                      { value: "temuan", title: "Laporan Temuan (Inventaris Pos)", icon: PackagePlus, description: "Catat barang yang sudah diterima secara fisik di pos Satpam ke Inventaris." },
+                    ] as const).map(({ value, title, icon: Icon, description }) => (
+                      <Button key={value} type="button" variant="outline" aria-pressed={selectedType === value} onClick={() => setSelectedType(value)}
+                        className={cn("group h-auto w-full flex-col items-stretch gap-3 rounded-xl border p-4 text-left whitespace-normal shadow-none transition-colors motion-reduce:transition-none sm:p-5", selectedType === value ? "border-primary bg-primary/5 hover:bg-primary/5 dark:bg-primary/10 dark:hover:bg-primary/10" : "border-border bg-background hover:border-primary/40 hover:bg-muted/40 dark:bg-background dark:hover:bg-muted/40")}>
+                        <span className="flex w-full items-center justify-between gap-3">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary"><Icon className="size-5" aria-hidden="true" /></span>
+                          <Badge variant="outline" tone={selectedType === value ? "primary" : "neutral"}>{selectedType === value ? "Terpilih" : "Pilih"}</Badge>
+                        </span>
+                        <span className="space-y-1"><span className="block text-base font-semibold text-foreground">{title}</span><span className="block text-xs leading-relaxed font-normal text-muted-foreground">{description}</span></span>
+                      </Button>
+                    ))}
                   </div>
 
                   <div className="flex items-center justify-end border-t border-border/60 pt-4">
@@ -330,28 +237,20 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
                       <ArrowRight className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
-                </div>
-              </Card>
+              </SectionCard>
             ) : null}
 
             {/* STEP 2: Formulir Informasi & Lampiran */}
             {currentStep === "details" ? (
-              <Card className="rounded-2xl border-border bg-sidebar p-1.5 shadow-xs">
-                <div className="space-y-5 rounded-xl border border-border/60 bg-card p-5 sm:p-7 shadow-2xs">
+              <SectionCard title="Informasi & lampiran" icon={FileText} contentClassName="space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
                     <div className="flex items-center gap-3">
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-primary/10 text-primary shadow-2xs">
-                        {selectedType === "kehilangan" ? (
-                          <PackageSearch className="size-5" aria-hidden="true" />
-                        ) : (
-                          <PackagePlus className="size-5" aria-hidden="true" />
-                        )}
-                      </span>
+
                       <div>
                         <h3 className="text-base font-semibold tracking-tight text-foreground">
                           {selectedType === "kehilangan"
-                            ? "Formulir Informasi Laporan Kehilangan"
-                            : "Formulir Informasi Barang Temuan"}
+                            ? "Laporan kehilangan"
+                            : "Barang temuan diterima di pos"}
                         </h3>
                         <p className="text-xs text-muted-foreground">
                           {selectedType === "kehilangan"
@@ -407,27 +306,13 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
                       submitLabel="Lanjut ke Pratinjau"
                     />
                   )}
-                </div>
-              </Card>
+              </SectionCard>
             ) : null}
 
             {/* STEP 3: Pratinjau & Konfirmasi Simpan */}
             {currentStep === "review" ? (
-              <Card className="rounded-2xl border-border bg-sidebar p-1.5 shadow-xs">
-                <div className="space-y-6 rounded-xl border border-border/60 bg-card p-5 sm:p-7 shadow-2xs">
-                  <div className="flex items-center gap-3 border-b border-border/60 pb-4">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-primary/10 text-primary shadow-2xs">
-                      <ShieldCheck className="size-5" aria-hidden="true" />
-                    </span>
-                    <div>
-                      <h3 className="text-base font-semibold tracking-tight text-foreground">
-                        Periksa Ringkasan Laporan
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        Pastikan seluruh data yang dimasukkan sudah benar sebelum disimpan ke sistem.
-                      </p>
-                    </div>
-                  </div>
+              <SectionCard title="Periksa laporan" icon={ShieldCheck} contentClassName="space-y-6">
+                  <p className="text-sm text-muted-foreground">Pastikan seluruh data sudah benar sebelum disimpan.</p>
 
                   {submitError ? <FieldError>{submitError}</FieldError> : null}
 
@@ -440,16 +325,9 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
                           Jenis Laporan
                         </dt>
                         <dd className="font-semibold text-foreground col-span-2 sm:col-span-3">
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold border",
-                              selectedType === "kehilangan"
-                                ? "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400"
-                                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                            )}
-                          >
+                          <Badge variant="outline" tone={selectedType === "kehilangan" ? "info" : "success"}>
                             {selectedType === "kehilangan" ? "Laporan Kehilangan" : "Laporan Temuan (Inventaris Pos)"}
-                          </span>
+                          </Badge>
                         </dd>
                       </div>
 
@@ -495,7 +373,7 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
                             <dd className="text-foreground col-span-2 sm:col-span-3">
                               {lossData?.incidentDate} · {lossData?.incidentTime} WIB
                               {!lossData?.useCustomTime && (
-                                <span className="ml-2 text-[11px] text-muted-foreground">(Waktu saat ini)</span>
+                                <span className="ml-2 text-xs text-muted-foreground">(Waktu saat ini)</span>
                               )}
                             </dd>
                           </div>
@@ -600,7 +478,7 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
                       type="button"
                       disabled={submitting}
                       onClick={handleFinalSubmit}
-                      className="min-w-[170px] gap-2"
+                      className="min-w-44 gap-2"
                     >
                       {submitting ? (
                         <>
@@ -615,8 +493,7 @@ export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
                       )}
                     </Button>
                   </div>
-                </div>
-              </Card>
+              </SectionCard>
             ) : null}
           </div>
         )}

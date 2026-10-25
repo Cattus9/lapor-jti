@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { ArrowRight, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
@@ -29,6 +29,7 @@ export function FoundItemForm({
   onProceedToReview,
   onCancel,
   submitLabel,
+  sourceFoundTicket,
 }: {
   idPrefix: string
   initialData?: Partial<FoundFormData>
@@ -36,6 +37,7 @@ export function FoundItemForm({
   onProceedToReview?: (data: FoundFormData) => void
   onCancel?: () => void
   submitLabel?: string
+  sourceFoundTicket?: string
 }) {
   const [itemName, setItemName] = useState(initialData?.itemName ?? "")
   const [description, setDescription] = useState(initialData?.description ?? "")
@@ -43,7 +45,8 @@ export function FoundItemForm({
   const [founderName, setFounderName] = useState(initialData?.founderName ?? "")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
-  const photo = useItemPhoto()
+  const photo = useItemPhoto(initialData?.photoFile)
+  const command = useRef<{ signature: string; key: string } | null>(null)
 
   function resetForm() {
     setItemName("")
@@ -79,6 +82,10 @@ export function FoundItemForm({
 
     try {
       const formData = new FormData()
+      const signature = JSON.stringify([itemName, description, foundLocation, founderName, sourceFoundTicket, photo.file?.name, photo.file?.size, photo.file?.lastModified])
+      if (!command.current || command.current.signature !== signature) command.current = { signature, key: crypto.randomUUID() }
+      formData.set("submissionKey", command.current.key)
+      if (sourceFoundTicket) formData.set("sourceFoundTicket", sourceFoundTicket)
       formData.set("itemName", itemName.trim())
       if (description.trim()) formData.set("description", description.trim())
       if (foundLocation.trim()) formData.set("foundLocation", foundLocation.trim())
@@ -89,6 +96,7 @@ export function FoundItemForm({
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || "Gagal menyimpan barang inventaris.")
 
+      command.current = null
       resetForm()
       onSuccess?.(data)
     } catch (err) {
@@ -152,6 +160,7 @@ export function FoundItemForm({
             disabled={submitting}
             rows={3}
             className="resize-none"
+            maxLength={2000}
           />
           <FieldDescription>Catatan ciri khusus untuk memudahkan verifikasi saat ada yang menanyakan.</FieldDescription>
         </Field>
@@ -181,7 +190,7 @@ export function FoundItemForm({
             Batal
           </Button>
         ) : null}
-        <Button type="submit" disabled={submitting} className="min-w-[150px] gap-2">
+        <Button type="submit" disabled={submitting} className="gap-2">
           {submitting ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />

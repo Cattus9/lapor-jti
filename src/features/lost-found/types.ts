@@ -3,8 +3,11 @@ import type { NotificationItem } from "../notifications/types"
 import type { satpamReportPeriods, satpamReportSorts } from "./domain/satpam-list-filters"
 
 export type SatpamReportKind = "kehilangan" | "temuan"
+// Diverifikasi remains readable only in historical entries from before migration 0015.
 export type SatpamReportStatus = "Baru" | "Diverifikasi" | "Diproses" | "Barang teridentifikasi" | "Diserahkan" | "Selesai" | "Ditolak"
 export type SatpamLostFoundReport = {
+  reporterContact?: string; recordedBy?: string
+  inventoryId?: string
   id: string; ticket: string; kind: SatpamReportKind; title: string; reporter: string; location: string
   eventDate: string; eventTime: string; submittedAt: string; updatedAt: string; status: SatpamReportStatus
   description: string; characteristics: string; attachments: number; photoUrl?: string
@@ -14,6 +17,7 @@ export type SatpamPendingHandover = { id: string; lossTicket: string; foundTicke
 export type StatusHistoryItem = { status: SatpamReportStatus; actor: string; timestamp: string; note?: string }
 export type SatpamDetail = { report: SatpamLostFoundReport; history: StatusHistoryItem[]; files: Array<{ id: string; name: string; url: string }> }
 export type SatpamHandoverHistoryItem = {
+  source?: "inventaris" | "laporan"; inventoryId?: string; legacy?: boolean; ownershipEvidence?: string; receivedAt?: string
   id: string; title: string; itemCategory: string; itemDescription: string; lostTicket: string; foundTicket: string
   lostSubmittedAt: string; foundSubmittedAt: string; lostPhotoUrl?: string; foundPhotoUrl?: string; recipient: string; handler: string; actor: string; location: string
   matchedAt: string; handedOverAt: string; handedOverAtIso: string; completedAt: string; handoverNote: string
@@ -28,5 +32,6 @@ export type SatpamWorkspaceData = {
   officers: SecurityOfficer[]; historyOfficers: SecurityOfficer[]; pending: SatpamPage<SatpamPendingHandover>
   counts: { lostReports: number; foundReports: number; newFindings: number; readyForHandover: number }
 }
-export type SatpamDashboardData = SatpamWorkspaceData["counts"] & { queue: SatpamLostFoundReport[]; updatedAt: string }
+export type SatpamQueueReport = Pick<SatpamLostFoundReport, "id" | "ticket" | "kind" | "title" | "location" | "status" | "submittedAt">
+export type SatpamDashboardData = SatpamWorkspaceData["counts"] & { storedItems: number; queue: SatpamQueueReport[]; updatedAt: string }
 export type SatpamNotifications = { items: NotificationItem[]; unread: number; nextCursor: string | null }

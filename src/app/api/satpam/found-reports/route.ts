@@ -1,5 +1,5 @@
 import { getSatpamService } from "@/features/lost-found/server"
-import { readSatpamJson, satpamRequest } from "@/features/lost-found/infrastructure/http"
+import { readSatpamJson, readSatpamPhotoForm, satpamRequest } from "@/features/lost-found/infrastructure/http"
 import { apiResult } from "@/features/reports/infrastructure/http"
 import { ReportError, type AttachmentUpload } from "@/features/reports/domain/report"
 
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type") || ""
 
     if (contentType.startsWith("multipart/form-data")) {
-      const formData = await request.formData()
+      const formData = await readSatpamPhotoForm(request)
       const title = String(formData.get("title") ?? "")
       const itemName = String(formData.get("itemName") ?? "")
       const location = String(formData.get("location") ?? "")

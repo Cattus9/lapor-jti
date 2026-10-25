@@ -1,7 +1,7 @@
 import "dotenv/config"
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
-import { unlink } from "node:fs/promises"
+import { access, unlink } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import { and, eq, inArray } from "drizzle-orm"
 import { hashPassword } from "better-auth/crypto"
@@ -55,6 +55,21 @@ async function main() {
     }
     assert.equal((await write(cookies[0], payload, randomUUID(), 0, false, [], new Blob(["fake image"], { type: "image/png" }))).status, 400)
     console.log("PASS: authentication, role, CSRF, required fields, future incident dates, and file validation")
+
+    const clearId = randomUUID()
+    const clearSource = await write(cookies[0], { category: "lainnya", title: "Draft untuk dikosongkan" }, clearId, 0, true, [], new Blob(["%PDF-fixture"], { type: "application/pdf" }))
+    assert.equal(clearSource.status, 200)
+    const clearDraft = (await clearSource.json()).draft
+    const [clearFile] = await db.select().from(reportAttachments).where(eq(reportAttachments.draftId, clearId))
+    assert.equal((await write(cookies[1], { category: "lainnya" }, clearId, clearDraft.revision, true)).status, 404)
+    assert.equal((await write(cookies[0], { category: "lainnya" }, clearId, 0, true)).status, 409)
+    const cleared = await write(cookies[0], { category: "lainnya" }, clearId, clearDraft.revision, true)
+    assert.equal(cleared.status, 200)
+    assert.equal((await cleared.json()).clearedDraftId, clearId)
+    assert.deepEqual(await db.select().from(reportDrafts).where(eq(reportDrafts.id, clearId)), [])
+    assert.equal((await request(`/api/pelapor/attachments/${clearFile.id}`, cookies[0])).status, 404)
+    await assert.rejects(access(join(storageRoot, clearFile.storageKey)), { code: "ENOENT" })
+    console.log("PASS: clearing a draft removes its record and private file, with ownership/revision protection")
 
     const draftId = randomUUID()
     const partial = await write(cookies[0], { category: "lainnya", title: "Draft parsial" }, draftId, 0, true)
@@ -121,7 +136,7 @@ async function main() {
     await db.update(reports).set({ status: "diproses" }).where(and(eq(reports.id, processSamples[0].id), eq(reports.reporterId, ids[0])))
     await db.update(reports).set({ status: "ditolak" }).where(and(eq(reports.id, processSamples[1].id), eq(reports.reporterId, ids[0])))
     async function filtered(query: Record<string, string>, cookie = cookies[0]) {
-      const response = await request(`/api/pelapor/reports?${new URLSearchParams(query)}`, cookie)
+      const response = await request(`/api/pelapor/reports?${new URLSearchParams({ status: "semua", ...query })}`, cookie)
       assert.equal(response.status, 200)
       return response.json()
     }

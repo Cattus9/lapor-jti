@@ -24,10 +24,15 @@
 :root {
   /* Preserve the original desktop report form / guidance proportion across themes. */
   --report-form-desktop-columns: minmax(0, 1.45fr) minmax(17.5rem, 0.55fr);
+  /* Shared history filter geometry, kept identical across light/dark themes. */
+  --report-history-filter-width: 33rem;
+  --report-history-filter-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.2fr);
   --background: #f4f5f7;
   --foreground: #0c121a;
   --card: #ffffff;
   --card-foreground: #0c121a;
+  /* Secondary report surfaces sit between white cards and the page background. */
+  --report-surface: #fbfbfc;
   /* Quiet inset surfaces for empty states; existing card/background tokens stay unchanged. */
   --empty-surface: #fafbfb;
   --popover: #ffffff;
@@ -94,6 +99,7 @@
   --foreground: #f0f2f4;
   --card: #13161b;
   --card-foreground: #f0f2f4;
+  --report-surface: #181b1f;
   --empty-surface: #181b1f;
   --popover: #1a1d22;
   --popover-foreground: #f0f2f4;
@@ -153,6 +159,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-report-surface: var(--report-surface);
   --color-empty-surface: var(--empty-surface);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);

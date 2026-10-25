@@ -43,7 +43,7 @@ export const reports = pgTable("reports", {
   check("reports_title_check", sql`length(trim(${t.title})) between 1 and 200`),
   check("reports_description_check", sql`length(trim(${t.description})) between 1 and 5000`),
   check("reports_handler_category_check", sql`(${t.category} = 'kehilangan-temuan' and ${t.handlerRole} = 'satpam') or (${t.category} = 'fasilitas' and ${t.handlerRole} = 'teknisi') or (${t.category} = 'layanan' and ${t.handlerRole} in ('manajemen', 'tefa')) or (${t.category} = 'lainnya' and ${t.handlerRole} = 'manajemen')`),
-  check("reports_status_category_check", sql`${t.status} in ('baru', 'diproses', 'selesai', 'ditolak') or (${t.category} in ('kehilangan-temuan', 'fasilitas') and ${t.status} = 'diverifikasi') or (${t.category} = 'kehilangan-temuan' and ${t.status} in ('barang_teridentifikasi', 'diserahkan'))`),
+  check("reports_status_category_check", sql`${t.status} in ('baru', 'diproses', 'selesai', 'ditolak') or (${t.category} = 'fasilitas' and ${t.status} = 'diverifikasi') or (${t.category} = 'kehilangan-temuan' and ${t.status} in ('barang_teridentifikasi', 'diserahkan'))`),
 ])
 // Atomic per-year counter, not MAX(ticket)+1. Incremented in the submission transaction.
 export const reportTicketCounters = pgTable("report_ticket_counters", { year: integer("year").primaryKey(), value: bigint("value", { mode: "number" }).notNull() })

@@ -4,20 +4,22 @@ import { getDb } from "@/db"
 import { sequentialQueries } from "@/db/sequential"
 import { users } from "@/db/schema"
 import { facilityObjects, locationAreas, locationFacilityObjects, locations, notifications, reportAttachments, reportDrafts, reportFacilityObjects, reportLostFoundDetails, reportOtherDetails, reports, reportServiceDetails, reportStatusHistory, reportTicketCounters, services } from "@/db/reports-schema"
-import { handlerByCategory, isUuid, ReportError, type ReportActor, type StoredAttachment } from "../domain/report"
+import { handlerByCategory, isUuid, reportCategories, ReportError, type ReportActor, type StoredAttachment } from "../domain/report"
 import type { DraftView, ReportRepository, ReportWrite } from "../application/ports"
 import type { ReportListItem, ReportSummary } from "../types"
 import { defaultReportFilters, reportDateBounds, type ReportListFilters } from "../domain/report-list-filters"
 import { getIncidentDateTimeInWib } from "../domain/report-date"
+import { hasReportDraftContent } from "../domain/report-draft-content"
 
 const pageSize = 20
 const reportDateFormatter = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })
 const dateLabel = (date: Date) => reportDateFormatter.format(date)
 type ReportRow = typeof reports.$inferSelect
 type DraftRow = typeof reportDrafts.$inferSelect
-const listColumns = { id: reports.id, ticketNumber: reports.ticketNumber, title: reports.title, category: reports.category, status: reports.status, updatedAt: reports.updatedAt, submittedAt: reports.submittedAt }
+// Bound the preview in the existing owner-scoped query; never load details per card.
+const listColumns = { id: reports.id, ticketNumber: reports.ticketNumber, title: reports.title, description: sql<string>`left(${reports.description}, 240)`, category: reports.category, status: reports.status, updatedAt: reports.updatedAt, submittedAt: reports.submittedAt }
 type ListRow = Pick<ReportRow, keyof typeof listColumns>
-const listItem = (row: ListRow): ReportListItem => ({ id: row.id, ticketNumber: row.ticketNumber, title: row.title, category: row.category, status: row.status, updatedAt: dateLabel(row.updatedAt), submittedAt: dateLabel(row.submittedAt), submittedAtIso: row.submittedAt.toISOString() })
+const listItem = (row: ListRow): ReportListItem => ({ id: row.id, ticketNumber: row.ticketNumber, title: row.title, descriptionPreview: row.description, category: row.category, status: row.status, updatedAt: dateLabel(row.updatedAt), submittedAt: dateLabel(row.submittedAt), submittedAtIso: row.submittedAt.toISOString() })
 function cursorValue(value?: string) {
   if (!value) return null
   if (value.length > 160) throw new ReportError("Pagination tidak valid.")
@@ -50,6 +52,12 @@ export class DrizzleReportRepository implements ReportRepository {
       const kept = existingFiles.filter((file) => input.retainedAttachmentIds.includes(file.id))
       if (kept.length !== input.retainedAttachmentIds.length) throw new ReportError("Lampiran bukan milik draft ini.", 400)
       const removed = existingFiles.filter((file) => !input.retainedAttachmentIds.includes(file.id))
+      // Clearing a resumed draft is a deletion, not another saved empty draft.
+      // Ownership, revision, schema and retained-file checks have already passed.
+      if (!submit && !hasReportDraftContent(input.payload, kept.length + files.length)) {
+        await tx.delete(reportDrafts).where(eq(reportDrafts.id, draft.id))
+        return { created: true, clearedDraftId: draft.id, removed }
+      }
       let payload = input.payload
       let location: typeof locations.$inferSelect | undefined
       let service: typeof services.$inferSelect | undefined
@@ -187,6 +195,16 @@ export class DrizzleReportRepository implements ReportRepository {
       previousMonth: isMonthSegmented ? previousMonth : null,
       previousMonthLabel: isMonthSegmented ? previousMonthLabel : null,
     }
+  }
+  async categoryDrafts(ownerId: string) {
+    const category = sql<string>`${reportDrafts.payload}->>'category'`
+    const rows = await this.db.selectDistinctOn([category]).from(reportDrafts)
+      .where(and(eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId), eq(reportDrafts.schemaVersion, 1), inArray(category, [...reportCategories])))
+      .orderBy(category, desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(reportCategories.length)
+    const files = rows.length ? await this.db.select().from(reportAttachments)
+      .where(and(eq(reportAttachments.ownerId, ownerId), inArray(reportAttachments.draftId, rows.map((row) => row.id))))
+      .orderBy(reportAttachments.createdAt, reportAttachments.id) : []
+    return rows.map((row) => draftView(row, files.filter((file) => file.draftId === row.id)))
   }
   async draft(ownerId: string, id: string) {
     const [row] = await this.db.select().from(reportDrafts).where(and(eq(reportDrafts.id, id), eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId))).limit(1)

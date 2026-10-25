@@ -14,6 +14,8 @@ import type { LossReport } from "../domain/loss-report"
 import { ItemPhotoField, useItemPhoto } from "./item-photo-field"
 
 export type LossFormData = {
+  ownerName?: string
+  ownerContact?: string
   title: string
   itemName: string
   location: string
@@ -47,6 +49,8 @@ export function LossItemForm({
   onCancel?: () => void
   submitLabel?: string
 }) {
+  const [ownerName, setOwnerName] = useState(initialData?.ownerName ?? "")
+  const [ownerContact, setOwnerContact] = useState(initialData?.ownerContact ?? "")
   const [title, setTitle] = useState(initialData?.title ?? "")
   const [itemName, setItemName] = useState(initialData?.itemName ?? "")
   const [location, setLocation] = useState(initialData?.location ?? "")
@@ -62,7 +66,7 @@ export function LossItemForm({
   )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
-  const photo = useItemPhoto()
+  const photo = useItemPhoto(initialData?.photoFile)
 
   const todayStr = getTodayInWib()
   const formattedSelectedDate = incidentDate ? formatCalendarDate(incidentDate) : ""
@@ -103,13 +107,14 @@ export function LossItemForm({
       return
     }
 
-    const currentWib = getIncidentDateTimeInWib()
-    const resolvedDate = useCustomTime ? formattedSelectedDate : currentWib.incidentDate
-    const resolvedTime = useCustomTime ? incidentTime.trim() : currentWib.incidentTime
+    const resolvedDate = useCustomTime ? formattedSelectedDate : ""
+    const resolvedTime = useCustomTime ? incidentTime.trim() : ""
 
     if (onProceedToReview) {
       setError("")
       onProceedToReview({
+        ownerName: ownerName.trim(),
+        ownerContact: ownerContact.trim(),
         title: title.trim(),
         itemName: itemName.trim(),
         location: location.trim(),
@@ -129,6 +134,8 @@ export function LossItemForm({
 
     try {
       const formData = new FormData()
+      formData.set("ownerName", ownerName.trim())
+      formData.set("ownerContact", ownerContact.trim())
       formData.set("title", title.trim())
       formData.set("itemName", itemName.trim())
       formData.set("location", location.trim())
@@ -157,6 +164,10 @@ export function LossItemForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       {error ? <FieldError>{error}</FieldError> : null}
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field><FieldLabel htmlFor={`${idPrefix}-owner-name`}>Nama pelapor langsung (opsional)</FieldLabel><Input id={`${idPrefix}-owner-name`} value={ownerName} maxLength={150} onChange={event => setOwnerName(event.target.value)} disabled={submitting} /><FieldDescription>Orang yang melaporkan kehilangan di pos, terpisah dari akun Satpam pencatat.</FieldDescription></Field>
+        <Field><FieldLabel htmlFor={`${idPrefix}-owner-contact`}>Kontak yang dapat dihubungi (opsional)</FieldLabel><Input id={`${idPrefix}-owner-contact`} value={ownerContact} maxLength={150} onChange={event => setOwnerContact(event.target.value)} disabled={submitting} /><FieldDescription>Email atau nomor kontak untuk tindak lanjut oleh Satpam.</FieldDescription></Field>
+      </div>
       <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
         {/* Judul Laporan */}
         <Field className="space-y-1.5 sm:col-span-2">
@@ -329,7 +340,7 @@ export function LossItemForm({
             Kembali
           </Button>
         ) : null}
-        <Button type="submit" disabled={submitting} className="min-w-[160px] gap-2">
+        <Button type="submit" disabled={submitting} className="min-w-40 gap-2">
           {submitting ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />

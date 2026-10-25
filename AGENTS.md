@@ -30,6 +30,14 @@ Sebelum mengubah kode, setiap anggota tim dan agent wajib membaca [Dev.md](Dev.m
 - The outer layer MUST include a bottom affordance labeled `Detail` with a subtle `ArrowRight`; use a link when a detail route exists and a non-interactive footer while the route is still pending.
 - Role-specific dashboards MUST not recreate KPI card markup locally or introduce a different footer label/style.
 
+## Layered Section Card Standard
+
+- Pola panel berlapis disebut **Layered Section Card**. Baris ikon dan teks pada lapisan luarnya disebut **Section Header** (judul bagian), bukan page header atau judul kartu di dalam konten.
+- Untuk panel koleksi/antrean yang dibuat atau disentuh, gunakan `SectionCard` dari `src/components/ui/section-card.tsx`: lapisan luar `bg-sidebar`, section header ringkas dengan ikon Lucide semantik dan label `text-xs font-medium text-muted-foreground`, lalu permukaan dalam `bg-card` dengan border/radius/spacing tema. Metadata atau jumlah data boleh berada di kanan section header.
+- Letakkan filter, ringkasan hasil, loading/error/empty state, daftar, dan pagination di permukaan dalam yang sama. Jangan membuat wrapper baru hanya ketika kosong atau mengulang judul/icon section header di dalam panel.
+- Empty state koleksi mengikuti `CollectionEmptyState`: border dashed, permukaan inset `bg-empty-surface`, ikon muted, judul singkat dan deskripsi pendukung. Bedakan data awal kosong dengan filter tanpa hasil; jangan menampilkan empty state selama loading/error.
+- Gunakan heading semantik untuk Section Header dan label field yang terhubung ke kontrol. Ikuti standar KPI/detail modal tersendiri untuk konteksnya; jangan mengganti komposisinya secara massal.
+
 ## Report Detail Modal Standard
 - `ReportDetailDialog` in `src/features/lost-found/components/satpam-lost-found-workspace.tsx` is the single source of truth for every operational report-detail modal.
 - Modal headers MUST use the compact metadata row: semantic icon, report category, submission date/time (WIB), and status badge. Internal ticket codes MUST NOT be displayed in the UI. Follow it with a prominent title and one concise update description. Do not use card-like headers or duplicate summary grids.

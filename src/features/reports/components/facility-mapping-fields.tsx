@@ -10,14 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { availableFacilities, type OperationalCatalog } from "@/features/operations/domain/operations"
 import { cn } from "cn"
 
-export function FacilityMappingFields({ catalog, location, onLocationChange, otherLocation, onOtherLocationChange, facilities, onFacilitiesChange, otherFacility, onOtherFacilityChange, disabled = false }: {
+export function FacilityMappingFields({ catalog, location, onLocationChange, otherLocation, onOtherLocationChange, facilities, onFacilitiesChange, otherFacility, onOtherFacilityChange, disabled = false, selectedAreaId, onAreaChange }: {
   catalog: OperationalCatalog; location: string; onLocationChange: (value: string) => void; otherLocation: string; onOtherLocationChange: (value: string) => void;
   facilities: string[]; onFacilitiesChange: (value: string[]) => void; otherFacility: string; onOtherFacilityChange: (value: string) => void; disabled?: boolean;
+  selectedAreaId?: string; onAreaChange?: (value: string) => void;
 }) {
   const selectedRoom = catalog.locations.find((row) => row.name === location)
   const [areaId, setAreaId] = useState(() => selectedRoom?.areaId ?? "")
   const [notice, setNotice] = useState("")
-  const activeArea = selectedRoom?.areaId ?? areaId
+  const activeArea = selectedRoom?.areaId ?? selectedAreaId ?? areaId
   const rooms = catalog.locations.filter((row) => row.areaId === activeArea).sort((a, b) => a.name.localeCompare(b.name, "id-ID", { numeric: true }))
   const choices = availableFacilities(catalog, location)
   const stale = facilities.filter((name) => name !== "Lainnya" && !choices.some((row) => row.name === name))
@@ -27,7 +28,7 @@ export function FacilityMappingFields({ catalog, location, onLocationChange, oth
     if (value !== "Lainnya") onOtherLocationChange("")
     setNotice(facilities.length ? "Lokasi berubah. Pilih kembali fasilitas sesuai lokasi baru." : "")
   }
-  function changeArea(value: string) { setAreaId(value); changeLocation("") }
+  function changeArea(value: string) { setAreaId(value); onAreaChange?.(value); changeLocation("") }
   const unavailableLocation = Boolean(location && location !== "Lainnya" && !selectedRoom)
   const locationOptions = [...rooms.map((row) => row.name), ...(selectedRoom && !rooms.some((row) => row.id === selectedRoom.id) ? [selectedRoom.name] : []), ...(unavailableLocation ? [location] : []), "Lainnya"]
   return <FieldGroup>

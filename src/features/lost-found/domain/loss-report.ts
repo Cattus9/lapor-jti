@@ -1,3 +1,4 @@
+import { validateSatpamIncident } from "./incident-time"
 import { ReportError } from "../../reports/domain/report"
 
 export type LossReport = {
@@ -17,6 +18,8 @@ export type LossReport = {
 }
 
 export type CreateLossReportInput = {
+  ownerName?: string
+  ownerContact?: string
   title?: string
   itemName: string
   location?: string
@@ -28,6 +31,11 @@ export type CreateLossReportInput = {
 }
 
 export function validateCreateLossReport(input: CreateLossReportInput) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new ReportError("Isian laporan tidak valid.")
+  for (const value of Object.values(input)) if (value !== undefined && typeof value !== "string") throw new ReportError("Isian laporan tidak valid.")
+  const ownerName = input.ownerName?.trim() || undefined
+  const ownerContact = input.ownerContact?.trim() || undefined
+  if ((ownerName?.length ?? 0) > 150 || (ownerContact?.length ?? 0) > 150) throw new ReportError("Nama dan kontak pemilik maksimal 150 karakter.")
   const itemName = input.itemName?.trim() ?? ""
   if (!itemName) throw new ReportError("Nama barang wajib diisi.", 400)
   if (itemName.length > 200) throw new ReportError("Nama barang maksimal 200 karakter.", 400)
@@ -56,17 +64,13 @@ export function validateCreateLossReport(input: CreateLossReportInput) {
   if (!description) throw new ReportError("Detail/kronologi kehilangan wajib diisi.", 400)
   if (description.length > 5000) throw new ReportError("Detail/kronologi maksimal 5000 karakter.", 400)
 
+  validateSatpamIncident(incidentDate, incidentTime)
   const photoUrl = input.photoUrl?.trim() || undefined
-  if (photoUrl) {
-    try {
-      const parsed = new URL(photoUrl)
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("Protocol not supported")
-    } catch {
-      throw new ReportError("Tautan foto harus berupa URL valid (http/https).", 400)
-    }
-  }
+  if (photoUrl) throw new ReportError("Gunakan unggahan foto privat. Tautan foto eksternal tidak didukung.")
 
   return {
+    ownerName,
+    ownerContact,
     title,
     itemName,
     location,

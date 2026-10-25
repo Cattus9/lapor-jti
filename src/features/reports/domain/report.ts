@@ -13,7 +13,7 @@ export const statusLabels: Record<ReportStatus, string> = { baru: "Baru", diveri
 // owner from the validated services row inside the repository transaction.
 export const handlerByCategory: Record<ReportCategory, ReportHandler> = { "kehilangan-temuan": "satpam", fasilitas: "teknisi", layanan: "manajemen", lainnya: "manajemen" }
 export const lifecycleByCategory: Record<ReportCategory, readonly ReportStatus[]> = {
-  "kehilangan-temuan": ["baru", "diverifikasi", "diproses", "barang_teridentifikasi", "diserahkan", "selesai"],
+  "kehilangan-temuan": ["baru", "diproses", "barang_teridentifikasi", "diserahkan", "selesai"],
   fasilitas: ["baru", "diverifikasi", "diproses", "selesai"],
   layanan: ["baru", "diproses", "selesai"], lainnya: ["baru", "diproses", "selesai"],
 }
@@ -34,10 +34,11 @@ export type ReportPayload = {
   location: string; otherLocation: string; reportType: string; itemName: string; itemDetails: string
   facilities: string[]; otherFacility: string; service: string; program: string; otherCategory: string
   incidentTimeMode?: "automatic" | "custom"
+  facilityAreaId?: string
 }
 export const emptyReportPayload: ReportPayload = {
   category: "lainnya", title: "", description: "", incidentDate: "", incidentTime: "", location: "", otherLocation: "",
-  reportType: "", itemName: "", itemDetails: "", facilities: [], otherFacility: "", service: "", program: "", otherCategory: "",
+  reportType: "", itemName: "", itemDetails: "", facilities: [], otherFacility: "", service: "", program: "", otherCategory: "", facilityAreaId: "",
 }
 export function isUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -96,13 +97,13 @@ export function parsePayload(raw: unknown, submitted: boolean, now = new Date())
   if (payload.reportType && !["Kehilangan", "Temuan"].includes(payload.reportType)) throw new ReportError("Jenis laporan tidak valid.")
   // Do not persist hidden fields left over after a category change.
   if (payload.category !== "kehilangan-temuan") { payload.reportType = ""; payload.itemName = ""; payload.itemDetails = "" }
-  if (payload.category !== "fasilitas") { payload.facilities = []; payload.otherFacility = ""; payload.otherLocation = "" }
+  if (payload.category !== "fasilitas") { payload.facilities = []; payload.otherFacility = ""; payload.otherLocation = ""; payload.facilityAreaId = "" }
   if (payload.category !== "layanan") { payload.service = ""; payload.program = "" }
   if (payload.category !== "lainnya") payload.otherCategory = ""
   return payload
 }
 export type AttachmentUpload = { name: string; mimeType: string; bytes: Uint8Array }
-export type StoredAttachment = { id: string; name: string; mimeType: string; size: number; storageKey: string }
+export type StoredAttachment = { id: string; name: string; mimeType: string; size: number; storageKey: string; digest?: string }
 export function validateUploads(files: AttachmentUpload[], retainedCount: number) {
   if (files.length + retainedCount > 4) throw new ReportError("Maksimal 4 lampiran per laporan.")
   for (const file of files) {

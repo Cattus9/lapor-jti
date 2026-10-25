@@ -14,8 +14,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     return getSatpamService().handoverInventory(actor, {
       id,
-      recipient: String(body.recipient ?? ""),
-      note: typeof body.note === "string" ? body.note : undefined,
+      recipient: body.recipient,
+      note: body.note,
+      officerId: body.officerId,
+      ownershipEvidence: body.ownershipEvidence,
+      lossTicket: body.lossTicket,
+      submissionKey: body.submissionKey,
     })
   })
 }

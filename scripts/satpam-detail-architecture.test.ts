@@ -28,3 +28,11 @@ test("refresh revisions do not control modal mounting or its React key", () => {
   assert.ok(!key?.includes("revision"))
   assert.equal(attrs.find((attr) => attr.name.getText(source) === "open")?.getText(source), "open={detailOpen}")
 })
+
+test("acceptance goes straight to matching-ready processing and the stepper uses the shared category lifecycle", () => {
+  const text = source.getFullText()
+  assert.match(text, /lifecycleByCategory\["kehilangan-temuan"\]/)
+  assert.match(text, /await change\("Diproses"\)/)
+  assert.doesNotMatch(text, /await change\("Diverifikasi"\)|Diverifikasi:|Belum diverifikasi/)
+  assert.match(text, /@\/components\/ui\/stepper/)
+})

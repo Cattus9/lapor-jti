@@ -48,6 +48,7 @@ next-env.d.ts
 
 /docs/*
 !/docs/audit-satpam-e968fa0-38b0a96.md
+!/docs/satpam-alur-lapangan-2026-10-25.md
 /CLAUDE.md
 
 # Private report uploads, never commit personal data.

@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { parseSatpamCommand, parseSatpamFilter, parseHistoryFilter, requireSatpam } from "../src/features/lost-found/domain/satpam"
+import { expectedStatus, parseSatpamCommand, parseSatpamFilter, parseHistoryFilter, requireSatpam } from "../src/features/lost-found/domain/satpam"
 import { SatpamService } from "../src/features/lost-found/application/satpam-service"
 import { assertTransition, ReportError } from "../src/features/reports/domain/report"
 import type { SatpamRepository } from "../src/features/lost-found/application/ports"
@@ -20,17 +20,19 @@ test("Handover requires an explicit officer, recipient and location", () => {
   assert.equal(parseSatpamCommand({ ...handover, officerName: "Impersonated", actorId: id }).type, "handover")
 })
 test("Direct status mutation cannot bypass matching or handover; rejection needs a reason", () => {
-  for (const status of ["barang_teridentifikasi", "diserahkan", "baru", "fasilitas"]) assert.throws(() => parseSatpamCommand({ type: "status", ticket: "LJ-2026-00001", status }), ReportError)
+  for (const status of ["diverifikasi", "barang_teridentifikasi", "diserahkan", "baru", "fasilitas"]) assert.throws(() => parseSatpamCommand({ type: "status", ticket: "LJ-2026-00001", status }), ReportError)
   assert.throws(() => parseSatpamCommand({ type: "status", ticket: "LJ-2026-00001", status: "ditolak", note: " " }), ReportError)
-  assert.equal(parseSatpamCommand({ type: "status", ticket: "LJ-2026-00001", status: "diverifikasi" }).type, "status")
+  assert.equal(parseSatpamCommand({ type: "status", ticket: "LJ-2026-00001", status: "diproses" }).type, "status")
+  assert.equal(expectedStatus("diproses"), "baru")
 })
 test("Matching requires two distinct valid tickets", () => {
   assert.equal(parseSatpamCommand({ type: "match", lossTicket: "LJ-2026-00001", foundTicket: "LJ-2026-00002" }).type, "match")
   for (const foundTicket of ["LJ-2026-00001", "bad", "LJ-2026-00000000000000000"]) assert.throws(() => parseSatpamCommand({ type: "match", lossTicket: "LJ-2026-00001", foundTicket }), ReportError)
 })
 test("Lost/found lifecycle cannot skip steps or reopen terminal status", () => {
-  for (const [from, to] of [["baru", "diverifikasi"], ["diverifikasi", "diproses"], ["diproses", "barang_teridentifikasi"], ["barang_teridentifikasi", "diserahkan"], ["diserahkan", "selesai"], ["baru", "ditolak"]] as const) assertTransition("kehilangan-temuan", from, to)
-  for (const [from, to] of [["baru", "selesai"], ["diproses", "ditolak"], ["selesai", "diproses"], ["ditolak", "diverifikasi"]] as const) assert.throws(() => assertTransition("kehilangan-temuan", from, to), ReportError)
+  for (const [from, to] of [["baru", "diproses"], ["diproses", "barang_teridentifikasi"], ["barang_teridentifikasi", "diserahkan"], ["diserahkan", "selesai"], ["baru", "ditolak"]] as const) assertTransition("kehilangan-temuan", from, to)
+  for (const [from, to] of [["baru", "diverifikasi"], ["diverifikasi", "diproses"], ["baru", "barang_teridentifikasi"], ["baru", "selesai"], ["diproses", "ditolak"], ["selesai", "diproses"], ["ditolak", "diproses"]] as const) assert.throws(() => assertTransition("kehilangan-temuan", from, to), ReportError)
+  assert.equal(parseSatpamFilter({ status: "diverifikasi" }).status, "diproses", "Legacy bookmark targets the replacement stage")
 })
 test("Server filters reject malformed statuses, officers and calendar dates", () => {
   assert.equal(parseSatpamFilter({ kind: "temuan", matching: "1", q: "  kartu  " }).query, "kartu")

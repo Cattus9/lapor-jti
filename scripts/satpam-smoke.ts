@@ -1,4 +1,5 @@
 import "dotenv/config"
+import sharp from "sharp"
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { unlink } from "node:fs/promises"
@@ -6,15 +7,15 @@ import { join, resolve } from "node:path"
 import { eq, inArray, or } from "drizzle-orm"
 import { hashPassword } from "better-auth/crypto"
 import { createDatabaseClient } from "../src/db/client"
-import { accounts, users, reports, reportDrafts, reportAttachments, reportLostFoundDetails, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers } from "../src/db/schema"
+import { accounts, users, reports, reportDrafts, reportAttachments, reportLostFoundDetails, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory } from "../src/db/schema"
 import { emptyReportPayload, type ReportPayload } from "../src/features/reports/domain/report"
 import { getTodayInWib } from "../src/features/reports/domain/report-date"
 
 // HTTP only. Exact disposable IDs are cleaned in finally; no real account or report is modified.
 async function main() {
-  const origin = process.env.BETTER_AUTH_URL, password = process.env.DEMO_USER_PASSWORD
+  const origin = process.env.BETTER_AUTH_URL, password = randomUUID()
   const connect = process.env.REPORT_SMOKE_CONNECT_URL || origin
-  if (process.env.NODE_ENV !== "development" || !origin || !connect || !password || !process.env.REPORT_UPLOAD_DIR || ![origin, connect].every((value) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(value).hostname))) throw new Error("Run Satpam smoke inside the local development app with a demo password and private storage configured.")
+  if (process.env.NODE_ENV !== "development" || !origin || !connect || !process.env.REPORT_UPLOAD_DIR || ![origin, connect].every((value) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(value).hostname))) throw new Error("Run Satpam smoke inside the local development app with private storage configured.")
   const { pool, db } = createDatabaseClient("migration")
   const userIds: string[] = [], reportIds: string[] = [], draftIds: string[] = [], officerIds: string[] = [], cookies: string[] = []
   const tag = randomUUID()
@@ -57,7 +58,7 @@ async function main() {
     const other = await submit("Kehilangan", false, "lainnya") as { id: string; ticketNumber: string }
     const draft = await submit("Kehilangan", true, "kehilangan-temuan", true) as { id: string; attachments: { id: string }[] }
     assert.equal((await request(`/api/satpam/reports/${other.ticketNumber}`, cookies[1])).status, 404)
-    assert.equal((await command({ type: "status", ticket: other.ticketNumber, status: "diverifikasi" })).status, 404)
+    assert.equal((await command({ type: "status", ticket: other.ticketNumber, status: "diproses" })).status, 404)
     assert.equal((await request(`/api/satpam/attachments/${draft.attachments[0].id}`, cookies[1])).status, 404)
     const detail = await (await request(`/api/satpam/reports/${loss.ticketNumber}`, cookies[1])).json()
     assert.equal(detail.files.length, 1)
@@ -67,15 +68,17 @@ async function main() {
     assert.ok(initialNotifications.items.some((n: { ticketNumber: string }) => n.ticketNumber === loss.ticketNumber))
     console.log("PASS: session/role/origin guards, category scope, private attachments, draft isolation and incoming notifications")
 
-    assert.equal((await command({ type: "status", ticket: loss.ticketNumber, status: "diproses" })).status, 409)
-    const accept = { type: "status", ticket: loss.ticketNumber, status: "diverifikasi" }
+    assert.equal((await command({ type: "status", ticket: loss.ticketNumber, status: "diverifikasi" })).status, 400)
+    const accept = { type: "status", ticket: loss.ticketNumber, status: "diproses" }
     const attempts = await Promise.all([command(accept), command(accept, cookies[2])])
     assert.deepEqual(attempts.map((r) => r.status).sort(), [200, 409])
     assert.equal((await command({ type: "status", ticket: loss.ticketNumber, status: "ditolak", note: "Tidak valid" })).status, 409)
     assert.equal((await command({ type: "status", ticket: loss.ticketNumber, status: "diserahkan" })).status, 400)
     assert.equal((await command({ type: "match", lossTicket: loss.ticketNumber, foundTicket: found.ticketNumber })).status, 409)
-    for (const report of [found, secondFound]) assert.equal((await command({ type: "status", ticket: report.ticketNumber, status: "diverifikasi" })).status, 200)
-    for (const report of [loss, found, secondFound]) assert.equal((await command({ type: "status", ticket: report.ticketNumber, status: "diproses" })).status, 200)
+    for (const report of [found, secondFound]) assert.equal((await command({ type: "status", ticket: report.ticketNumber, status: "diproses" })).status, 200)
+    assert.equal((await command(accept)).status, 409)
+    const acceptedDetail = await (await request(`/api/satpam/reports/${loss.ticketNumber}`, cookies[1])).json()
+    assert.deepEqual(acceptedDetail.history.map((event: { status: string }) => event.status), ["Baru", "Diproses"])
     assert.equal((await command({ type: "match", lossTicket: found.ticketNumber, foundTicket: loss.ticketNumber })).status, 400)
     const pairs = await Promise.all([command({ type: "match", lossTicket: loss.ticketNumber, foundTicket: found.ticketNumber }), command({ type: "match", lossTicket: loss.ticketNumber, foundTicket: secondFound.ticketNumber }, cookies[2])])
     assert.deepEqual(pairs.map((r) => r.status).sort(), [200, 409])
@@ -94,6 +97,8 @@ async function main() {
     assert.deepEqual(handoverAttempts.map((r) => r.status).sort(), [200, 409])
     const recorded = await db.select().from(reportHandovers).where(eq(reportHandovers.matchId, pair.id))
     assert.equal(recorded.length, 1)
+    assert.ok(recorded[0].actorId)
+    assert.ok(recorded[0].officerId)
     assert.ok([userIds[1], userIds[2]].includes(recorded[0].actorId))
     const winningOfficer = recorded[0].officerId, snapshotName = recorded[0].officerName
     assert.ok(["Petugas uji pertama", "Petugas uji kedua"].includes(snapshotName))
@@ -141,7 +146,7 @@ async function main() {
     // Exact calendar boundaries, deliberately different from the incident date.
     const dayMs = 86_400_000, start = new Date(`${getTodayInWib()}T00:00:00+07:00`).getTime()
     const timestamps = [start - 29 * dayMs - 1, start - 29 * dayMs, start - 6 * dayMs - 1, start - 6 * dayMs, start - 1, start, start + dayMs - 1, start + dayMs]
-    const periodRows = ["kehilangan", "temuan"].flatMap((kind, kindIndex) => timestamps.map((time, i) => ({ ...fixtureRows[0], id: randomUUID(), submissionKey: randomUUID(), ticketNumber: `LJ-2099-${prefix}${String(25 + kindIndex * timestamps.length + i).padStart(2, "0")}`, title: `Period ${tag} ${kind} ${i}`, status: i === 5 ? "diverifikasi" as const : "baru" as const, submittedAt: new Date(time) })))
+    const periodRows = ["kehilangan", "temuan"].flatMap((kind, kindIndex) => timestamps.map((time, i) => ({ ...fixtureRows[0], id: randomUUID(), submissionKey: randomUUID(), ticketNumber: `LJ-2099-${prefix}${String(25 + kindIndex * timestamps.length + i).padStart(2, "0")}`, title: `Period ${tag} ${kind} ${i}`, status: i === 5 ? "diproses" as const : "baru" as const, submittedAt: new Date(time) })))
     reportIds.push(...periodRows.map((row) => row.id))
     await db.insert(reports).values(periodRows)
     await db.insert(reportLostFoundDetails).values(periodRows.map((row, i) => ({ reportId: row.id, kind: i < timestamps.length ? "kehilangan" : "temuan", itemName: "Uji periode", itemDetails: "Batas kalender WIB" })))
@@ -158,8 +163,8 @@ async function main() {
           assert.deepEqual(result.items.map((item: { id: string }) => item.id), sort === "terlama" ? expected : [...expected].reverse())
         }
       }
-      const filtered = await (await request(`${url}&period=hari-ini&status=diverifikasi`, cookies[1])).json()
-      assert.equal(filtered.total, 1); assert.equal(filtered.items[0].status, "Diverifikasi")
+      const filtered = await (await request(`${url}&period=hari-ini&status=diproses`, cookies[1])).json()
+      assert.equal(filtered.total, 1); assert.equal(filtered.items[0].status, "Diproses")
     }
     const literal = await (await request(`/api/satpam/reports?q=${encodeURIComponent("%_")}`, cookies[1])).json(); assert.ok(literal.items.every((r: { characteristics: string }) => r.characteristics.includes("%_")))
     assert.equal((await request("/api/satpam/reports?cursor=bad", cookies[1])).status, 400)
@@ -168,20 +173,54 @@ async function main() {
     assert.equal((await request("/api/satpam/history?from=2026-02-30", cookies[1])).status, 400)
     console.log("PASS: scoped notification read, escaped search, ASC/DESC keyset pagination, both report kinds' WIB periods and filter validation")
     for (const path of ["/satpam/dashboard", "/satpam/kehilangan-temuan", "/satpam/riwayat", "/satpam/notifikasi"]) assert.equal((await request(path, cookies[1])).status, 200)
+    // Inventory returns are independent of a mandatory second report, but linked reports finish atomically.
+    const inventoryKey = randomUUID()
+    const inventoryPng = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 80, g: 130, b: 210 } } }).png().toBuffer()
+    const photoForm = () => { const form = new FormData(); form.set("submissionKey", inventoryKey); form.set("itemName", `Inventory HTTP ${tag}`); form.set("photo", new Blob([new Uint8Array(inventoryPng)], { type: "image/png" }), "fixture.png"); return form }
+    assert.equal((await request("/api/satpam/inventory", cookies[0], { method: "POST", body: photoForm() })).status, 403)
+    const receiptResponse = await request("/api/satpam/inventory", cookies[1], { method: "POST", body: photoForm() })
+    assert.equal(receiptResponse.status, 200)
+    const inventory = await receiptResponse.json()
+    const retryReceipt = await request("/api/satpam/inventory", cookies[1], { method: "POST", body: photoForm() })
+    assert.equal(retryReceipt.status, 200); assert.equal((await retryReceipt.json()).id, inventory.id)
+    assert.equal((await request(`/api/satpam/inventory/${inventory.id}`, cookies[0])).status, 403)
+    const photo = await request(inventory.photoUrl, cookies[1]); assert.equal(photo.status, 200)
+    assert.equal(photo.headers.get("cache-control"), "private, no-store")
+    assert.equal((await request(inventory.photoUrl, cookies[0])).status, 403)
+    assert.equal((await request("/api/satpam/inventory", cookies[1], { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemName: "External", photoUrl: "https://example.test/item.png" }) })).status, 400)
+    const inventoryLoss = await submit("Kehilangan") as { id: string; ticketNumber: string }
+    const returnInput = { officerId: officerIds[1], recipient: "Pemilik inventaris", ownershipEvidence: "Ciri khusus terkonfirmasi", submissionKey: randomUUID(), lossTicket: inventoryLoss.ticketNumber }
+    // The earlier shared-flow test may have retired this officer; restore only our own fixture.
+    await db.update(securityOfficers).set({ isActive: true }).where(eq(securityOfficers.id, officerIds[1]))
+    const returnRequest = (body: unknown) => request(`/api/satpam/inventory/${inventory.id}/handover`, cookies[1], { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    assert.equal((await returnRequest({ ...returnInput, ownershipEvidence: "" })).status, 400)
+    const returned = await returnRequest(returnInput); assert.equal(returned.status, 200)
+    assert.equal((await returnRequest(returnInput)).status, 200)
+    assert.equal((await returnRequest({ ...returnInput, submissionKey: randomUUID() })).status, 409)
+    const [finished] = await db.select().from(reports).where(eq(reports.id, inventoryLoss.id)); assert.equal(finished.status, "selesai")
+    const inventoryHistory = await (await request(`/api/satpam/history?q=${encodeURIComponent(`Inventory HTTP ${tag}`)}`, cookies[1])).json()
+    assert.equal(inventoryHistory.total, 1); assert.equal(inventoryHistory.items[0].source, "inventaris")
+    assert.equal(inventoryHistory.items[0].actor, "Akun uji satpam")
+    console.log("PASS: private inventory receipt/retry, role guards, linked report completion, single return and unified history")
     console.log("Satpam backend smoke passed.")
   } finally {
     try {
+      const inventoryRows = userIds.length ? await db.select().from(satpamInventory).where(inArray(satpamInventory.registeredBy, userIds)) : []
       const files = userIds.length ? await db.select({ key: reportAttachments.storageKey }).from(reportAttachments).where(inArray(reportAttachments.ownerId, userIds)) : []
       if (reportIds.length) {
         const matches = await db.select({ id: lostFoundMatches.id }).from(lostFoundMatches).where(or(inArray(lostFoundMatches.lossReportId, reportIds), inArray(lostFoundMatches.foundReportId, reportIds)))
         if (matches.length) { const matchIds = matches.map((m) => m.id); await db.delete(reportHandovers).where(inArray(reportHandovers.matchId, matchIds)); await db.delete(lostFoundMatches).where(inArray(lostFoundMatches.id, matchIds)) }
+      }
+      if (inventoryRows.length) {
+        await db.delete(reportHandovers).where(inArray(reportHandovers.inventoryId, inventoryRows.map(r => r.id)))
+        await db.delete(satpamInventory).where(inArray(satpamInventory.id, inventoryRows.map(r => r.id)))
       }
       if (draftIds.length) await db.delete(reportDrafts).where(inArray(reportDrafts.id, draftIds))
       if (reportIds.length) await db.delete(reports).where(inArray(reports.id, reportIds))
       if (officerIds.length) await db.delete(securityOfficers).where(inArray(securityOfficers.id, officerIds))
       if (userIds.length) await db.delete(users).where(inArray(users.id, userIds))
       const root = resolve(process.env.REPORT_UPLOAD_DIR!)
-      for (const file of files) {
+      for (const file of [...files, ...inventoryRows.filter(r => r.photoStorageKey).map(r => ({ key: r.photoStorageKey! }))]) {
         if (!/^[0-9a-f-]{36}$/.test(file.key)) throw new Error("Unexpected test storage key.")
         await unlink(join(root, file.key)).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error })
       }

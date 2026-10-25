@@ -1,4 +1,5 @@
 import { Check, ClipboardCheck, FileText, ListChecks, type LucideIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { cn } from "cn"
 
 export type PelaporanStepId = "type" | "details" | "review"
@@ -29,11 +30,9 @@ export function SatpamPelaporanStepper({
             <li
               key={step.id}
               aria-current={active ? "step" : undefined}
-              onClick={() => {
-                if (canClick && onStepClick) onStepClick(index)
-              }}
+            ><Button type="button" variant="ghost" disabled={!canClick} onClick={() => onStepClick?.(index)}
               className={cn(
-                "flex items-center gap-3 rounded-xl border p-3 transition-colors",
+                "h-auto w-full justify-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:opacity-100",
                 active ? "border-primary bg-primary/5" : "border-border/60 bg-background/60",
                 canClick ? "cursor-pointer hover:border-primary/40" : "cursor-default"
               )}
@@ -59,7 +58,7 @@ export function SatpamPelaporanStepper({
                   {step.title}
                 </span>
               </span>
-            </li>
+            </Button></li>
           )
         })}
       </ol>

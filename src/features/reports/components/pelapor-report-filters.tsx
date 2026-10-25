@@ -80,25 +80,25 @@ export function PelaporReportFilters({ filters }: { filters: ReportListFilters }
           <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id={`${id}-q`} type="search" value={values.q} onChange={(event) => change({ ...values, q: event.target.value }, 350)} onCompositionStart={() => { composing.current = true; cancelSearch() }} onCompositionEnd={(event) => { composing.current = false; change({ ...values, q: event.currentTarget.value }, 350) }} maxLength={100} placeholder="Cari judul laporan" className="h-9 bg-background pl-9" /></div>
         </Field>
         <Button type="button" variant="outline" className="h-9 bg-background md:hidden" aria-expanded={mobileOpen} aria-controls={`${id}-options`} onClick={() => setMobileOpen((open) => !open)}><SlidersHorizontal aria-hidden="true" />Filter{activeCount ? ` (${activeCount})` : ""}</Button>
-        <div id={`${id}-options`} className={cn("col-span-2 gap-2 md:grid md:max-w-[33rem] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.2fr)] @5xl:col-span-1 @5xl:w-[33rem]", mobileOpen ? "grid" : "hidden")}>
+        <div id={`${id}-options`} className={cn("col-span-2 gap-2 md:grid md:max-w-(--report-history-filter-width) md:grid-cols-(--report-history-filter-columns) @5xl:col-span-1 @5xl:w-(--report-history-filter-width)", mobileOpen ? "grid" : "hidden")}>
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${id}-category`} className="text-xs text-muted-foreground">Jenis laporan</FieldLabel>
             <Select value={values.category} onValueChange={(value) => change({ ...values, category: (value ?? "semua") as ReportListFilters["category"] })}>
-              <SelectTrigger id={`${id}-category`} aria-label="Jenis laporan" className="!h-9 w-full bg-background"><SelectValue className="min-w-0 truncate">{values.category === "semua" ? "Semua jenis" : reportCategoryPresentation[values.category].label}</SelectValue></SelectTrigger>
+              <SelectTrigger id={`${id}-category`} aria-label="Jenis laporan" className="w-full bg-background"><SelectValue className="min-w-0 truncate">{values.category === "semua" ? "Semua jenis" : reportCategoryPresentation[values.category].label}</SelectValue></SelectTrigger>
               <SelectContent matchTriggerWidth={false} className="min-w-52"><SelectItem value="semua">Semua jenis</SelectItem>{reportCategories.map((category) => <SelectItem key={category} value={category}>{reportCategoryPresentation[category].label}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${id}-status`} className="text-xs text-muted-foreground">Proses</FieldLabel>
             <Select value={values.status} onValueChange={(value) => change({ ...values, status: (value ?? "belum-selesai") as ReportListFilters["status"] })}>
-              <SelectTrigger id={`${id}-status`} aria-label="Proses laporan" className="!h-9 w-full bg-background"><SelectValue className="min-w-0 truncate">{reportProcessFilters[values.status]}</SelectValue></SelectTrigger>
+              <SelectTrigger id={`${id}-status`} aria-label="Proses laporan" className="w-full bg-background"><SelectValue className="min-w-0 truncate">{reportProcessFilters[values.status]}</SelectValue></SelectTrigger>
               <SelectContent>{Object.entries(reportProcessFilters).map(([process, label]) => <SelectItem key={process} value={process}>{label}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${id}-period`} className="text-xs text-muted-foreground">Periode</FieldLabel>
             <Select value={values.period} onValueChange={(value) => change({ ...values, period: (value ?? "semua") as ReportListFilters["period"] })}>
-              <SelectTrigger id={`${id}-period`} aria-label="Periode pengiriman laporan" aria-describedby={periodDescriptionId} className="!h-9 w-full bg-background"><SelectValue className="min-w-0 truncate">{reportPeriods[values.period]}</SelectValue></SelectTrigger>
+              <SelectTrigger id={`${id}-period`} aria-label="Periode pengiriman laporan" aria-describedby={periodDescriptionId} className="w-full bg-background"><SelectValue className="min-w-0 truncate">{reportPeriods[values.period]}</SelectValue></SelectTrigger>
               <SelectContent matchTriggerWidth={false} className="min-w-44">{Object.entries(reportPeriods).map(([period, label]) => <SelectItem key={period} value={period}>{label}</SelectItem>)}</SelectContent>
             </Select>
           </Field>

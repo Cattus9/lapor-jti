@@ -4,324 +4,64 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { Archive, ArrowRight, CalendarDays, Handshake, ImageIcon, Images, MapPin, Package, PackageSearch, Search, SlidersHorizontal, UserRound } from "lucide-react"
+import { Archive, ArrowRight, CalendarDays, ClipboardCheck, FileText, Handshake, ImageIcon, Images, MapPin, Package, PackageSearch, Search, SlidersHorizontal, UserRound } from "lucide-react"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
+import { SectionCard } from "@/components/ui/section-card"
+import { Stepper } from "@/components/ui/stepper"
+import { ReportDetailSection, ReportDetailTable } from "@/components/reports/report-detail-section"
+import { CollectionEmptyState } from "@/components/reports/collection-empty-state"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
+import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { cn } from "cn"
 import type { SatpamHandoverHistoryItem, SecurityOfficer } from "../types"
 import { useSatpamPage, useDebouncedSatpamQuery } from "./use-satpam-data"
 import { SatpamPageFeedback } from "./satpam-page-feedback"
 import { getTodayInWib } from "../../reports/domain/report-date"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
-function HistoryDetailDialog({ item, trigger }: { item: SatpamHandoverHistoryItem; trigger?: React.ReactElement }) {
-  return (
-    <Dialog>
-      <DialogTrigger
-        render={
-          trigger ?? (
-            <Button type="button" variant="outline" size="sm" className="shrink-0 bg-card hover:bg-muted">
-              Lihat detail
-            </Button>
-          )
-        }
-      />
-      <DialogContent>
-        <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary">
-              <Archive className="size-4" aria-hidden="true" />
-            </span>
-            <span>Riwayat penyerahan</span>
-            <span aria-hidden="true">·</span>
-            <span>{item.completedAt}</span>
-            <StatusBadge className="ml-auto" status={item.status} />
-          </div>
-          <DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">{item.title}</DialogTitle>
-          <DialogDescription className="mt-2">Barang telah diserahkan. Catatan petugas diambil dari transaksi penyerahan.</DialogDescription>
-        </div>
-        <div className="space-y-6 p-5 md:p-6">
-          <section>
-            <div className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary">
-                <PackageSearch className="size-4" aria-hidden="true" />
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Pasangan laporan</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">Waktu pengiriman laporan kehilangan dan temuan oleh masing-masing pelapor.</p>
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)]">
-              <ReportSummary label="Kehilangan" submittedAt={item.lostSubmittedAt} />
-              <div className="hidden items-center justify-center sm:flex">
-                <span className="text-xs text-muted-foreground">dan</span>
-              </div>
-              <ReportSummary label="Temuan" submittedAt={item.foundSubmittedAt} />
-            </div>
-          </section>
-          <EvidenceSection item={item} />
-          <ItemSummary item={item} />
-          <section className="border-t border-border/60 pt-6">
-            <div className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary">
-                <Handshake className="size-4" aria-hidden="true" />
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Penyerahan barang</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">Penerima dan satpam yang bertanggung jawab saat penyerahan.</p>
-              </div>
-            </div>
-            <dl className="mt-4 grid overflow-hidden rounded-xl border border-border/60 sm:grid-cols-2">
-              <div className="border-b border-border/60 p-4 sm:border-b-0 sm:border-r">
-                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><UserRound className="size-3.5" aria-hidden="true" />Penerima</dt>
-                <dd className="mt-1.5 text-sm font-medium text-foreground">{item.recipient}</dd>
-              </div>
-              <div className="p-4 sm:border-b sm:border-border/60">
-                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3.5" aria-hidden="true" />Lokasi</dt>
-                <dd className="mt-1.5 text-sm font-medium text-foreground">{item.location}</dd>
-              </div>
-              <div className="border-t border-border/60 p-4 sm:col-span-2 sm:border-t-0">
-                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><UserRound className="size-3.5" aria-hidden="true" />Penanggung jawab</dt>
-                <dd className="mt-1.5 text-sm font-medium text-foreground">{item.handler}</dd>
-              </div>
-              <div className="border-t border-border/60 p-4 sm:col-span-2">
-                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><UserRound className="size-3.5" aria-hidden="true" />Dicatat melalui akun</dt>
-                <dd className="mt-1.5 text-sm font-medium text-foreground">{item.actor}</dd>
-              </div>
-            </dl>
-            <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-4">
-              <p className="text-xs text-muted-foreground">Catatan penyerahan</p>
-              <p className="mt-1.5 text-sm leading-relaxed text-foreground">{item.handoverNote || "Tidak ada catatan tambahan."}</p>
-            </div>
-          </section>
-          <section className="border-t border-border/60 pt-6">
-            <h3 className="text-sm font-semibold text-foreground">Waktu penanganan</h3>
-            <div className="mt-3 space-y-2">
-              <TimelineItem label="Dicocokkan satpam" value={item.matchedAt} />
-              <TimelineItem label="Barang diserahkan" value={item.handedOverAt} />
-              <TimelineItem label="Tiket diselesaikan" value={item.completedAt} />
-            </div>
-          </section>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function ItemSummary({ item }: { item: SatpamHandoverHistoryItem }) {
-  return (
-    <section className="border-t border-border/60 pt-6">
-      <div className="flex items-center gap-2">
-        <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary">
-          <Package className="size-4" aria-hidden="true" />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Informasi barang</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">Ringkasan barang dari laporan.</p>
-        </div>
-      </div>
-      <dl className="mt-4 grid overflow-hidden rounded-xl border border-border/60 bg-background/60 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
-        <div className="border-b border-border/60 p-4 sm:border-b-0 sm:border-r">
-          <dt className="text-xs text-muted-foreground">Jenis barang</dt>
-          <dd className="mt-1.5 text-sm font-medium text-foreground">{item.itemCategory}</dd>
-        </div>
-        <div className="p-4">
-          <dt className="text-xs text-muted-foreground">Deskripsi barang</dt>
-          <dd className="mt-1.5 text-sm leading-relaxed text-foreground">{item.itemDescription}</dd>
-        </div>
-      </dl>
-    </section>
-  )
-}
-
-function EvidenceSection({ item }: { item: SatpamHandoverHistoryItem }) {
-  return (
-    <section className="border-t border-border/60 pt-6">
-      <div className="flex items-center gap-2">
-        <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary">
-          <Images className="size-4" aria-hidden="true" />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Bukti</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">Foto dari masing-masing laporan.</p>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <EvidencePhoto label="Kehilangan" photoUrl={item.lostPhotoUrl} />
-        <EvidencePhoto label="Temuan" photoUrl={item.foundPhotoUrl} />
-      </div>
-    </section>
-  )
-}
-
-function EvidencePhoto({ label, photoUrl }: { label: string; photoUrl?: string }) {
-  const [imageFailed, setImageFailed] = useState(false)
-  const hasPhoto = Boolean(photoUrl) && !imageFailed
-
-  return (
-    <Card className="gap-0 overflow-hidden rounded-xl border-border/60 bg-background/60 py-0 shadow-none">
-      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-      </div>
-      <div className="relative flex h-36 items-center justify-center border-t border-border/60 bg-muted/30 sm:h-44">
-        {hasPhoto ? (
-          <Image
-            src={photoUrl!}
-            alt={`Foto bukti laporan ${label.toLowerCase()}`}
-            fill
-            sizes="(min-width: 640px) 300px, 100vw"
-            className="object-contain"
-            unoptimized
-            onError={() => setImageFailed(true)}
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-center text-muted-foreground">
-            <ImageIcon className="size-5" aria-hidden="true" />
-            <p className="text-xs">Foto belum tersedia</p>
-          </div>
-        )}
-      </div>
-    </Card>
-  )
-}
-
-function ReportSummary({ label, submittedAt }: { label: string; submittedAt: string }) {
-  return (
-    <div className="rounded-xl border border-border/60 bg-background/60 p-3.5">
-      <Badge variant="outline" tone="neutral" className="h-6 rounded-md px-2 text-[11px]">
-        Laporan {label.toLocaleLowerCase()}
-      </Badge>
-      <p className="mt-2.5 text-xs text-muted-foreground">Laporan dikirim</p>
-      <p className="mt-1 text-sm font-medium text-foreground">{submittedAt} WIB</p>
+function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
+  const sourceLabel = item.source === "inventaris" ? "Inventaris Pos Satpam" : "Pasangan laporan"
+  return <Dialog><DialogTrigger render={<Button variant="ghost" className="group relative h-auto w-full flex-col items-stretch gap-3 overflow-hidden rounded-xl border border-border bg-report-surface p-4 text-left whitespace-normal shadow-none transition-colors hover:border-primary/40 hover:bg-report-surface focus-visible:ring-ring md:p-5" />}>
+    <span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary"><PackageSearch aria-hidden="true" /></span><span className="min-w-0"><span className="block text-sm font-semibold text-foreground">{item.title}</span><span className="mt-1 block text-xs font-normal text-muted-foreground">Penerima: {item.recipient}</span></span></span><StatusBadge status={item.status} /></span>
+    <span className="line-clamp-2 text-sm font-normal text-muted-foreground">{item.itemDescription || "Tidak ada deskripsi tambahan."}</span>
+    <span className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs font-normal text-muted-foreground"><span>{sourceLabel} · Diserahkan {item.handedOverAt} WIB</span><span className="inline-flex items-center gap-1 text-primary-action">Lihat detail<ArrowRight className="size-3.5" aria-hidden="true" /></span></span>
+  </DialogTrigger><DialogContent>
+    <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16"><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><Archive className="size-4" aria-hidden="true" /></span><span>{sourceLabel}</span><span>{item.handedOverAt} WIB</span><StatusBadge status={item.status} /></div><DialogTitle className="mt-4 text-xl">{item.title}</DialogTitle><DialogDescription className="mt-2">Catatan penyerahan barang dan petugas yang bertanggung jawab.</DialogDescription></div>
+    <div className="space-y-6 p-5 md:p-6">
+      <Stepper aria-label="Progres penyerahan" value={item.status === "Selesai" ? "selesai" : "diserahkan"} steps={[{ value: "diserahkan", label: "Diserahkan" }, { value: "selesai", label: "Selesai" }]} />
+      <ReportDetailSection icon={Package} title="Detail barang" description="Informasi barang dan penyerahan yang tercatat."><ReportDetailTable rows={[
+        { icon: Package, label: "Barang", value: item.itemCategory }, { icon: FileText, label: "Deskripsi", value: item.itemDescription },
+        { icon: UserRound, label: "Penerima", value: item.recipient }, { icon: MapPin, label: "Lokasi penyerahan", value: item.location },
+        { icon: UserRound, label: "Petugas penyerah", value: item.handler }, { icon: UserRound, label: "Dicatat melalui akun", value: item.actor },
+        ...(item.ownershipEvidence ? [{ icon: ClipboardCheck, label: "Pemeriksaan kepemilikan", value: item.ownershipEvidence }] : []),
+        { icon: FileText, label: "Catatan", value: item.handoverNote },
+        ...(item.lostSubmittedAt ? [{ icon: CalendarDays, label: "Kehilangan dikirim", value: `${item.lostSubmittedAt} WIB` }] : []),
+        ...(item.foundSubmittedAt ? [{ icon: CalendarDays, label: "Temuan dikirim", value: `${item.foundSubmittedAt} WIB` }] : []),
+      ]} />{item.legacy ? <Badge variant="outline" tone="neutral">Data lama; petugas penyerah tidak tercatat</Badge> : null}</ReportDetailSection>
+      <ReportDetailSection icon={Images} title="Foto barang" description="Lampiran privat dari inventaris atau laporan terkait."><div className="grid gap-3 sm:grid-cols-2">{item.lostTicket ? <EvidencePhoto label="Kehilangan" photoUrl={item.lostPhotoUrl} /> : null}<EvidencePhoto label={item.source === "inventaris" ? "Inventaris" : "Temuan"} photoUrl={item.foundPhotoUrl} /></div></ReportDetailSection>
+      <ReportDetailSection icon={ClipboardCheck} title="Riwayat penanganan" description="Waktu penerimaan dan penyelesaian yang tercatat."><ReportDetailTable rows={[
+        ...(item.receivedAt ? [{ icon: CalendarDays, label: "Diterima di pos", value: `${item.receivedAt} WIB` }] : []),
+        ...(item.matchedAt ? [{ icon: CalendarDays, label: "Dicocokkan", value: `${item.matchedAt} WIB` }] : []),
+        { icon: Handshake, label: "Diserahkan", value: `${item.handedOverAt} WIB` }, { icon: ClipboardCheck, label: "Penyelesaian", value: item.completedAt },
+      ]} /></ReportDetailSection>
     </div>
-  )
+  </DialogContent></Dialog>
 }
-
-function TimelineItem({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/60 p-3"><span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" /><div><p className="text-sm font-medium text-foreground">{label}</p><p className="mt-1 text-xs text-muted-foreground">{value}</p></div></div>
+function EvidencePhoto({ label, photoUrl }: { label: string; photoUrl?: string }) {
+  const [failed, setFailed] = useState(false)
+  return <Card className="gap-0 overflow-hidden rounded-xl border border-border bg-background py-0 shadow-none"><p className="px-3 py-2 text-sm font-medium">{label}</p><div className="relative flex h-44 items-center justify-center border-t border-border bg-muted/30">{photoUrl && !failed ? <Image src={photoUrl} alt={`Foto ${label}`} fill sizes="(min-width: 640px) 300px, 100vw" className="object-contain" unoptimized onError={() => setFailed(true)} /> : <span className="flex items-center gap-2 text-xs text-muted-foreground"><ImageIcon className="size-5" aria-hidden="true" />Foto belum tersedia</span>}</div></Card>
 }
-
-function HistoryRow({ item }: { item: SatpamHandoverHistoryItem }) {
-  const isDone = item.status.toLowerCase() === "selesai"
-
-  const cardTrigger = (
-    <article
-      tabIndex={0}
-      role="button"
-      aria-label={`Buka detail riwayat: ${item.title}`}
-      className={cn(
-        "group relative w-full overflow-hidden rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer select-none md:p-5",
-        "hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-        isDone
-          ? "border-emerald-500/30 bg-card/95 hover:border-emerald-500/60 dark:border-emerald-500/40"
-          : "border-border bg-card/90 hover:border-primary/50 dark:border-border"
-      )}
-    >
-      {/* Ambient background glow & done watermark on the right edge */}
-      {isDone ? (
-        <>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-12 top-1/2 size-44 -translate-y-1/2 rounded-full bg-emerald-500/15 blur-2xl dark:bg-emerald-400/20"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-4 top-1/2 size-24 -translate-y-1/2 rounded-full bg-emerald-500/20 blur-xl dark:bg-emerald-400/25"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-4 top-1/2 size-32 -translate-y-1/2 opacity-20 blur-[2px] transition-all duration-300 group-hover:scale-105 group-hover:opacity-30 dark:opacity-25 sm:size-40"
-          >
-            <Image
-              src="/assets/DoneIcon.png"
-              alt=""
-              fill
-              sizes="(min-width: 640px) 160px, 128px"
-              className="object-contain"
-            />
-          </div>
-        </>
-      ) : (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-12 top-1/2 size-36 -translate-y-1/2 rounded-full bg-primary/10 blur-2xl dark:bg-primary/15"
-        />
-      )}
-
-      {/* Main card info */}
-      <div className="relative flex flex-col gap-3.5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-xl border transition-colors shadow-2xs",
-              isDone
-                ? "border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-300"
-                : "border-border bg-card text-foreground"
-            )}
-          >
-            <PackageSearch className="size-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold transition-colors group-hover:text-primary md:text-base">
-              {item.title}
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">Penerima: {item.recipient}</p>
-          </div>
-        </div>
-
-        {/* Status pill & hover detail affordance */}
-        <div className="flex flex-row items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
-          <StatusBadge className="shrink-0" status={item.status} />
-          <div className="flex items-center gap-1 text-xs font-medium text-primary opacity-80 transition-all duration-200 sm:translate-x-1 sm:opacity-0 sm:group-hover:translate-x-0 sm:group-hover:opacity-100">
-            <span>Lihat detail</span>
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-          </div>
-        </div>
-      </div>
-
-      {/* Description & submission timestamps */}
-      <div className="relative mt-4 border-t border-border/60 pt-4">
-        <p className="text-xs font-medium text-muted-foreground">Deskripsi barang</p>
-        <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap text-foreground">{item.itemDescription}</p>
-        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-          <p>Kehilangan dikirim {item.lostSubmittedAt} WIB</p>
-          <p>Temuan dikirim {item.foundSubmittedAt} WIB</p>
-        </div>
-      </div>
-
-      {/* Bottom meta badges */}
-      <div className="relative mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" tone="primary" className="h-auto min-h-7 gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-normal whitespace-normal">
-            <Handshake className="size-3.5" aria-hidden="true" />
-            <span className="font-medium">Diserahkan</span>
-            <span aria-hidden="true">·</span>
-            <span>{item.handedOverAt}</span>
-          </Badge>
-          <Badge variant="outline" tone="neutral" className="h-auto min-h-7 gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-normal whitespace-normal">
-            <UserRound className="size-3.5" aria-hidden="true" />
-            <span className="font-medium">Satpam penanggung jawab</span>
-            <span aria-hidden="true">·</span>
-            <span>{item.handler}</span>
-          </Badge>
-        </div>
-      </div>
-    </article>
-  )
-
-  return <HistoryDetailDialog item={item} trigger={cardTrigger} />
-}
+function HistoryRow({ item }: { item: SatpamHandoverHistoryItem }) { return <HistoryDetailDialog item={item} /> }
 
 type DatePreset = "all" | "7d" | "30d" | "custom"
 
@@ -422,18 +162,11 @@ export function SatpamHandoverHistory({ user, officers }: { user: CurrentUser; o
     <DashboardLayout role="satpam">
       <ContentShell>
         <PageHeader title="Riwayat" description={`Arsip penyerahan barang yang telah dicatat, ${user.name}.`} />
-        <Card className="shrink-0 gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
-          <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">
-            <Archive className="size-4 text-primary" aria-hidden="true" />
-            Riwayat penyerahan
-            <span className="ml-auto rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">{page.total} penyerahan</span>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs">
-            <CardContent className="space-y-4 p-4 md:p-5">
+        <SectionCard title="Riwayat penyerahan" icon={Archive} meta={<Badge variant="secondary">{page.total} penyerahan</Badge>} contentClassName="space-y-4">
               <div className="border-b border-border/60 pb-4">
                 <div className="flex items-end gap-2">
                   <div className="grid min-w-0 flex-1 gap-1 lg:max-w-sm">
-                    <label htmlFor="history-search" className="text-xs font-medium text-muted-foreground">Cari riwayat</label>
+                    <Label htmlFor="history-search" className="text-xs font-medium text-muted-foreground">Cari riwayat</Label>
                     <div className="relative">
                       <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                       <Input id="history-search" value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 bg-background pl-9" placeholder="Barang, penerima, atau petugas" />
@@ -447,7 +180,7 @@ export function SatpamHandoverHistory({ user, officers }: { user: CurrentUser; o
                           <CalendarDays className="size-4" aria-hidden="true" />
                           <span className="min-w-0 truncate">{activeDateLabel}</span>
                         </PopoverTrigger>
-                        <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] p-4">
+                        <PopoverContent align="end" className="w-80 max-w-full p-4">
                           <DateFilterControls preset={datePreset} from={dateFrom} to={dateTo} onPresetChange={setDatePreset} onFromChange={updateDateFrom} onToChange={setDateTo} idPrefix="desktop-history-date" />
                         </PopoverContent>
                       </Popover>
@@ -470,9 +203,9 @@ export function SatpamHandoverHistory({ user, officers }: { user: CurrentUser; o
                     <SheetTrigger render={<Button type="button" variant="outline" className="h-9 gap-1.5 bg-background lg:hidden" />}>
                       <SlidersHorizontal className="size-4" aria-hidden="true" />
                       Filter
-                      {activeFilterCount > 0 && <Badge variant="outline" tone="primary" className="ml-1 size-5 justify-center rounded-full px-0 text-[11px]">{activeFilterCount}</Badge>}
+                      {activeFilterCount > 0 && <Badge variant="outline" tone="primary" className="ml-1 size-5 justify-center rounded-full px-0 text-xs">{activeFilterCount}</Badge>}
                     </SheetTrigger>
-                    <SheetContent side="bottom" className="max-h-[85dvh] gap-0 overflow-hidden rounded-t-2xl p-0 lg:hidden">
+                    <SheetContent side="bottom" className="max-h-dvh gap-0 overflow-hidden rounded-t-2xl p-0 lg:hidden">
                       <SheetHeader className="border-b border-border/60 px-5 py-4 pr-12">
                         <SheetTitle>Filter riwayat</SheetTitle>
                         <SheetDescription>Temukan arsip berdasarkan tanggal penyerahan dan Satpam penanggung jawab.</SheetDescription>
@@ -509,16 +242,9 @@ export function SatpamHandoverHistory({ user, officers }: { user: CurrentUser; o
               {items.length ? (
                 <div className="space-y-3">{items.map((item) => <HistoryRow key={item.id} item={item} />)}</div>
               ) : !page.loading && !page.error ? (
-                <div className="flex min-h-52 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center">
-                  <Search className="size-6 text-muted-foreground" aria-hidden="true" />
-                  <p className="mt-3 text-sm font-medium text-foreground">Tidak ada riwayat yang sesuai</p>
-                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">Ubah kata kunci atau filter untuk menemukan arsip lain.</p>
-                  {(query || activeFilterCount > 0) && <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { setQuery(""); resetFilters() }}>Reset filter</Button>}
-                </div>
+                <CollectionEmptyState icon={Archive} title={query || activeFilterCount ? "Tidak ada riwayat yang sesuai" : "Belum ada penyerahan barang"} description={query || activeFilterCount ? "Ubah kata kunci atau filter untuk menemukan arsip lain." : "Penyerahan Inventaris maupun pasangan laporan akan tercatat di sini."} action={query || activeFilterCount ? <Button variant="outline" size="sm" onClick={() => { setQuery(""); resetFilters() }}>Reset filter</Button> : undefined} />
               ) : null}
-            </CardContent>
-          </div>
-        </Card>
+        </SectionCard>
       </ContentShell>
     </DashboardLayout>
   )

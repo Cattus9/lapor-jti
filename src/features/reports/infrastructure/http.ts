@@ -20,7 +20,7 @@ export async function apiResult(run: () => Promise<unknown>) {
     return Response.json({ error: "Permintaan belum berhasil. Silakan coba lagi." }, { status: 500 })
   }
 }
-async function limitedBody(request: Request, limit: number) {
+export async function limitedBody(request: Request, limit: number) {
   const length = Number(request.headers.get("content-length"))
   if (length > limit) throw new ReportError("Ukuran permintaan terlalu besar.", 413)
   if (!request.body) throw new ReportError("Isian permintaan kosong.")

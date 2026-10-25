@@ -1,3 +1,4 @@
+import { validateSatpamIncident } from "./incident-time"
 import { ReportError } from "../../reports/domain/report"
 
 export type FoundReport = {
@@ -32,6 +33,9 @@ export type CreateFoundReportInput = {
 }
 
 export function validateCreateFoundReport(input: CreateFoundReportInput) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new ReportError("Isian laporan tidak valid.")
+  for (const value of Object.values(input)) if (value !== undefined && typeof value !== "string") throw new ReportError("Isian laporan tidak valid.")
+  if (input.status !== undefined && !["baru", "diproses"].includes(input.status)) throw new ReportError("Status awal temuan tidak valid.")
   const itemName = input.itemName?.trim() ?? ""
   if (!itemName) throw new ReportError("Nama barang temuan wajib diisi.", 400)
   if (itemName.length > 200) throw new ReportError("Nama barang maksimal 200 karakter.", 400)
@@ -65,15 +69,9 @@ export function validateCreateFoundReport(input: CreateFoundReportInput) {
 
   const status = input.status === "baru" ? "baru" : "diproses"
 
+  validateSatpamIncident(incidentDate, incidentTime)
   const photoUrl = input.photoUrl?.trim() || undefined
-  if (photoUrl) {
-    try {
-      const parsed = new URL(photoUrl)
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("Protocol not supported")
-    } catch {
-      throw new ReportError("Tautan foto harus berupa URL valid (http/https).", 400)
-    }
-  }
+  if (photoUrl) throw new ReportError("Gunakan unggahan foto privat. Tautan foto eksternal tidak didukung.")
 
   return {
     title,

@@ -25,10 +25,16 @@ export const lostFoundMatches = pgTable("lost_found_matches", {
 
 export const reportHandovers = pgTable("report_handovers", {
   id: uuid("id").defaultRandom().primaryKey(),
-  matchId: uuid("match_id").notNull().unique().references(() => lostFoundMatches.id, { onDelete: "restrict" }),
-  officerId: uuid("officer_id").notNull().references(() => securityOfficers.id, { onDelete: "restrict" }),
+  matchId: uuid("match_id").unique().references(() => lostFoundMatches.id, { onDelete: "restrict" }),
+  inventoryId: uuid("inventory_id").unique().references(() => satpamInventory.id, { onDelete: "restrict" }),
+  lossReportId: uuid("loss_report_id").unique().references(() => reports.id, { onDelete: "restrict" }),
+  submissionKey: uuid("submission_key").unique(),
+  submissionFingerprint: text("submission_fingerprint"),
+  ownershipEvidence: text("ownership_evidence").notNull().default(""),
+  legacy: boolean("legacy").notNull().default(false),
+  officerId: uuid("officer_id").references(() => securityOfficers.id, { onDelete: "restrict" }),
   officerName: text("officer_name").notNull(), // Snapshot survives later officer renames/deactivation.
-  actorId: uuid("actor_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  actorId: uuid("actor_id").references(() => users.id, { onDelete: "restrict" }),
   actorName: text("actor_name").notNull(),
   recipient: text("recipient").notNull(), location: text("location").notNull(), note: text("note").notNull(),
   handedOverAt: timestamp("handed_over_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
@@ -38,10 +44,17 @@ export const reportHandovers = pgTable("report_handovers", {
   check("handover_recipient_check", sql`length(trim(${t.recipient})) between 1 and 150`),
   check("handover_location_check", sql`length(trim(${t.location})) between 1 and 200`),
   check("handover_note_check", sql`length(${t.note}) <= 2000`),
+  check("handover_source_check", sql`(${t.matchId} is not null)::integer + (${t.inventoryId} is not null)::integer = 1`),
+  check("handover_actor_check", sql`${t.legacy} or (${t.actorId} is not null and ${t.officerId} is not null)`),
+  check("handover_inventory_evidence_check", sql`${t.inventoryId} is null or ${t.legacy} or (length(trim(${t.ownershipEvidence})) between 1 and 1000 and ${t.submissionKey} is not null and ${t.submissionFingerprint} is not null)`),
+  check("handover_loss_source_check", sql`${t.lossReportId} is null or ${t.inventoryId} is not null`),
 ])
 
 export const satpamInventory = pgTable("satpam_inventory", {
   id: uuid("id").defaultRandom().primaryKey(),
+  sourceFoundReportId: uuid("source_found_report_id").unique().references(() => reports.id, { onDelete: "restrict" }),
+  submissionKey: uuid("submission_key").unique(),
+  submissionFingerprint: text("submission_fingerprint"),
   itemName: text("item_name").notNull(),
   description: text("description").notNull().default(""),
   founderName: text("founder_name"),
@@ -70,6 +83,8 @@ export const satpamInventory = pgTable("satpam_inventory", {
 // Kehilangan reports recorded directly by Satpam at the post (separate from Pelapor submissions).
 export const satpamLossReports = pgTable("satpam_loss_reports", {
   id: uuid("id").defaultRandom().primaryKey(),
+  ownerName: text("owner_name"),
+  ownerContact: text("owner_contact"),
   title: text("title"),
   itemName: text("item_name").notNull(),
   location: text("location"),
@@ -87,6 +102,8 @@ export const satpamLossReports = pgTable("satpam_loss_reports", {
 }, (t) => [
   index("satpam_loss_reports_created_idx").on(t.createdAt.desc(), t.id.desc()),
   check("satpam_loss_reports_name_check", sql`length(trim(${t.itemName})) between 1 and 200`),
+  check("satpam_loss_owner_name_check", sql`${t.ownerName} is null or length(trim(${t.ownerName})) between 1 and 150`),
+  check("satpam_loss_owner_contact_check", sql`${t.ownerContact} is null or length(trim(${t.ownerContact})) between 1 and 150`),
   check("satpam_loss_reports_title_check", sql`${t.title} is null or length(trim(${t.title})) between 1 and 200`),
   check("satpam_loss_reports_location_check", sql`${t.location} is null or length(trim(${t.location})) between 1 and 200`),
   check("satpam_loss_reports_characteristics_check", sql`length(trim(${t.characteristics})) between 1 and 2000`),

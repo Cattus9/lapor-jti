@@ -16,8 +16,8 @@ export interface SatpamRepository {
   attachment(id: string): Promise<StoredAttachment | null>
   notifications(actorId: string, cursor?: string): Promise<SatpamNotifications>
   markRead(actorId: string, id?: string): Promise<void>
-  listInventory(filter: InventoryFilter): Promise<{ items: InventoryItem[]; total: number }>
-  createInventory(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<InventoryItem>
+  listInventory(filter: InventoryFilter): Promise<SatpamPage<InventoryItem>>
+  createInventory(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string; digest?: string }): Promise<InventoryItem>
   handoverInventory(actor: ReportActor, raw: unknown): Promise<InventoryItem>
   getInventoryPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null>
   getInventoryItem(id: string): Promise<InventoryItem | null>

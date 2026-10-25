@@ -21,7 +21,8 @@ export type ReportPage = {
 }
 export type DashboardData = { total: number; active: number; completed: number; recent: ReportListItem[] }
 export interface ReportRepository {
-  write(actor: ReportActor, input: ReportWrite, attachments: StoredAttachment[], submit: boolean): Promise<{ created: boolean; draft?: DraftView; report?: { id: string; ticketNumber: string }; removed: StoredAttachment[] }>
+  categoryDrafts(ownerId: string): Promise<DraftView[]>
+  write(actor: ReportActor, input: ReportWrite, attachments: StoredAttachment[], submit: boolean): Promise<{ created: boolean; draft?: DraftView; clearedDraftId?: string; report?: { id: string; ticketNumber: string }; removed: StoredAttachment[] }>
   list(ownerId: string, cursor?: string, ticket?: string, draftCursor?: string, filters?: ReportListFilters, month?: string): Promise<ReportPage>
   detail(ownerId: string, id: string): Promise<ReportSummary | null>
   draft(ownerId: string, id: string): Promise<DraftView | null>
@@ -34,4 +35,5 @@ export interface AttachmentStorage {
   store(files: AttachmentUpload[]): Promise<StoredAttachment[]>
   remove(files: StoredAttachment[]): Promise<void>
   read(file: StoredAttachment): Promise<Uint8Array>
+  readPreview?(file: StoredAttachment): Promise<{ bytes: Uint8Array; mimeType: string }>
 }

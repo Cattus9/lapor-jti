@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from "react"
-import { resolveOperationalResource, type OperationalResourceResult } from "./operational-resource-state"
+import { mergeOperationalPage, resolveOperationalResource, type OperationalResourceResult } from "./operational-resource-state"
 
 export const OperationalRefreshContext = createContext(0)
 export function useOperationalResource<T>(url?: string, options: { keepPreviousData?: boolean } = {}) {
@@ -22,21 +22,21 @@ export function useOperationalResource<T>(url?: string, options: { keepPreviousD
   }, [key, url, options.keepPreviousData])
   return resolveOperationalResource(url, key, result, options.keepPreviousData)
 }
-export function useOperationalPage<T extends { id: string }>(url: string) {
+export function useOperationalPage<T extends { id: string }, Metadata extends object = object>(url: string) {
+  type PageData = { items: T[]; nextCursor: string | null; total: number } & Metadata
   const revision = useContext(OperationalRefreshContext)
   const base = `${url}${url.includes("?") ? "&" : "?"}revision=${revision}`
   const [cursor, setCursor] = useState({ base, value: "" })
-  const [pages, setPages] = useState<{ base: string; items: T[]; nextCursor: string | null; total: number }>({ base, items: [], nextCursor: null, total: 0 })
+  const [pages, setPages] = useState<{ base: string; items: T[]; nextCursor: string | null; total: number; data?: PageData }>({ base, items: [], nextCursor: null, total: 0 })
   if (cursor.base !== base) { setCursor({ base, value: "" }); setPages({ base, items: [], nextCursor: null, total: 0 }) }
   const activeCursor = cursor.base === base ? cursor.value : ""
-  const resource = useOperationalResource<{ items: T[]; nextCursor: string | null; total: number }>(`${base}${activeCursor ? `&cursor=${encodeURIComponent(activeCursor)}` : ""}`)
-  if (resource.data && (pages.base !== base || pages.nextCursor !== resource.data.nextCursor || pages.items.length === 0 && resource.data.items.length > 0)) {
+  const resource = useOperationalResource<PageData>(`${base}${activeCursor ? `&cursor=${encodeURIComponent(activeCursor)}` : ""}`)
+  if (resource.data && pages.data !== resource.data) {
     const previous = activeCursor && pages.base === base ? pages.items : []
-    const map = new Map([...previous, ...resource.data.items].map((item) => [item.id, item]))
-    setPages({ base, items: [...map.values()], nextCursor: resource.data.nextCursor, total: resource.data.total })
+    setPages({ base, ...mergeOperationalPage(previous, resource.data) })
   }
   const active = pages.base === base ? pages : { items: [], nextCursor: null, total: 0 }
-  return { ...active, loading: resource.loading, error: resource.error, loadMore: () => { if (!resource.loading && active.nextCursor) setCursor({ base, value: active.nextCursor }) } }
+  return { ...active, data: pages.base === base ? pages.data : undefined, loading: resource.loading, error: resource.error, loadMore: () => { if (!resource.loading && !resource.error && active.nextCursor) setCursor({ base, value: active.nextCursor }) } }
 }
 export function useDebouncedOperationalQuery(value: string) {
   const [query, setQuery] = useState(value)

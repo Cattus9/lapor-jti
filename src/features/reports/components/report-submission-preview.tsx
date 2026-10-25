@@ -1,11 +1,12 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import Image from "next/image"
 import { AlignLeft, ArrowLeft, CalendarDays, ClipboardCheck, Clock3, Eye, FileText, GraduationCap, Headphones, MapPin, PackageSearch, Paperclip, Send, Tags, Wrench, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FieldError } from "@/components/ui/field"
+import { DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import type { PublicAttachment } from "../application/ports"
 import { ReportCategoryBadge } from "./report-category-badge"
 import { reportSubmissionRows, type ReportSubmissionSnapshot } from "./report-submission-state"
@@ -31,21 +32,23 @@ function PreviewAttachment({ file, upload, url }: { file: Pick<PublicAttachment,
   </div>
 }
 
-export function ReportSubmissionPreview({ snapshot, uploadUrls, pending, error, onClose, onConfirm }: {
+export function ReportSubmissionPreview({ snapshot, uploadUrls, pending, error, onClose, onConfirm, finalFocus }: {
   snapshot: ReportSubmissionSnapshot
   uploadUrls: string[]
   pending: boolean
   error: string
   onClose: () => void
   onConfirm: () => void
+  finalFocus: () => HTMLElement | null
 }) {
   const id = useId()
+  const backButton = useRef<HTMLButtonElement>(null)
   const count = snapshot.retained.length + snapshot.files.length
-  return <div className="space-y-5">
+  return <DialogContent className="max-w-3xl space-y-5 p-5 md:p-6" initialFocus={backButton} finalFocus={finalFocus} showCloseButton={!pending}>
       <div>
         <div className="flex flex-wrap items-center gap-2"><ReportCategoryBadge category={snapshot.payload.category} /><Badge variant="outline">Belum dikirim</Badge></div>
-        <h2 className="mt-3 flex items-center gap-2 text-xl font-semibold"><ClipboardCheck className="size-5 shrink-0 text-primary" aria-hidden="true" />Periksa laporan Anda</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Pastikan informasi dan lampiran sudah sesuai. Laporan baru dikirim setelah Anda menekan Konfirmasi kirim.</p>
+        <DialogTitle className="mt-3 flex items-center gap-2 pr-8 text-xl"><ClipboardCheck className="size-5 shrink-0 text-primary" aria-hidden="true" />Periksa laporan Anda</DialogTitle>
+        <DialogDescription className="mt-2 pr-8">Pastikan informasi dan lampiran sudah sesuai. Laporan baru dikirim setelah Anda menekan Konfirmasi kirim.</DialogDescription>
       </div>
       <div className="space-y-5 border-t border-border/60 pt-5">
         <dl className="overflow-hidden rounded-xl border border-border/60">
@@ -66,10 +69,10 @@ export function ReportSubmissionPreview({ snapshot, uploadUrls, pending, error, 
         {error ? <FieldError>{error} Isian dan lampiran tetap tersedia; Anda dapat mencoba lagi atau kembali mengedit.</FieldError> : null}
         <p className="text-xs leading-relaxed text-muted-foreground">Setelah dikirim, pantau laporan melalui Laporan Saya. Formulir akan dikosongkan untuk laporan baru; laporan yang sudah terkirim tidak diubah.</p>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" disabled={pending} onClick={onClose}><ArrowLeft aria-hidden="true" />Kembali edit</Button>
+          <Button ref={backButton} type="button" variant="outline" disabled={pending} onClick={onClose}><ArrowLeft aria-hidden="true" />Kembali edit</Button>
           <Button type="button" disabled={pending} onClick={onConfirm}><Send aria-hidden="true" />{pending ? "Mengirim..." : "Konfirmasi kirim"}</Button>
         </div>
         {pending ? <p role="status" className="text-xs text-muted-foreground">Laporan sedang dikirim. Mohon tunggu.</p> : null}
       </div>
-  </div>
+  </DialogContent>
 }

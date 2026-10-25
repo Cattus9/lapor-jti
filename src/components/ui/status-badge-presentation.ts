@@ -7,6 +7,7 @@ type StatusPresentation = Readonly<{ tone: BadgeTone; className?: string }>
 const presentations = {
   baru: { tone: "info", className: "border-blue-300 bg-blue-100 text-blue-800 dark:border-blue-700 dark:bg-blue-900/60 dark:text-blue-200" },
   diverifikasi: { tone: "cyan" },
+  tersimpan: { tone: "info" },
   diproses: { tone: "warning" },
   "barang teridentifikasi": { tone: "violet" },
   diserahkan: { tone: "teal" },

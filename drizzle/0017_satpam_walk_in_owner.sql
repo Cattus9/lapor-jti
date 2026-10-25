@@ -1,0 +1,4 @@
+ALTER TABLE "satpam_loss_reports" ADD COLUMN "owner_name" text;--> statement-breakpoint
+ALTER TABLE "satpam_loss_reports" ADD COLUMN "owner_contact" text;--> statement-breakpoint
+ALTER TABLE "satpam_loss_reports" ADD CONSTRAINT "satpam_loss_owner_name_check" CHECK ("satpam_loss_reports"."owner_name" is null or length(trim("satpam_loss_reports"."owner_name")) between 1 and 150);--> statement-breakpoint
+ALTER TABLE "satpam_loss_reports" ADD CONSTRAINT "satpam_loss_owner_contact_check" CHECK ("satpam_loss_reports"."owner_contact" is null or length(trim("satpam_loss_reports"."owner_contact")) between 1 and 150);

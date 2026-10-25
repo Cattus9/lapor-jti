@@ -7,14 +7,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const error = await apiResult(async () => {
     const actor = await satpamRequest(request)
     const { id } = await context.params
-    const { photo, bytes } = await getSatpamService().downloadLossReportPhoto(actor, id)
+    const { photo, bytes } = await getSatpamService().downloadLossReportPhoto(actor, id, new URL(request.url).searchParams.get("preview") === "1")
     const disposition = new URL(request.url).searchParams.get("preview") === "1" ? "inline" : "attachment"
 
     response = new Response(new Uint8Array(bytes), {
       headers: {
         "Content-Type": photo.mimeType,
         "Content-Length": String(bytes.length),
-        "Cache-Control": "private, max-age=3600",
+        "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "default-src 'none'; sandbox",
         "Content-Disposition": `${disposition}; filename="foto-kehilangan"; filename*=UTF-8''${encodeURIComponent(photo.name).replace(/'/g, "%27")}`,

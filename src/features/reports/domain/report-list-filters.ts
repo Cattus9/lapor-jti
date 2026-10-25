@@ -44,7 +44,8 @@ export function parseReportListFilters(raw: unknown = {}): ReportListFilters {
   if (category !== "semua" && !reportCategories.includes(category as ReportCategory)) throw new ReportError("Kategori filter tidak valid.")
   if (status !== "semua" && status !== "belum-selesai" && !reportStatuses.includes(status as ReportStatus)) throw new ReportError("Status filter tidak valid.")
   if (!Object.hasOwn(reportPeriods, period)) throw new ReportError("Periode filter tidak valid.")
-  if (category !== "semua" && status !== "semua" && status !== "belum-selesai" && status !== "ditolak" && !lifecycleByCategory[category as ReportCategory].includes(status as ReportStatus)) throw new ReportError("Status tidak tersedia untuk kategori ini.")
+  const legacySatpamStage = category === "kehilangan-temuan" && status === "diverifikasi"
+  if (category !== "semua" && status !== "semua" && status !== "belum-selesai" && status !== "ditolak" && !legacySatpamStage && !lifecycleByCategory[category as ReportCategory].includes(status as ReportStatus)) throw new ReportError("Status tidak tersedia untuk kategori ini.")
   const from = period === "rentang" ? text(value.from) : ""
   const to = period === "rentang" ? text(value.to) : ""
   if (period === "rentang" && (!validDate(from) || !validDate(to) || from > to)) throw new ReportError("Pilih rentang tanggal yang valid; tanggal akhir tidak boleh sebelum tanggal awal.")

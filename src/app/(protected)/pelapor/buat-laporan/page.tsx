@@ -21,7 +21,7 @@ export default async function CreateReportPage({ searchParams }: { searchParams:
     <DashboardLayout role="pelapor">
       <ContentShell>
         <PageHeader title="Buat Laporan" description="Sampaikan kendala atau temuan Anda agar dapat segera ditindaklanjuti oleh pengelola yang tepat." />
-        <ReportForm key={draft?.id ?? "new"} initialDraft={draft} />
+        <ReportForm key={draft?.id ?? "new"} initialDraft={draft} categoryDrafts={await getReportService().categoryDrafts(user)} />
       </ContentShell>
     </DashboardLayout>
   )

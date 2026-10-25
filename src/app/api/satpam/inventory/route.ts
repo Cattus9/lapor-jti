@@ -1,5 +1,5 @@
 import { getSatpamService } from "@/features/lost-found/server"
-import { readSatpamJson, satpamRequest } from "@/features/lost-found/infrastructure/http"
+import { readSatpamJson, readSatpamPhotoForm, satpamRequest } from "@/features/lost-found/infrastructure/http"
 import { apiResult } from "@/features/reports/infrastructure/http"
 import { ReportError, type AttachmentUpload } from "@/features/reports/domain/report"
 
@@ -9,7 +9,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const q = url.searchParams.get("q") ?? undefined
     const status = url.searchParams.get("status") ?? undefined
-    return getSatpamService().listInventory(actor, { q, status })
+    const cursor = url.searchParams.get("cursor") ?? undefined
+    return getSatpamService().listInventory(actor, { q, status, cursor })
   })
 }
 
@@ -19,12 +20,14 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type") || ""
 
     if (contentType.startsWith("multipart/form-data")) {
-      const formData = await request.formData()
+      const formData = await readSatpamPhotoForm(request)
       const itemName = String(formData.get("itemName") ?? "")
       const description = String(formData.get("description") ?? "")
       const founderName = String(formData.get("founderName") ?? "")
       const foundLocation = String(formData.get("foundLocation") ?? "")
       const photoUrl = String(formData.get("photoUrl") ?? "")
+      const sourceFoundTicket = formData.get("sourceFoundTicket") ?? undefined
+      const submissionKey = formData.get("submissionKey") ?? undefined
       const photoFile = formData.get("photo")
 
       let uploadFile: AttachmentUpload | undefined
@@ -44,7 +47,7 @@ export async function POST(request: Request) {
 
       return getSatpamService().createInventory(
         actor,
-        { itemName, description, founderName, foundLocation, photoUrl },
+        { itemName, description, founderName, foundLocation, photoUrl, sourceFoundTicket, submissionKey },
         uploadFile
       )
     }

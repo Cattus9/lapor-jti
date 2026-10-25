@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { validateCreateInventory, validateHandoverInventory } from "../src/features/lost-found/domain/inventory"
+import { randomUUID } from "node:crypto"
+import { assertInventoryReportCompletable, validateCreateInventory, validateHandoverInventory } from "../src/features/lost-found/domain/inventory"
 import { SatpamService } from "../src/features/lost-found/application/satpam-service"
 import type { SatpamRepository } from "../src/features/lost-found/application/ports"
 import type { AttachmentStorage } from "../src/features/reports/application/ports"
 import type { ReportActor } from "../src/features/reports/domain/report"
+import { validateSatpamIncident } from "../src/features/lost-found/domain/incident-time"
 
 const fakeRepository = {
   listInventory: async () => ({ items: [], total: 0 }),
@@ -12,11 +14,44 @@ const fakeRepository = {
 
 const fakeStorage = {} as AttachmentStorage
 
+test("A physical inventory return may finish an active Satpam report, but cannot reopen or close a foreign workflow", () => {
+  for (const status of ["baru", "diproses"]) assertInventoryReportCompletable({ category: "kehilangan-temuan", handlerRole: "satpam", status })
+  for (const status of ["selesai", "ditolak", "barang_teridentifikasi", "diserahkan"]) assert.throws(() => assertInventoryReportCompletable({ category: "kehilangan-temuan", handlerRole: "satpam", status }), /Laporan tertaut/)
+  assert.throws(() => assertInventoryReportCompletable({ category: "fasilitas", handlerRole: "teknisi", status: "baru" }), /Laporan tertaut/)
+})
+
+test("Satpam custom incident dates reject impossible dates, future days and partial date/time pairs", () => {
+  validateSatpamIncident()
+  validateSatpamIncident("2026-01-20", "09:30")
+  assert.throws(() => validateSatpamIncident("2026-02-30", "09:30"), /Tanggal kejadian tidak valid/)
+  assert.throws(() => validateSatpamIncident("2099-01-01", "09:30"), /hari ini/)
+  assert.throws(() => validateSatpamIncident("2026-01-20"), /bersamaan/)
+})
+
+test("Inventory validates image bytes before storage, and cleans only newly staged files on failure/retry", async () => {
+  const actor: ReportActor = { id: randomUUID(), role: "satpam" }
+  const removed: string[] = []
+  const staged = { id: randomUUID(), storageKey: randomUUID(), name: "photo.png", mimeType: "image/png", size: 8, digest: "digest" }
+  let writes = 0
+  const storage = { store: async () => { writes++; return [staged] }, remove: async (files: { storageKey: string }[]) => { removed.push(...files.map(f => f.storageKey)) } } as unknown as AttachmentStorage
+  const failing = new SatpamService({ createInventory: async () => { throw new Error("persistence failed") } } as unknown as SatpamRepository, storage)
+  await assert.rejects(failing.createInventory(actor, { itemName: "Barang" }, { name: "fake.png", mimeType: "image/png", bytes: new Uint8Array([1, 2]) }), /valid/)
+  assert.equal(writes, 0)
+  const image = { name: "photo.png", mimeType: "image/png", bytes: new Uint8Array([137,80,78,71,13,10,26,10]) }
+  await assert.rejects(failing.createInventory(actor, { itemName: "Barang" }, image), /persistence failed/)
+  assert.deepEqual(removed, [staged.storageKey])
+  const originalKey = randomUUID()
+  const retry = new SatpamService({ createInventory: async () => ({ id: randomUUID() }), getInventoryPhoto: async () => ({ storageKey: originalKey }) } as unknown as SatpamRepository, storage)
+  await retry.createInventory(actor, { itemName: "Barang" }, image)
+  assert.deepEqual(removed, [staged.storageKey, staged.storageKey])
+  assert.ok(!removed.includes(originalKey))
+})
+
 
 test("validateCreateInventory requires itemName and trims fields", () => {
-  assert.throws(() => validateCreateInventory({ itemName: "" }), /Nama barang wajib diisi/)
-  assert.throws(() => validateCreateInventory({ itemName: "   " }), /Nama barang wajib diisi/)
-  assert.throws(() => validateCreateInventory({ itemName: "a".repeat(201) }), /Nama barang maksimal 200/)
+  assert.throws(() => validateCreateInventory({ itemName: "" }), /Nama barang tidak valid/)
+  assert.throws(() => validateCreateInventory({ itemName: "   " }), /Nama barang tidak valid/)
+  assert.throws(() => validateCreateInventory({ itemName: "a".repeat(201) }), /maksimal 200/)
 
   const validated = validateCreateInventory({
     itemName: "  Kunci Motor Vario  ",
@@ -46,23 +81,21 @@ test("validateCreateLossReport requires itemName, characteristics, description a
   assert.equal(validated.description, "Tertinggal di meja laboratorium lantai 2")
 })
 
-test("validateCreateInventory rejects invalid photoUrl protocols", () => {
-  assert.throws(() => validateCreateInventory({ itemName: "Dompet", photoUrl: "ftp://example.com/foto.jpg" }), /Tautan foto harus berupa URL valid/)
-  assert.throws(() => validateCreateInventory({ itemName: "Dompet", photoUrl: "javascript:alert(1)" }), /Tautan foto harus berupa URL valid/)
-
-  const validated = validateCreateInventory({ itemName: "Dompet", photoUrl: "https://example.com/foto.jpg" })
-  assert.equal(validated.photoUrl, "https://example.com/foto.jpg")
+test("Inventory rejects external photo URLs and malformed runtime payloads", () => {
+  for (const photoUrl of ["https://example.com/photo.jpg", "ftp://example.com/photo.jpg", "javascript:alert(1)"]) assert.throws(() => validateCreateInventory({ itemName: "Dompet", photoUrl }), /unggahan foto privat/)
+  for (const raw of [null, [], 1, { itemName: 123 }]) assert.throws(() => validateCreateInventory(raw), /tidak valid/)
 })
 
-test("validateHandoverInventory validates recipient and note", () => {
-  assert.throws(() => validateHandoverInventory({ id: "", recipient: "Budi" }), /ID barang tidak valid/)
-  assert.throws(() => validateHandoverInventory({ id: "123", recipient: "   " }), /Nama penerima barang wajib diisi/)
-  assert.throws(() => validateHandoverInventory({ id: "123", recipient: "a".repeat(151) }), /Nama penerima maksimal 150/)
-
-  const validated = validateHandoverInventory({ id: "item-1", recipient: "  Siti Aminah  ", note: "  Membawa STNK asli  " })
-  assert.equal(validated.id, "item-1")
-  assert.equal(validated.recipient, "Siti Aminah")
-  assert.equal(validated.note, "Membawa STNK asli")
+test("Inventory handover requires an officer, ownership evidence, a stable key and valid optional loss reference", () => {
+  const input = { id: randomUUID(), officerId: randomUUID(), submissionKey: randomUUID(), recipient: "  Siti  ", ownershipEvidence: "  Menjelaskan ciri khusus  ", note: "  Catatan  " }
+  const result = validateHandoverInventory(input)
+  assert.equal(result.recipient, "Siti"); assert.equal(result.ownershipEvidence, "Menjelaskan ciri khusus")
+  assert.equal(result.note, "Catatan"); assert.equal(result.lossTicket, undefined)
+  assert.throws(() => validateHandoverInventory({ ...input, officerId: "" }), /Pilih petugas/)
+  assert.throws(() => validateHandoverInventory({ ...input, ownershipEvidence: "" }), /kepemilikan/)
+  assert.throws(() => validateHandoverInventory({ ...input, submissionKey: "" }), /Kunci penyerahan/)
+  assert.throws(() => validateHandoverInventory({ ...input, recipient: "x".repeat(151) }), /maksimal 150/)
+  assert.throws(() => validateHandoverInventory({ ...input, lossTicket: "bad" }), /tiket tidak valid/)
 })
 
 test("SatpamService inventory endpoints enforce satpam role authorization", async () => {

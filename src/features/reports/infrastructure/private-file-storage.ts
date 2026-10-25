@@ -1,9 +1,10 @@
 import "server-only"
 import { mkdir, readFile, writeFile, unlink } from "node:fs/promises"
 import { join, resolve } from "node:path"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { ReportError, type AttachmentUpload, type StoredAttachment } from "../domain/report"
 import type { AttachmentStorage } from "../application/ports"
+import { privateImagePreviews } from "./private-image-previews"
 
 export class PrivateFileStorage implements AttachmentStorage {
   // Runtime volume, not a build asset. Do not trace/upload user files into Next standalone output.
@@ -17,7 +18,7 @@ export class PrivateFileStorage implements AttachmentStorage {
     try {
       if (files.length) await mkdir(this.root, { recursive: true, mode: 0o700 })
       for (const file of files) {
-        const item = { id: randomUUID(), storageKey: randomUUID(), name: file.name, mimeType: file.mimeType, size: file.bytes.length }
+        const item = { id: randomUUID(), storageKey: randomUUID(), name: file.name, mimeType: file.mimeType, size: file.bytes.length, digest: createHash("sha256").update(file.bytes).digest("hex") }
         await writeFile(this.path(item.storageKey), file.bytes, { flag: "wx", mode: 0o600 })
         stored.push(item)
       }
@@ -26,6 +27,7 @@ export class PrivateFileStorage implements AttachmentStorage {
   }
   async remove(files: StoredAttachment[]) {
     for (const file of files) {
+      privateImagePreviews.forget(file.storageKey)
       try { await unlink(this.path(file.storageKey)) }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error("Private attachment cleanup failed; an orphan file may need maintenance.") }
     }
@@ -36,5 +38,10 @@ export class PrivateFileStorage implements AttachmentStorage {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new ReportError("File lampiran tidak tersedia.", 404)
       throw error
     }
+  }
+  readPreview(file: StoredAttachment) {
+    // Validate key even on a cache hit; originals are immutable UUID-keyed files.
+    this.path(file.storageKey)
+    return privateImagePreviews.read(file.storageKey, () => this.read(file))
   }
 }

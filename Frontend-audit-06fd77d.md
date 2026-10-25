@@ -4,7 +4,7 @@ Tanggal audit: 13 Oktober 2026 (WIB).
 
 Commit yang diperiksa: `06fd77d13df310ed32954117485c732181c18ab0`, `Add satpam inventory and history filters`. Pembanding: `ef23001`, versi sebelum push tim. Saat audit, HEAD lokal dan remote `origin/main` sama-sama menunjuk commit yang diperiksa.
 
-Status seluruh temuan: **terbuka; belum dilakukan perbaikan implementasi**. Dokumen ini mencatat hasil pemeriksaan, dampak, dan arah normalisasi untuk tim Dev/agent AI.
+Status awal seluruh temuan: **terbuka**. Tindak lanjut Riwayat Pelapor pada 24 Oktober 2026 dicatat di bawah; bagian Inventaris dan alignment sidebar tetap terbuka. Dokumen ini mempertahankan bukti audit awal serta membedakannya dari perbaikan implementasi.
 
 ## Cakupan dan metode
 
@@ -18,14 +18,25 @@ Tidak dilakukan Preview Mode, browser automation, atau Playwright. Ukuran/alignm
 
 | ID | Temuan | Asal | Status |
 | --- | --- | --- | --- |
-| UI-01 | Ukuran/typography eksplisit belum dinormalisasi | Ditambahkan pada commit tim | Terbuka |
+| UI-01 | Ukuran/typography eksplisit belum dinormalisasi | Ditambahkan pada commit tim | Parsial: Riwayat Pelapor dinormalisasi; Inventaris tetap terbuka |
 | UI-02 | Badge/status dan palette warna ditulis ulang di halaman | Ditambahkan pada commit tim | Terbuka |
 | UI-03 | Upload foto lokal menduplikasi komponen upload bersama | Ditambahkan pada commit tim | Terbuka |
 | UI-04 | Helper format foto tidak memakai FieldDescription | Ditambahkan pada commit tim | Terbuka |
-| UI-05 | Glow dan styling status Riwayat Pelapor tersebar di halaman | Ditambahkan pada commit tim | Terbuka |
+| UI-05 | Glow dan styling status Riwayat Pelapor tersebar di halaman | Ditambahkan pada commit tim | Implementasi Riwayat dinormalisasi 24 Oktober 2026; QA visual manual belum dilakukan |
 | LAYOUT-01 | Acuan vertikal brand sidebar berbeda dari toolbar konten | Sudah ada sebelum commit tim | Terbuka |
 
 ## UI-01: ukuran dan typography eksplisit
+
+### Tindak lanjut Riwayat Pelapor, 24 Oktober 2026
+
+**Revisi UX 25 Oktober 2026:** keputusan terbaru menggantikan stepper daftar dengan cuplikan deskripsi dua baris. Ikon, kategori, status, waktu kirim dan akses detail tetap dipertahankan. `report-surface` di globals.css memberi lapisan dalam `#FBFBFC` beserta pasangan dark; hover lift 2px dan `shadow-xs` kini diizinkan secara eksplisit pengguna, dengan reduced motion. Modal tetap memakai stepper lengkap. Query daftar menambah preview maksimal 240 karakter dalam query owner yang sama, tanpa N+1; tes PostgreSQL rollback memverifikasi preview dan isolasi owner. Rincian berikut mencatat implementasi 24 Oktober sebelum revisi ini; acuan perilaku terkini ada di OPERATIONS.md.
+
+- Keputusan UX terakhir mempertahankan susunan kartu awal: identitas di atas, status/detail di kanan, progres di bawah. Stepper daftar dibatasi skala tema `max-w-3xl` pada desktop, tidak lagi membentang sepanjang kartu. Ringkasan "Tahap x dari y" dan salinan status di atas bar dihapus. Modal detail tetap memiliki stepper lengkap. Keduanya memakai komponen custom Shadcn `src/components/ui/stepper.tsx`, disusun dari `Badge` dan `Separator` dengan semantik ordered-list. Warna memakai token global `primary`, `muted`, `muted-foreground`, `border`, dan `card`; tidak menambah palette lokal.
+- Tahap sebelum posisi saat ini memakai soft blue turunan token primary (bukan abu-abu), tahap saat ini primary solid tanpa glow/ring dekoratif, dan tahap berikutnya memakai track muted netral. Indikator lingkaran dan konektor lampau mengikuti soft blue yang sama; label nonaktif tetap muted agar mudah dibaca tanpa terlalu banyak aksen. Status selesai tetap menonjolkan tahap terakhir, bukan seluruh tahap; status ditolak tetap menjadi pesan penolakan, bukan progres palsu.
+- Kartu menggunakan `Card` sebagai trigger dialog non-native yang mempertahankan semantik tombol/keyboard. Ikon dan `ReportCategoryBadge` awal dipertahankan, sedangkan status tetap satu `StatusBadge`. Tanggal dikirim dekat judul; tanggal pembaruan di area progres hanya ditampilkan bila berbeda pada presisi menit tampilan. Tidak menebak pengelola atau keterangan penanganan yang tidak tersedia pada proyeksi server. Glow blur, gambar dekoratif DoneIcon, hover lift/shadow, serta affordance detail yang hanya terlihat saat hover tetap dihapus.
+- Label 10/11px menjadi skala `text-xs`. Geometri filter khusus dipusatkan pada `--report-history-filter-width` dan `--report-history-filter-columns` di globals.css; override tinggi Select `!h-9` dihapus karena primitive sudah menyediakan ukuran standar.
+- Ring fokus keyboard pada kartu/dialog tetap dipertahankan. Bayangan modal dan wrapper berlapis yang berasal dari primitive/token bersama tidak diubah secara global. Tidak ada perubahan lifecycle, query, indeks, atau migration pada revisi UI ini.
+- Regression tersedia di `scripts/pelapor-history-ui.test.tsx`: hierarki kartu semua lifecycle dengan kategori/status terpisah, progres terbatas tanpa ringkasan berulang, tanggal identik/berbeda, seluruh jumlah tahap kategori, aria-current, komposisi Shadcn, tokenisasi, dan penghapusan glow. Tes ini memeriksa source/hasil render statis, bukan hasil klik atau pengukuran visual browser. QA manual terang/gelap/mobile tetap diperlukan.
 
 Pada baris frontend baru ditemukan 10 baris dengan nilai ukuran eksplisit lokal. Rinciannya:
 

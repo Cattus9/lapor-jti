@@ -3,191 +3,76 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { ArrowRight, Calendar, CalendarDays, CheckCircle2, ChevronDown, Clock, History, Loader2, ScanSearch, XCircle } from "lucide-react"
+import { ArrowRight, Calendar, CalendarDays, ChevronDown, Clock, History, Loader2, ScanSearch } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "cn"
 import type { ReportPage } from "../application/ports"
 import type { ReportListItem } from "../types"
-import { lifecycleByCategory, statusLabels } from "../domain/report"
+import { statusLabels } from "../domain/report"
 import { hasReportFilters, reportListHref, type ReportListFilters } from "../domain/report-list-filters"
 import { PelaporReportDetailDialog } from "./pelapor-report-detail-dialog"
 import { ReportCategoryBadge, reportCategoryPresentation } from "./report-category-badge"
 
 export function ReportRow({ report, selected }: { report: ReportListItem; selected?: string }) {
-  const isDone = report.status === "selesai"
-  const isRejected = report.status === "ditolak"
-  const isProcessing = !isDone && !isRejected
-
   const meta = reportCategoryPresentation[report.category]
   const Icon = meta.icon
-  const stages = lifecycleByCategory[report.category]
-  const activeIndex = Math.max(0, stages.indexOf(report.status))
-  const totalStages = stages.length
+  const isCompleted = report.status === "selesai"
+  // Both values are formatted by the same server projection. Do not repeat a
+  // timestamp if there is no visible change at the displayed minute precision.
+  const hasVisibleUpdate = report.updatedAt !== report.submittedAt
 
   const cardTrigger = (
-    <article
+    <Card
       tabIndex={0}
       role="button"
-      aria-label={`Buka detail laporan: ${report.title}`}
+      aria-label={`Buka detail laporan: ${report.title}, status ${statusLabels[report.status]}`}
       className={cn(
-        "group relative w-full overflow-hidden rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer select-none md:p-5",
-        "hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-        isDone && "border-emerald-500/30 bg-card/95 hover:border-emerald-500/60 dark:border-emerald-500/40",
-        isRejected && "border-destructive/30 bg-card/95 hover:border-destructive/60 dark:border-destructive/40",
-        isProcessing && "border-border bg-card/90 hover:border-primary/50 dark:border-border"
+        "group w-full cursor-pointer gap-0 rounded-xl border border-border bg-report-surface p-4 text-left text-card-foreground shadow-none ring-0 transition duration-200 ease-out select-none hover:border-primary/40 hover:shadow-xs motion-safe:hover:-translate-y-0.5 md:p-5 motion-reduce:transition-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
     >
-      {/* Ambient background glow & done watermark on the right edge */}
-      {isDone ? (
-        <>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-12 top-1/2 size-44 -translate-y-1/2 rounded-full bg-emerald-500/15 blur-2xl dark:bg-emerald-400/20"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-4 top-1/2 size-24 -translate-y-1/2 rounded-full bg-emerald-500/20 blur-xl dark:bg-emerald-400/25"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-4 top-1/2 size-32 -translate-y-1/2 opacity-20 blur-[2px] transition-all duration-300 group-hover:scale-105 group-hover:opacity-30 dark:opacity-25 sm:size-40"
-          >
-            <Image
-              src="/assets/DoneIcon.png"
-              alt=""
-              fill
-              sizes="(min-width: 640px) 160px, 128px"
-              className="object-contain"
-            />
+      <div className="flex items-start gap-3 md:gap-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary sm:size-12">
+          <Icon className="size-5 sm:size-6" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between sm:gap-4">
+            <h2 className="min-w-0 break-words text-sm font-semibold leading-snug md:text-base">{report.title}</h2>
+            <StatusBadge className="shrink-0" status={statusLabels[report.status]} />
           </div>
-        </>
-      ) : isRejected ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-12 top-1/2 size-40 -translate-y-1/2 rounded-full bg-destructive/10 blur-2xl dark:bg-destructive/15"
-        />
-      ) : (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-12 top-1/2 size-36 -translate-y-1/2 rounded-full bg-primary/10 blur-2xl dark:bg-primary/15"
-        />
-      )}
-
-      {/* Main card info */}
-      <div className="relative flex flex-col gap-3.5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-xl border transition-colors",
-              isDone
-                ? "border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-300"
-                : isRejected
-                ? "border-destructive/30 bg-destructive/5 text-destructive dark:border-destructive/30 dark:bg-destructive/15"
-                : "border-border bg-card text-primary"
-            )}
-          >
-            <Icon className="size-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold transition-colors group-hover:text-primary md:text-base">
-              {report.title}
-            </h2>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <ReportCategoryBadge category={report.category} />
-            </div>
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-              <CalendarDays className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <ReportCategoryBadge category={report.category} />
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <CalendarDays className="size-3.5 shrink-0" aria-hidden="true" />
               <span>Dikirim <time dateTime={report.submittedAtIso}>{report.submittedAt} WIB</time></span>
             </p>
           </div>
-        </div>
-
-        {/* Status pill & hover detail affordance */}
-        <div className="flex flex-row items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
-          <StatusBadge status={statusLabels[report.status]} />
-          <div className="flex items-center gap-1 text-xs font-medium text-primary opacity-80 transition-all duration-200 sm:translate-x-1 sm:opacity-0 sm:group-hover:translate-x-0 sm:group-hover:opacity-100">
-            <span>Lihat detail</span>
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-          </div>
-        </div>
-      </div>
-
-      {/* Mini Stepper at bottom */}
-      <div className="relative mt-4 border-t border-border/60 pt-3.5">
-        {!isRejected ? (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-xs">
-                {isDone ? (
-                  <>
-                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-300">Semua tahap selesai</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-semibold text-primary">Tahap {activeIndex + 1} dari {totalStages}</span>
-                    <span className="text-muted-foreground/60">·</span>
-                    <span className="font-medium text-foreground">{statusLabels[report.status]}</span>
-                  </>
-                )}
-              </div>
-              <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <Clock className="size-3 shrink-0 text-muted-foreground/80" aria-hidden="true" />
-                <span>Terakhir diperbarui {report.updatedAt} WIB</span>
+          {report.descriptionPreview || isCompleted ? (
+            <div className="mt-2.5 flex items-center justify-between gap-4">
+              {report.descriptionPreview ? <p className="min-w-0 flex-1 line-clamp-2 max-w-3xl break-words text-sm leading-relaxed text-muted-foreground">{report.descriptionPreview}</p> : null}
+              {isCompleted ? (
+                <span aria-hidden="true" className="pointer-events-none ml-auto flex size-12 shrink-0 items-center justify-center sm:size-16">
+                  <Image src="/assets/DoneStatusIc.png" alt="" width={292} height={283} sizes="(min-width: 640px) 64px, 48px" className="h-auto w-full object-contain opacity-70 dark:opacity-80" />
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="mt-3 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+            {hasVisibleUpdate ? (
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                <span>Diperbarui {report.updatedAt} WIB</span>
               </p>
-            </div>
-
-            {/* Segmented Stepper Bar */}
-            <div className="flex items-center gap-1.5 w-full pt-0.5" aria-label={`Progress: tahap ${activeIndex + 1} dari ${totalStages}`}>
-              {stages.map((stage, idx) => {
-                const isPast = idx < activeIndex || isDone
-                const isCurrent = idx === activeIndex && !isDone
-                return (
-                  <div key={stage} className="flex-1 flex flex-col gap-1 min-w-0">
-                    <div
-                      className={cn(
-                        "h-1.5 rounded-full transition-all duration-300",
-                        isDone
-                          ? "bg-emerald-500"
-                          : isPast
-                          ? "bg-primary"
-                          : isCurrent
-                          ? "bg-primary ring-2 ring-primary/25"
-                          : "bg-muted-foreground/20"
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        "truncate text-[10px] leading-tight hidden sm:block",
-                        isCurrent
-                          ? "font-semibold text-foreground"
-                          : isPast
-                          ? "text-muted-foreground"
-                          : "text-muted-foreground/50"
-                      )}
-                    >
-                      {statusLabels[stage]}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
+            ) : null}
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary-action sm:ml-auto">
+              Lihat detail <ArrowRight className="size-3.5" aria-hidden="true" />
+            </span>
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-destructive font-medium">
-              <XCircle className="size-3.5 shrink-0" aria-hidden="true" />
-              <span>Laporan ditolak oleh pengelola</span>
-            </div>
-            <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Clock className="size-3 shrink-0 text-muted-foreground/80" aria-hidden="true" />
-              <span>Terakhir diperbarui {report.updatedAt} WIB</span>
-            </p>
-          </div>
-        )}
+        </div>
       </div>
-    </article>
+    </Card>
   )
 
   return (

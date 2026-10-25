@@ -23,6 +23,8 @@ compose.override.yml
 docker-compose.override.yaml
 docker-compose.override.yml
 coverage
+output
+.codex-remote-attachments
 docs
 .agents
 .agent

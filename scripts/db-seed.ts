@@ -17,12 +17,18 @@ async function main() {
   if (!password || password.length < 12 || password.length > 128) {
     throw new Error("Demo seed requires DEMO_USER_PASSWORD (12-128 characters).")
   }
+  const args = process.argv.slice(2)
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--role=tefa")) {
+    throw new Error("Demo seed supports only the optional --role=tefa argument.")
+  }
+  const tefaOnly = args[0] === "--role=tefa"
 
   const { pool, db } = createDatabaseClient("migration")
   try {
     let newUsers = 0
     let newAccounts = 0
     for (const demo of Object.values(demoUsers)) {
+      if (tefaOnly && demo.role !== "tefa") continue
       await db.transaction(async (tx) => {
         const inserted = await tx.insert(users).values({
           name: demo.name, email: demo.email.toLowerCase(), identifier: demo.identifier,
@@ -49,7 +55,7 @@ async function main() {
         newAccounts += insertedAccounts.length
       })
     }
-    await db.insert(securityOfficers).values(demoSecurityOfficers.map((officer) => ({ ...officer }))).onConflictDoNothing()
+    if (!tefaOnly) await db.insert(securityOfficers).values(demoSecurityOfficers.map((officer) => ({ ...officer }))).onConflictDoNothing()
     console.log(`Development seed completed (${newUsers} new users, ${newAccounts} new credential accounts). Existing credentials and officer records were preserved.`)
   } finally {
     await pool.end()

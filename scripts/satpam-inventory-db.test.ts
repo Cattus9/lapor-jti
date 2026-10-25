@@ -4,13 +4,16 @@ import test from "node:test"
 import { randomUUID } from "node:crypto"
 import { eq } from "drizzle-orm"
 import { createDatabaseClient } from "../src/db/client"
-import { users, satpamInventory } from "../src/db/schema"
+import { getDatabaseUrl } from "../src/db/environment"
+import { users, satpamInventory, reportHandovers, securityOfficers } from "../src/db/schema"
 import { DrizzleSatpamRepository } from "../src/features/lost-found/infrastructure/drizzle-satpam-repository"
 import type { ReportActor } from "../src/features/reports/domain/report"
 
-test("satpam inventory persistence in PostgreSQL: insert, list, and handover", async () => {
+test("satpam inventory persistence in PostgreSQL: insert, list, and handover", { skip: process.env.NODE_ENV !== "development" }, async () => {
+  assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(new URL(getDatabaseUrl()).hostname))
   const { pool, db } = createDatabaseClient()
   const testId = randomUUID()
+  const officerId = randomUUID()
   const actorId = randomUUID()
   const actorName = `Satpam Test ${testId.slice(0, 8)}`
   const actorEmail = `satpam-${testId.slice(0, 8)}@example.com`
@@ -29,6 +32,7 @@ test("satpam inventory persistence in PostgreSQL: insert, list, and handover", a
       isActive: true,
     })
 
+    await db.insert(securityOfficers).values({ id: officerId, name: "Penyerah test" })
     const repo = new DrizzleSatpamRepository(db)
 
     // 2. Insert an inventory item
@@ -36,7 +40,7 @@ test("satpam inventory persistence in PostgreSQL: insert, list, and handover", a
       itemName: `Kunci Motor Honda ${testId.slice(0, 6)}`,
       founderName: "Ahmad Mahasiswa",
       description: "Ditemukan di dekat parkiran Gedung TI",
-      photoUrl: "https://example.com/kunci.jpg",
+
     })
 
     assert.ok(created.id)
@@ -61,6 +65,7 @@ test("satpam inventory persistence in PostgreSQL: insert, list, and handover", a
     const handedOver = await repo.handoverInventory(satpamActor, {
       id: created.id,
       recipient: "Riko Pemilik",
+      officerId, submissionKey: randomUUID(), ownershipEvidence: "Menunjukkan ciri khusus dan bukti kepemilikan",
       note: "Menyerahkan bukti STNK motor",
     })
 
@@ -75,6 +80,8 @@ test("satpam inventory persistence in PostgreSQL: insert, list, and handover", a
     assert.equal(updatedRow.handoverRecipient, "Riko Pemilik")
   } finally {
     // Cleanup fixture
+    await db.delete(reportHandovers).where(eq(reportHandovers.actorId, actorId))
+    await db.delete(securityOfficers).where(eq(securityOfficers.id, officerId))
     await db.delete(satpamInventory).where(eq(satpamInventory.registeredBy, satpamActor.id)).catch(() => {})
     await db.delete(users).where(eq(users.id, satpamActor.id)).catch(() => {})
     await pool.end()

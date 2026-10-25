@@ -36,6 +36,7 @@ Aturan penerapan:
 - Edit primitive Shadcn bersama hanya jika perubahan visual/interaksi/aksesibilitas/responsif berlaku lintas pemakai. Periksa dampaknya dan pertahankan API kecuali migrasi seluruh pemakai memang termasuk cakupan.
 - Hindari card/wrapper yang tidak memberi hierarki atau fungsi. Untuk pola yang ditentukan proyek—terutama KPI dan detail laporan—ikuti komposisi berlapis di AGENTS.md secara tepat. Jangan mengganti standar role tertentu dengan markup lokal yang hanya tampak serupa.
 - Field helper text wajib memakai `FieldDescription`; jangan membuat versi helper text sendiri.
+- Form Buat Laporan Pelapor memakai satu halaman dengan pemilih kategori selalu terlihat dan modal pemeriksaan sebelum kirim. Pergantian kategori menyimpan draft terpisah hanya bila ada isian/lampiran; notifikasi sukses hanya sesudah server mengonfirmasi. Pertahankan pemulihan draft per kategori, guard owner/revision, lampiran privat, serta isian lokal saat gagal. Jangan mengembalikan wizard tiga langkah tanpa arahan pemilik proyek. Detail workflow dan tes ada di OPERATIONS.md.
 - Gunakan Lucide yang tersedia dan semantik; pastikan nama ikon ada di paket terpasang.
 - Baca dan gunakan skill frontend proyek di `.agents/skills/design-taste-frontend/SKILL.md` untuk setiap iterasi/pengembangan frontend, bersama aturan AGENTS.md. Jika arahan generik skill bertentangan dengan sistem Shadcn, token, atau kebutuhan eksplisit proyek, pertahankan standar proyek dan ambil hanya arahan skill yang relevan.
 - Visual dan interaksi diverifikasi manual oleh pengguna. Jangan menjalankan Preview Mode, browser automation, atau Playwright untuk validasi; tetap lakukan pemeriksaan statis.
@@ -62,6 +63,10 @@ Aturan penerapan:
 - Provider Google Workspace belum dikonfigurasi saat ini. Jangan mengklaim SSO aktif atau menaruh kredensial OAuth di client. Bila provider ditambahkan, rahasia OAuth hanya di server dan role aplikasi tetap dikelola database.
 - Perubahan role/status harus mempertimbangkan pencabutan session, aturan agar pengelola aktif terakhir tidak terkunci, pemeriksaan origin, audit tanpa kredensial, dan perlindungan update bersamaan.
 - Backend TEFA kini memakai metadata pengelola layanan di PostgreSQL dan frontend operasional nyata. Jangan mengembalikan data simulasi sebagai fallback runtime. Pertahankan snapshot pemilik laporan lama, batas API/lampiran/notifikasi antar-role, lock/transaksi status, dan routing dari katalog aktif. Rincian migration 0014, indeks, relasi, serta tes rollback/HTTP/fresh-install ada di OPERATIONS.md.
+- Satpam kehilangan/temuan memakai penerimaan langsung `baru → diproses` sejak migration 0015; jangan mengembalikan tahap Verifikasi melalui UI, API, seed, atau fixture. Urutan bersama berada di `lifecycleByCategory`. Enum `diverifikasi` tetap ada untuk Teknisi dan histori lama, bukan tahap aktif Satpam. Backfill, constraint, deployment dan tes rollback/HTTP dijelaskan di OPERATIONS.md.
+- Inventaris Satpam adalah barang yang sudah diterima secara fisik, bukan katalog publik. Penyerahan memakai `report_handovers` dengan tepat satu sumber (pasangan laporan atau inventaris), petugas aktif, actor dari session, snapshot identitas, dan hasil pemeriksaan kepemilikan. Laporan kehilangan terkait opsional; jika dipilih, penyerahan dan penyelesaian laporan/notifikasi wajib satu transaksi. Jangan membuat dua laporan fiktif atau memperbarui stok saja sambil meninggalkan laporan tertaut aktif.
+- Migration 0016 menyatukan riwayat penyerahan dan menjaga satu pengembalian per barang. Backfill penyerahan lama diberi penanda legacy dengan petugas/actor null, bukan mengambil identitas pencatat awal sebagai penyerah. Migration 0017 memisahkan nama/kontak pelapor langsung dari akun Satpam. Data kontak tetap privat; tidak ada pengiriman pesan eksternal otomatis.
+- Pertahankan kunci pengiriman Inventaris/penyerahan yang stabil selama retry dan buat kunci baru setelah penyimpanan terkonfirmasi atau isi form berubah. Jangan mengubah key di setiap retry. Foto unggahan baru harus melewati validator bersama dan batas body sebelum parsing; URL foto eksternal tidak menjadi sumber gambar runtime Satpam. Lampiran temuan terkait boleh dibaca melalui endpoint privat Inventaris tanpa menggandakan file. Rincian tes dan batas audit ada di OPERATIONS.md.
 
 ## Database: PostgreSQL di Docker wajib
 
@@ -103,6 +108,7 @@ Aturan keselamatan:
 - `npm run db:seed` hanya untuk development, memerlukan `NODE_ENV=development` dan `DEMO_USER_PASSWORD` 12–128 karakter. Seed akun demo bersifat idempotent, memeriksa kecocokan fixture, tidak menimpa password/kredensial yang sudah ada, dan dapat menambah contoh petugas Satpam.
 - `npm run db:seed-officers` hanya menambah contoh data petugas pada development; tidak membuat akun login.
 - Jangan menjalankan seed demo di production, jangan memakai seed untuk reset password, dan jangan menganggap seed memperbarui akun yang sudah ada.
+- Seed lengkap mencakup akun TEFA (`tefa@gmail.com`, role `tefa`, aktif). Password awal berasal dari `DEMO_USER_PASSWORD` lokal, bukan password hardcode. Untuk menambahkan hanya TEFA setelah migration: `docker compose -f compose.yaml -f compose.dev.yaml run --rm --no-deps migrate npm run db:seed -- --role=tefa`. PostgreSQL harus sudah sehat dan migration berhasil. Jalankan ulang dengan aman: kredensial yang sudah ada tidak diubah; mode ini tidak membuat akun role lain maupun petugas Satpam. Setup development baru tetap menjalankan seed lengkap secara eksplisit setelah migration; build/startup tidak otomatis membuat akun demo.
 - Tentukan tempat data awal dengan sengaja: backfill atau data wajib untuk transformasi versi database masuk ke migration; fixture/demo/testing opsional masuk ke seed development; data katalog yang dikelola pengguna tidak boleh diam-diam di-reset oleh seed.
 - Untuk Area/Lantai, Ruangan, Fasilitas, dan relasinya, periksa migration yang berlaku pada database tersebut. Migration `0008` membuat Area/Lantai serta template pemetaan bagi katalog lokasi lama; ia bukan verifikasi kondisi kampus dan tidak menyinkronkan perubahan katalog lokal antar laptop.
 - Jika migration gagal, hentikan app/deployment dan periksa log serta status database. Jangan menghapus volume untuk “memperbaiki” migration tanpa keputusan eksplisit dan backup.
@@ -161,6 +167,13 @@ Perintah bantu:
 - Database tidak dipublikasikan ke port host pada konfigurasi production; app dipublikasikan ke loopback untuk dipasang di belakang reverse proxy/TLS sesuai infrastruktur.
 - Volume Docker bukan strategi backup. Siapkan backup database dan lampiran, uji pemulihan, HTTPS, secret management, logging, monitoring, dan prosedur upgrade sebelum penggunaan publik/production.
 - Konfigurasi Compose saat ini bukan bukti bahwa semua kebutuhan deployment production terpenuhi. Tinjau hosting, domain, provider auth, storage, backup, dan keamanan secara terpisah.
+
+### Pengukuran performa
+
+- Jangan menyamakan waktu kompilasi `next dev` dengan performa build production. Catat request pertama vs request hangat, bagian Next.js vs aplikasi pada log, serta mode container sebelum mengoptimalkan kode atau menyalahkan commit tertentu.
+- Uji HTTP/API dan PostgreSQL secara terpisah dari LCP/INP browser. Tes HTTP bukan bukti bahwa hydration, paint, atau interaksi browser sudah cepat. QA browser tetap manual sesuai AGENTS.md.
+- Daftar operasional harus dibatasi di SQL, bukan mengambil semua baris lalu hanya membatasi tampilan. Inventaris Satpam memakai keyset 20 barang dengan total dan cursor; pemakai pencocokan juga wajib mendukung halaman berikutnya dan pencarian server.
+- Thumbnail foto privat tidak boleh dipindah ke folder public atau optimizer gambar publik. Endpoint wajib memeriksa session, status/role, dan scope record sebelum membaca thumbnail dari cache; unduhan asli harus tetap tersedia. Detail cache/batas decoder dan tes ada di OPERATIONS.md.
 
 ## Workflow wajib untuk tim Dev dan agent AI
 
@@ -338,6 +351,14 @@ Aturan berikut disalin dari AGENTS.md agar tersedia juga dalam satu panduan onbo
 - Every dashboard KPI MUST use the reusable `KpiCard` composition so sizing, spacing, icon treatment, and responsive behavior stay consistent across roles.
 - The outer layer MUST include a bottom affordance labeled `Detail` with a subtle `ArrowRight`; use a link when a detail route exists and a non-interactive footer while the route is still pending.
 - Role-specific dashboards MUST not recreate KPI card markup locally or introduce a different footer label/style.
+
+## Layered Section Card Standard
+
+- Pola panel berlapis disebut **Layered Section Card**. Baris ikon dan teks pada lapisan luarnya disebut **Section Header** (judul bagian), bukan page header atau judul kartu di dalam konten.
+- Untuk panel koleksi/antrean yang dibuat atau disentuh, gunakan `SectionCard` dari `src/components/ui/section-card.tsx`: lapisan luar `bg-sidebar`, section header ringkas dengan ikon Lucide semantik dan label `text-xs font-medium text-muted-foreground`, lalu permukaan dalam `bg-card` dengan border/radius/spacing tema. Metadata atau jumlah data boleh berada di kanan section header.
+- Letakkan filter, ringkasan hasil, loading/error/empty state, daftar, dan pagination di permukaan dalam yang sama. Jangan membuat wrapper baru hanya ketika kosong atau mengulang judul/icon section header di dalam panel.
+- Empty state koleksi mengikuti `CollectionEmptyState`: border dashed, permukaan inset `bg-empty-surface`, ikon muted, judul singkat dan deskripsi pendukung. Bedakan data awal kosong dengan filter tanpa hasil; jangan menampilkan empty state selama loading/error.
+- Gunakan heading semantik untuk Section Header dan label field yang terhubung ke kontrol. Ikuti standar KPI/detail modal tersendiri untuk konteksnya; jangan mengganti komposisinya secara massal.
 
 ## Report Detail Modal Standard
 - `ReportDetailDialog` in `src/features/lost-found/components/satpam-lost-found-workspace.tsx` is the single source of truth for every operational report-detail modal.

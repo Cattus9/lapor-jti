@@ -4,6 +4,17 @@ import { getCurrentUser } from "@/lib/auth/server-session"
 import { getAuthEnvironment } from "@/lib/auth/environment"
 import { ReportError } from "../../reports/domain/report"
 import { requireSatpam } from "../domain/satpam"
+import { limitedBody } from "../../reports/infrastructure/http"
+
+export async function readSatpamPhotoForm(request: Request) {
+  const bytes = await limitedBody(request, 6 * 1024 * 1024)
+  let form: FormData
+  try { form = await new Response(bytes, { headers: { "Content-Type": request.headers.get("content-type") ?? "" } }).formData() }
+  catch { throw new ReportError("Isian formulir tidak valid.") }
+  if (form.getAll("photo").length > 1) throw new ReportError("Maksimal satu foto barang.")
+  for (const [key, value] of form.entries()) if (key !== "photo" && typeof value !== "string") throw new ReportError("Isian formulir tidak valid.")
+  return form
+}
 
 export async function satpamRequest(request: Request, mutate = false) {
   const user = await getCurrentUser()

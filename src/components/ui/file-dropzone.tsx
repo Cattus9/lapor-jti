@@ -15,6 +15,8 @@ export function FileDropzone({
   accept = DEFAULT_ACCEPT,
   maxFiles = 4,
   maxSizeMb = 5,
+  disabled = false,
+  description,
 }: {
   id: string
   value: File[]
@@ -22,6 +24,8 @@ export function FileDropzone({
   accept?: string | string[]
   maxFiles?: number
   maxSizeMb?: number
+  disabled?: boolean
+  description?: React.ReactNode
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = React.useState(false)
@@ -30,6 +34,7 @@ export function FileDropzone({
   const acceptString = Array.isArray(accept) ? accept.join(",") : accept
 
   function addFiles(incoming: File[]) {
+    if (disabled) return
     setError("")
     const validFiles = incoming
       .map((file) => {
@@ -76,6 +81,7 @@ export function FileDropzone({
         id={id}
         name={id}
         type="file"
+        disabled={disabled}
         accept={acceptString}
         multiple
         className="sr-only"
@@ -87,18 +93,19 @@ export function FileDropzone({
       />
       <div
         role="button"
-        tabIndex={0}
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
         aria-controls={id}
-        onClick={() => inputRef.current?.click()}
+        onClick={() => { if (!disabled) inputRef.current?.click() }}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
+          if (!disabled && (event.key === "Enter" || event.key === " ")) {
             event.preventDefault()
             inputRef.current?.click()
           }
         }}
         onDragOver={(event) => {
           event.preventDefault()
-          setIsDragging(true)
+          if (!disabled) setIsDragging(true)
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(event) => {
@@ -107,7 +114,7 @@ export function FileDropzone({
           addFiles(Array.from(event.dataTransfer.files))
         }}
         className={cn(
-          "flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-background/60 px-5 py-6 text-center transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+          "flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-background/60 px-5 py-6 text-center transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:cursor-default aria-disabled:opacity-50",
           isDragging && "border-primary bg-primary/5 ring-2 ring-primary/20"
         )}
       >
@@ -117,9 +124,9 @@ export function FileDropzone({
         <span className="text-sm font-medium text-foreground">Tarik dan lepaskan file di sini</span>
         <span className="text-xs text-muted-foreground/70">atau ketuk di sini untuk memilih dari perangkat</span>
       </div>
-      <FieldDescription>JPG, PNG, atau PDF · Maksimal {maxFiles} file tambahan · {maxSizeMb} MB per file</FieldDescription>
+      <FieldDescription>{description ?? <>JPG, PNG, atau PDF · Maksimal {maxFiles} file tambahan · {maxSizeMb} MB per file</>}</FieldDescription>
       {error ? <FieldError>{error}</FieldError> : null}
-      <FilePreviewList files={value} onRemove={(file) => onChange(value.filter((item) => item !== file))} />
+      <FilePreviewList files={value} onRemove={(file) => { if (!disabled) onChange(value.filter((item) => item !== file)) }} />
     </div>
   )
 }

@@ -1,20 +1,22 @@
 import "server-only"
 import { randomUUID } from "node:crypto"
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, notExists, notInArray, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { getDb } from "@/db"
+import { sequentialQueries } from "@/db/sequential"
+import { DrizzleInventoryRepository, type InventoryPhoto } from "./drizzle-inventory-repository"
 import { users, reports, reportLostFoundDetails, reportAttachments, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory, satpamLossReports, reportTicketCounters } from "@/db/schema"
 import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor, type ReportStatus } from "../../reports/domain/report"
 import { getIncidentDateTimeInWib } from "../../reports/domain/report-date"
 import { DrizzleReportRepository } from "../../reports/infrastructure/drizzle-report-repository"
 import { defaultReportFilters, reportDateBounds } from "../../reports/domain/report-list-filters"
 import { expectedStatus, type SatpamCommand } from "../domain/satpam"
-import { validateCreateInventory, validateHandoverInventory, type CreateInventoryInput, type HandoverInventoryInput, type InventoryFilter, type InventoryItem } from "../domain/inventory"
+import { type InventoryFilter } from "../domain/inventory"
 import { validateCreateLossReport, type CreateLossReportInput, type LossReport } from "../domain/loss-report"
 import { validateCreateFoundReport, type CreateFoundReportInput, type FoundReport } from "../domain/found-report"
 import type { SatpamRepository } from "../application/ports"
 
-import type { SatpamHandoverHistoryItem, SatpamHistoryFilter, SatpamListFilter, SatpamLostFoundReport, SatpamPage, SatpamPendingHandover, SatpamReportStatus } from "../types"
+import type { SatpamDashboardData, SatpamHandoverHistoryItem, SatpamHistoryFilter, SatpamListFilter, SatpamLostFoundReport, SatpamPage, SatpamPendingHandover, SatpamReportStatus } from "../types"
 
 
 type Database = ReturnType<typeof getDb>
@@ -43,10 +45,11 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const compare = filter.sort === "terlama" ? gt : lt
     const order = filter.sort === "terlama" ? asc : desc
     const criteria = and(scope,
+      filter.matching ? notExists(this.db.select({ id: satpamInventory.id }).from(satpamInventory).where(eq(satpamInventory.sourceFoundReportId, reports.id))) : undefined,
       exactTicket ? eq(reports.ticketNumber, exactTicket) : undefined,
       filter.kind !== "semua" ? eq(reportLostFoundDetails.kind, filter.kind) : undefined,
       filter.matching
-        ? inArray(reports.status, ["baru", "diverifikasi", "diproses"])
+        ? and(inArray(reports.status, ["baru", "diproses"]), filter.status !== "semua" && filter.status !== "aktif" ? eq(reports.status, filter.status) : undefined)
         : filter.status === "aktif"
           ? notInArray(reports.status, ["selesai", "ditolak"])
           : filter.status !== "semua"
@@ -57,8 +60,8 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       filter.query ? or(ilike(reports.title, escaped(filter.query)), ilike(reports.ticketNumber, escaped(filter.query)), ilike(reports.locationText, escaped(filter.query)), ilike(reports.description, escaped(filter.query)), ilike(reportLostFoundDetails.itemName, escaped(filter.query)), ilike(reportLostFoundDetails.itemDetails, escaped(filter.query))) : undefined,
     )!
     const [rows, totals] = await Promise.all([
-      this.db.select({ report: reports, kind: reportLostFoundDetails.kind, characteristics: reportLostFoundDetails.itemDetails, reporter: users.name }).from(reports)
-        .innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).innerJoin(users, eq(users.id, reports.reporterId))
+      this.db.select({ report: reports, kind: reportLostFoundDetails.kind, characteristics: reportLostFoundDetails.itemDetails, reporter: sql<string>`case when ${satpamLossReports.id} is not null then coalesce(${satpamLossReports.ownerName}, 'Pelapor langsung') else ${users.name} end`, reporterContact: satpamLossReports.ownerContact, recordedBy: users.name, inventoryId: satpamInventory.id }).from(reports)
+        .innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).innerJoin(users, eq(users.id, reports.reporterId)).leftJoin(satpamInventory, eq(satpamInventory.sourceFoundReportId, reports.id)).leftJoin(satpamLossReports, eq(satpamLossReports.id, reports.id))
         .where(and(criteria, after ? or(compare(reports.submittedAt, after.date), and(eq(reports.submittedAt, after.date), compare(reports.id, after.id))) : undefined))
         .orderBy(order(reports.submittedAt), order(reports.id)).limit(pageSize + 1),
       this.db.select({ count: sql<number>`count(*)::integer` }).from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).where(criteria),
@@ -66,9 +69,9 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const page = rows.slice(0, pageSize), ids = page.map((r) => r.report.id)
     // One batch for this page, not one attachment query per card.
     const files = ids.length ? await this.db.select({ id: reportAttachments.id, reportId: reportAttachments.reportId, mime: reportAttachments.mimeType }).from(reportAttachments).where(inArray(reportAttachments.reportId, ids)).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)) : []
-    const items = page.map(({ report: r, kind, characteristics, reporter }): SatpamLostFoundReport => {
+    const items = page.map(({ report: r, kind, characteristics, reporter, reporterContact, recordedBy, inventoryId }): SatpamLostFoundReport => {
       const attached = files.filter((file) => file.reportId === r.id), photo = attached.find((file) => file.mime.startsWith("image/"))
-      return { id: r.id, ticket: r.ticketNumber, kind: kind as "kehilangan" | "temuan", title: r.title, reporter, location: r.locationText,
+      return { id: r.id, inventoryId: inventoryId ?? undefined, reporterContact: reporterContact ?? undefined, recordedBy, ticket: r.ticketNumber, kind: kind as "kehilangan" | "temuan", title: r.title, reporter, location: r.locationText,
         eventDate: new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(`${r.incidentDate}T00:00:00+07:00`)),
         eventTime: r.incidentTime.slice(0, 5).replace(":", "."), submittedAt: dateLabel(r.submittedAt), updatedAt: dateLabel(r.updatedAt), status: statusLabels[r.status] as SatpamReportStatus,
         description: r.description, characteristics, attachments: attached.length, photoUrl: photo ? `/api/satpam/attachments/${photo.id}?preview=1` : undefined }
@@ -111,9 +114,25 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     ])
     return { officers: officers.filter((o) => o.isActive).map(({ id, name }) => ({ id, name })), historyOfficers: officers.map(({ id, name }) => ({ id, name })), pending, counts: { ...totals[0], readyForHandover: pending.total } }
   }
-  async dashboard() {
-    const [workspace, page] = await Promise.all([this.workspace(), this.list({ kind: "semua", status: "semua", matching: true, query: "", period: "semua", sort: "terbaru" })])
-    return { ...workspace.counts, queue: page.items.slice(0, 5), updatedAt: dateLabel(new Date()) }
+  async dashboard(): Promise<SatpamDashboardData> {
+    // Operational priority is FIFO across active reports, including handover.
+    // Bound and project in SQL; the dashboard needs no photos, officers or list totals.
+    return this.db.transaction(async (tx) => {
+      const [totals, handovers, queue, inventory] = await sequentialQueries([
+        tx.select({ lostReports: sql<number>`count(*) filter (where ${reportLostFoundDetails.kind} = 'kehilangan' and ${reports.status} not in ('selesai', 'ditolak'))::integer`, foundReports: sql<number>`count(*) filter (where ${reportLostFoundDetails.kind} = 'temuan' and ${reports.status} not in ('selesai', 'ditolak'))::integer`, newFindings: sql<number>`count(*) filter (where ${reportLostFoundDetails.kind} = 'temuan' and ${reports.status} = 'baru')::integer` })
+          .from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).where(scope),
+        tx.select({ count: sql<number>`count(*)::integer` }).from(lostFoundMatches)
+          .innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId))
+          .leftJoin(reportHandovers, eq(reportHandovers.matchId, lostFoundMatches.id))
+          .where(and(isNull(reportHandovers.id), isNull(lostFoundMatches.completedAt), eq(lost.category, "kehilangan-temuan"), eq(found.category, "kehilangan-temuan"), eq(lost.handlerRole, "satpam"), eq(found.handlerRole, "satpam"))),
+        tx.select({ id: reports.id, ticket: reports.ticketNumber, kind: reportLostFoundDetails.kind, title: reports.title, location: reports.locationText, status: reports.status, submittedAt: reports.submittedAt })
+          .from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id))
+          .where(and(scope, notInArray(reports.status, ["selesai", "ditolak"])))
+          .orderBy(asc(reports.submittedAt), asc(reports.id)).limit(5),
+        tx.select({ count: sql<number>`count(*)::integer` }).from(satpamInventory).where(eq(satpamInventory.status, "tersimpan")),
+      ])
+      return { ...totals[0], storedItems: inventory[0].count, readyForHandover: handovers[0].count, queue: queue.map((row) => ({ ...row, kind: row.kind as "kehilangan" | "temuan", status: statusLabels[row.status] as SatpamReportStatus, submittedAt: dateLabel(row.submittedAt) })), updatedAt: dateLabel(new Date()) }
+    }, { isolationLevel: "repeatable read", accessMode: "read only" })
   }
 
   async execute(actor: ReportActor, command: SatpamCommand) {
@@ -137,6 +156,8 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         const details = await tx.select().from(reportLostFoundDetails).where(inArray(reportLostFoundDetails.reportId, [loss.id, foundReport.id]))
         if (details.find((d) => d.reportId === loss.id)?.kind !== "kehilangan" || details.find((d) => d.reportId === foundReport.id)?.kind !== "temuan") throw new ReportError("Pasangan harus berupa laporan kehilangan dan temuan.")
         if (rows.some((r) => r.status !== "diproses")) throw new ReportError("Kedua laporan harus berstatus Diproses. Muat ulang data.", 409)
+        const [inInventory] = await tx.select({ id: satpamInventory.id }).from(satpamInventory).where(eq(satpamInventory.sourceFoundReportId, foundReport.id))
+        if (inInventory) throw new ReportError("Temuan sudah diterima di Inventaris. Lanjutkan penyerahan melalui barang tersebut.", 409)
         const occupied = await tx.select({ id: lostFoundMatches.id }).from(lostFoundMatches).where(or(inArray(lostFoundMatches.lossReportId, [loss.id, foundReport.id]), inArray(lostFoundMatches.foundReportId, [loss.id, foundReport.id]))).limit(1)
         if (occupied.length) throw new ReportError("Laporan sudah memiliki pasangan.", 409)
         await tx.insert(lostFoundMatches).values({ lossReportId: loss.id, foundReportId: foundReport.id, matchedBy: actor.id, matchedAt: now })
@@ -167,7 +188,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
           const [report] = await tx.select().from(reports).where(and(scope, eq(reports.ticketNumber, command.ticket))).for("update")
           if (!report) throw new ReportError("Laporan tidak ditemukan.", 404)
           if (report.status !== expectedStatus(command.status)) throw new ReportError("Status laporan sudah berubah. Muat ulang data.", 409)
-          await update([report], command.status, command.note || statusLabels[command.status])
+          await update([report], command.status, command.note || (command.status === "diproses" ? "Laporan diterima dan siap untuk pencocokan barang." : statusLabels[command.status]))
         }
       }
     })
@@ -181,21 +202,43 @@ export class DrizzleSatpamRepository implements SatpamRepository {
   async history(filter: SatpamHistoryFilter): Promise<SatpamPage<SatpamHandoverHistoryItem>> {
     const after = cursorValue(filter.cursor)
     const criteria = and(
+      or(sql`${reportHandovers.inventoryId} is not null`, and(eq(lost.category, "kehilangan-temuan"), eq(lost.handlerRole, "satpam"), eq(found.category, "kehilangan-temuan"), eq(found.handlerRole, "satpam"))),
       filter.officerId ? eq(reportHandovers.officerId, filter.officerId) : undefined,
       filter.from ? gte(reportHandovers.handedOverAt, new Date(`${filter.from}T00:00:00+07:00`)) : undefined,
       filter.to ? lt(reportHandovers.handedOverAt, new Date(Date.parse(`${filter.to}T00:00:00+07:00`) + 86400000)) : undefined,
-      filter.query ? or(ilike(lost.title, escaped(filter.query)), ilike(lost.ticketNumber, escaped(filter.query)), ilike(found.ticketNumber, escaped(filter.query)), ilike(reportHandovers.recipient, escaped(filter.query)), ilike(reportHandovers.officerName, escaped(filter.query))) : undefined,
+      filter.query ? or(ilike(lost.title, escaped(filter.query)), ilike(satpamInventory.itemName, escaped(filter.query)), ilike(reportHandovers.recipient, escaped(filter.query)), ilike(reportHandovers.officerName, escaped(filter.query))) : undefined,
     )
-    const base = () => this.db.select({ handover: reportHandovers, pair: lostFoundMatches, title: lost.title, lostTicket: lost.ticketNumber, foundTicket: found.ticketNumber, description: lost.description, characteristics: reportLostFoundDetails.itemDetails, itemName: reportLostFoundDetails.itemName, lostSubmittedAt: lost.submittedAt, foundSubmittedAt: found.submittedAt }).from(reportHandovers)
-      .innerJoin(lostFoundMatches, eq(lostFoundMatches.id, reportHandovers.matchId)).innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId)).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, lost.id))
-    const rows = await base().where(and(criteria, after ? or(lt(reportHandovers.handedOverAt, after.date), and(eq(reportHandovers.handedOverAt, after.date), lt(reportHandovers.id, after.id))) : undefined)).orderBy(desc(reportHandovers.handedOverAt), desc(reportHandovers.id)).limit(pageSize + 1)
-    const [total] = await this.db.select({ count: sql<number>`count(*)::integer` }).from(reportHandovers).innerJoin(lostFoundMatches, eq(lostFoundMatches.id, reportHandovers.matchId)).innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId)).where(criteria)
-    const page = rows.slice(0, pageSize), last = page.at(-1)
-    const reportIds = page.flatMap(({ pair }) => [pair.lossReportId, pair.foundReportId])
-    const photos = reportIds.length ? await this.db.select({ id: reportAttachments.id, reportId: reportAttachments.reportId }).from(reportAttachments)
-      .where(and(inArray(reportAttachments.reportId, reportIds), ilike(reportAttachments.mimeType, "image/%"))).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)) : []
-    const photoUrl = (reportId: string) => { const photo = photos.find((file) => file.reportId === reportId); return photo ? `/api/satpam/attachments/${photo.id}?preview=1` : undefined }
-    return { items: page.map(({ handover: h, pair, title, description, characteristics, itemName, lostTicket, foundTicket, lostSubmittedAt, foundSubmittedAt }) => ({ id: h.id, title, itemCategory: itemName, itemDescription: [description, characteristics].filter(Boolean).join("\n\n"), lostTicket, foundTicket, lostSubmittedAt: dateLabel(lostSubmittedAt), foundSubmittedAt: dateLabel(foundSubmittedAt), lostPhotoUrl: photoUrl(pair.lossReportId), foundPhotoUrl: photoUrl(pair.foundReportId), recipient: h.recipient, handler: h.officerName, actor: h.actorName, location: h.location, matchedAt: dateLabel(pair.matchedAt), handedOverAt: dateLabel(h.handedOverAt), handedOverAtIso: h.handedOverAt.toISOString(), completedAt: pair.completedAt ? dateLabel(pair.completedAt) : "Belum ditutup", handoverNote: h.note, status: pair.completedAt ? "Selesai" : "Diserahkan" })), total: total.count, nextCursor: rows.length > pageSize && last ? cursorFor(last.handover.handedOverAt, last.handover.id) : null }
+    return this.db.transaction(async tx => {
+      const base = () => tx.select({ handover: reportHandovers, pair: lostFoundMatches, title: lost.title, lostTicket: lost.ticketNumber, foundTicket: found.ticketNumber, description: lost.description, characteristics: reportLostFoundDetails.itemDetails, itemName: reportLostFoundDetails.itemName, lostId: lost.id, foundId: found.id, lostSubmittedAt: lost.submittedAt, foundSubmittedAt: found.submittedAt, inventory: satpamInventory }).from(reportHandovers)
+        .leftJoin(lostFoundMatches, eq(lostFoundMatches.id, reportHandovers.matchId))
+        .leftJoin(satpamInventory, eq(satpamInventory.id, reportHandovers.inventoryId))
+        .leftJoin(lost, eq(lost.id, sql`coalesce(${lostFoundMatches.lossReportId}, ${reportHandovers.lossReportId})`))
+        .leftJoin(found, eq(found.id, sql`coalesce(${lostFoundMatches.foundReportId}, ${satpamInventory.sourceFoundReportId})`))
+        .leftJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, lost.id))
+      const rows = await base().where(and(criteria, after ? or(lt(reportHandovers.handedOverAt, after.date), and(eq(reportHandovers.handedOverAt, after.date), lt(reportHandovers.id, after.id))) : undefined)).orderBy(desc(reportHandovers.handedOverAt), desc(reportHandovers.id)).limit(pageSize + 1)
+      const [total] = await tx.select({ count: sql<number>`count(*)::integer` }).from(reportHandovers)
+        .leftJoin(lostFoundMatches, eq(lostFoundMatches.id, reportHandovers.matchId))
+        .leftJoin(satpamInventory, eq(satpamInventory.id, reportHandovers.inventoryId))
+        .leftJoin(lost, eq(lost.id, sql`coalesce(${lostFoundMatches.lossReportId}, ${reportHandovers.lossReportId})`))
+        .leftJoin(found, eq(found.id, sql`coalesce(${lostFoundMatches.foundReportId}, ${satpamInventory.sourceFoundReportId})`)).where(criteria)
+      const page = rows.slice(0, pageSize), last = page.at(-1)
+      const reportIds = page.flatMap(r => [r.lostId, r.foundId]).filter((id): id is string => Boolean(id))
+      const photos = reportIds.length ? await tx.select({ id: reportAttachments.id, reportId: reportAttachments.reportId }).from(reportAttachments)
+        .where(and(inArray(reportAttachments.reportId, reportIds), ilike(reportAttachments.mimeType, "image/%"))).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)) : []
+      const photoUrl = (id: string | null) => { const photo = photos.find(file => file.reportId === id); return photo ? `/api/satpam/attachments/${photo.id}?preview=1` : undefined }
+      return { items: page.map(r => ({
+        id: r.handover.id, source: r.inventory ? "inventaris" as const : "laporan" as const, legacy: r.handover.legacy,
+        inventoryId: r.inventory?.id, title: r.inventory?.itemName ?? r.title ?? "Barang",
+        itemCategory: r.inventory?.itemName ?? r.itemName ?? "Barang", itemDescription: r.inventory?.description ?? [r.description, r.characteristics].filter(Boolean).join("\n\n"),
+        lostTicket: r.lostTicket ?? "", foundTicket: r.foundTicket ?? "", lostSubmittedAt: r.lostSubmittedAt ? dateLabel(r.lostSubmittedAt) : "", foundSubmittedAt: r.foundSubmittedAt ? dateLabel(r.foundSubmittedAt) : "",
+        lostPhotoUrl: photoUrl(r.lostId), foundPhotoUrl: r.inventory?.photoStorageKey ? `/api/satpam/inventory/${r.inventory.id}/photo?preview=1` : photoUrl(r.foundId),
+        recipient: r.handover.recipient, handler: r.handover.officerName, actor: r.handover.actorName, location: r.handover.location,
+        matchedAt: r.pair ? dateLabel(r.pair.matchedAt) : "", receivedAt: r.inventory ? dateLabel(r.inventory.createdAt) : undefined,
+        handedOverAt: dateLabel(r.handover.handedOverAt), handedOverAtIso: r.handover.handedOverAt.toISOString(),
+        completedAt: r.inventory ? dateLabel(r.handover.handedOverAt) : r.pair?.completedAt ? dateLabel(r.pair.completedAt) : "Belum ditutup",
+        handoverNote: r.handover.note, ownershipEvidence: r.handover.ownershipEvidence, status: r.inventory || r.pair?.completedAt ? "Selesai" as const : "Diserahkan" as const,
+      })), total: total.count, nextCursor: rows.length > pageSize && last ? cursorFor(last.handover.handedOverAt, last.handover.id) : null }
+    }, { isolationLevel: "repeatable read", accessMode: "read only" })
   }
   async attachment(id: string) {
     const [row] = await this.db.select({ file: reportAttachments }).from(reportAttachments).innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(and(scope, eq(reportAttachments.id, id))).limit(1)
@@ -204,168 +247,10 @@ export class DrizzleSatpamRepository implements SatpamRepository {
   notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor) }
   markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id) }
 
-  async listInventory(filter: InventoryFilter): Promise<{ items: InventoryItem[]; total: number }> {
-    const criteria = and(
-      filter.status && filter.status !== "semua" ? eq(satpamInventory.status, filter.status) : undefined,
-      filter.query
-        ? or(
-            ilike(satpamInventory.itemName, escaped(filter.query)),
-            ilike(satpamInventory.description, escaped(filter.query)),
-            ilike(satpamInventory.founderName, escaped(filter.query)),
-            ilike(satpamInventory.handoverRecipient, escaped(filter.query))
-          )
-        : undefined
-    )
-
-    const [rows, [totals]] = await Promise.all([
-      this.db
-        .select()
-        .from(satpamInventory)
-        .where(criteria)
-        .orderBy(desc(satpamInventory.createdAt), desc(satpamInventory.id)),
-      this.db
-        .select({ count: sql<number>`count(*)::integer` })
-        .from(satpamInventory)
-        .where(criteria),
-    ])
-
-    const items: InventoryItem[] = rows.map((r) => ({
-      id: r.id,
-      itemName: r.itemName,
-      description: r.description,
-      founderName: r.founderName ?? undefined,
-      status: r.status as "tersimpan" | "diserahkan",
-      storageLocation: r.storageLocation,
-      foundLocation: r.foundLocation ?? undefined,
-      photoUrl: r.photoStorageKey ? `/api/satpam/inventory/${r.id}/photo?preview=1` : r.photoUrl ?? undefined,
-      hasStoredPhoto: Boolean(r.photoStorageKey),
-      handoverRecipient: r.handoverRecipient ?? undefined,
-      handoverNote: r.handoverNote ?? undefined,
-      handedOverAt: r.handedOverAt ? dateLabel(r.handedOverAt) : undefined,
-      registeredByName: r.registeredByName,
-      createdAt: dateLabel(r.createdAt),
-      updatedAt: dateLabel(r.updatedAt),
-    }))
-
-    return { items, total: totals.count }
-  }
-
-  async getInventoryItem(id: string): Promise<InventoryItem | null> {
-    const [r] = await this.db.select().from(satpamInventory).where(eq(satpamInventory.id, id)).limit(1)
-    if (!r) return null
-    return {
-      id: r.id,
-      itemName: r.itemName,
-      description: r.description,
-      founderName: r.founderName ?? undefined,
-      status: r.status as "tersimpan" | "diserahkan",
-      storageLocation: r.storageLocation,
-      photoUrl: r.photoStorageKey ? `/api/satpam/inventory/${r.id}/photo?preview=1` : r.photoUrl ?? undefined,
-      hasStoredPhoto: Boolean(r.photoStorageKey),
-      handoverRecipient: r.handoverRecipient ?? undefined,
-      handoverNote: r.handoverNote ?? undefined,
-      handedOverAt: r.handedOverAt ? dateLabel(r.handedOverAt) : undefined,
-      registeredByName: r.registeredByName,
-      createdAt: dateLabel(r.createdAt),
-      updatedAt: dateLabel(r.updatedAt),
-    }
-  }
-
-  async createInventory(
-    actor: ReportActor,
-    raw: unknown,
-    storedPhoto?: { storageKey: string; mimeType: string; name: string }
-  ): Promise<InventoryItem> {
-    const input = validateCreateInventory(raw as CreateInventoryInput)
-    const [account] = await this.db
-      .select({ name: users.name })
-      .from(users)
-      .where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true)))
-      .limit(1)
-    if (!account) throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
-
-    const [inserted] = await this.db
-      .insert(satpamInventory)
-      .values({
-        itemName: input.itemName,
-        description: input.description,
-        founderName: input.founderName,
-        foundLocation: input.foundLocation,
-        photoUrl: input.photoUrl,
-        photoStorageKey: storedPhoto?.storageKey,
-        photoMimeType: storedPhoto?.mimeType,
-        photoName: storedPhoto?.name,
-        registeredBy: actor.id,
-        registeredByName: account.name,
-      })
-      .returning()
-
-    return {
-      id: inserted.id,
-      itemName: inserted.itemName,
-      description: inserted.description,
-      founderName: inserted.founderName ?? undefined,
-      status: inserted.status as "tersimpan" | "diserahkan",
-      storageLocation: inserted.storageLocation,
-      foundLocation: inserted.foundLocation ?? undefined,
-      photoUrl: inserted.photoStorageKey
-        ? `/api/satpam/inventory/${inserted.id}/photo?preview=1`
-        : inserted.photoUrl ?? undefined,
-      hasStoredPhoto: Boolean(inserted.photoStorageKey),
-      handoverRecipient: inserted.handoverRecipient ?? undefined,
-      handoverNote: inserted.handoverNote ?? undefined,
-      handedOverAt: inserted.handedOverAt ? dateLabel(inserted.handedOverAt) : undefined,
-      registeredByName: inserted.registeredByName,
-      createdAt: dateLabel(inserted.createdAt),
-      updatedAt: dateLabel(inserted.updatedAt),
-    }
-  }
-
-  async handoverInventory(actor: ReportActor, raw: unknown): Promise<InventoryItem> {
-    const input = validateHandoverInventory(raw as HandoverInventoryInput)
-    const now = new Date()
-    const [existing] = await this.db
-      .select()
-      .from(satpamInventory)
-      .where(eq(satpamInventory.id, input.id))
-      .limit(1)
-    if (!existing) throw new ReportError("Barang inventaris tidak ditemukan.", 404)
-    if (existing.status === "diserahkan") {
-      throw new ReportError("Barang ini sudah berstatus diserahkan.", 409)
-    }
-
-    const [updated] = await this.db
-      .update(satpamInventory)
-      .set({
-        status: "diserahkan",
-        handoverRecipient: input.recipient,
-        handoverNote: input.note,
-        handedOverAt: now,
-        updatedAt: now,
-      })
-      .where(eq(satpamInventory.id, input.id))
-      .returning()
-
-    return {
-      id: updated.id,
-      itemName: updated.itemName,
-      description: updated.description,
-      founderName: updated.founderName ?? undefined,
-      status: updated.status as "tersimpan" | "diserahkan",
-      storageLocation: updated.storageLocation,
-      foundLocation: updated.foundLocation ?? undefined,
-      photoUrl: updated.photoStorageKey
-        ? `/api/satpam/inventory/${updated.id}/photo?preview=1`
-        : updated.photoUrl ?? undefined,
-      hasStoredPhoto: Boolean(updated.photoStorageKey),
-      handoverRecipient: updated.handoverRecipient ?? undefined,
-      handoverNote: updated.handoverNote ?? undefined,
-      handedOverAt: updated.handedOverAt ? dateLabel(updated.handedOverAt) : undefined,
-      registeredByName: updated.registeredByName,
-      createdAt: dateLabel(updated.createdAt),
-      updatedAt: dateLabel(updated.updatedAt),
-    }
-  }
+  listInventory(filter: InventoryFilter) { return new DrizzleInventoryRepository(this.db).list(filter) }
+  getInventoryItem(id: string) { return new DrizzleInventoryRepository(this.db).detail(id) }
+  createInventory(actor: ReportActor, raw: unknown, photo?: InventoryPhoto) { return new DrizzleInventoryRepository(this.db).create(actor, raw, photo) }
+  handoverInventory(actor: ReportActor, raw: unknown) { return new DrizzleInventoryRepository(this.db).handover(actor, raw) }
 
   async getInventoryPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null> {
     const [row] = await this.db
@@ -373,11 +258,19 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         photoStorageKey: satpamInventory.photoStorageKey,
         photoMimeType: satpamInventory.photoMimeType,
         photoName: satpamInventory.photoName,
+        sourceFoundReportId: satpamInventory.sourceFoundReportId,
       })
       .from(satpamInventory)
       .where(eq(satpamInventory.id, id))
       .limit(1)
-    if (!row || !row.photoStorageKey || !row.photoMimeType) return null
+    if (!row) return null
+    if (!row.photoStorageKey || !row.photoMimeType) {
+      if (!row.sourceFoundReportId) return null
+      const [photo] = await this.db.select({ storageKey: reportAttachments.storageKey, mimeType: reportAttachments.mimeType, name: reportAttachments.name }).from(reportAttachments)
+        .innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(and(eq(reports.id, row.sourceFoundReportId), scope, ilike(reportAttachments.mimeType, "image/%")))
+        .orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)).limit(1)
+      return photo ?? null
+    }
     return {
       storageKey: row.photoStorageKey,
       mimeType: row.photoMimeType,
@@ -395,7 +288,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       incidentTime: r.incidentTime ?? undefined,
       characteristics: r.characteristics,
       description: r.description,
-      photoUrl: r.photoStorageKey ? `/api/satpam/loss-reports/${r.id}/photo?preview=1` : r.photoUrl ?? undefined,
+      photoUrl: r.photoStorageKey ? `/api/satpam/loss-reports/${r.id}/photo?preview=1` : undefined,
       registeredByName: r.registeredByName,
       createdAt: dateLabel(r.createdAt),
     }
@@ -464,10 +357,11 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         itemDetails: input.characteristics || input.description,
       })
 
+      const photoId = storedPhoto ? randomUUID() : undefined
       // 4. Attach photo if available
       if (storedPhoto) {
         await tx.insert(reportAttachments).values({
-          id: randomUUID(),
+          id: photoId!,
           ownerId: actor.id,
           reportId: reportRow.id,
           name: storedPhoto.name,
@@ -494,6 +388,8 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         .insert(satpamLossReports)
         .values({
           id: reportRow.id,
+          ownerName: input.ownerName,
+          ownerContact: input.ownerContact,
           title: input.title,
           itemName: input.itemName,
           location: input.location,
@@ -594,10 +490,11 @@ export class DrizzleSatpamRepository implements SatpamRepository {
           .join("\n\n"),
       })
 
+      const photoId = storedPhoto ? randomUUID() : undefined
       // 4. Attach photo if available
       if (storedPhoto) {
         await tx.insert(reportAttachments).values({
-          id: randomUUID(),
+          id: photoId!,
           ownerId: actor.id,
           reportId: reportRow.id,
           name: storedPhoto.name,
@@ -635,7 +532,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         characteristics: input.characteristics || input.description,
         description: input.description,
         status: targetStatus,
-        photoUrl: storedPhoto ? `/api/satpam/attachments/${reportRow.id}?preview=1` : input.photoUrl,
+        photoUrl: storedPhoto ? `/api/satpam/attachments/${photoId}?preview=1` : undefined,
         registeredByName: account.name,
         createdAt: dateLabel(now),
       }
