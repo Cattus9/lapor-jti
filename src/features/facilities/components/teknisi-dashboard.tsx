@@ -6,6 +6,7 @@ import { KpiCard } from "@/components/dashboard/kpi-card"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
+import { UnopenedReportBadge } from "@/components/reports/report-opening"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,20 +33,20 @@ export function TeknisiDashboard({ user, data: technicianOverview }: { user: Cur
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            label="Laporan baru"
-            value={technicianOverview.newReports}
+            label="Laporan aktif"
+            value={technicianOverview.newReports + technicianOverview.inProgress}
             icon={ScanSearch}
-            detail="Perlu diverifikasi"
-            detailValue={`${technicianOverview.newReports} laporan`}
+            detail="Belum selesai"
+            detailValue={`${technicianOverview.newReports + technicianOverview.inProgress} laporan`}
             href="/teknisi/laporan-fasilitas"
           />
           <KpiCard
-            label="Dalam penanganan"
-            value={technicianOverview.inProgress}
+            label="Perlu pemetaan"
+            value={technicianOverview.unclassifiedReports}
             icon={Wrench}
             iconTone="amber"
-            detail="Perbaikan aktif"
-            detailValue={`${technicianOverview.inProgress} pekerjaan`}
+            detail="Lokasi atau objek lainnya"
+            detailValue={`${technicianOverview.unclassifiedReports} laporan`}
             href="/teknisi/laporan-fasilitas"
           />
           <KpiCard
@@ -106,7 +107,7 @@ export function TeknisiDashboard({ user, data: technicianOverview }: { user: Cur
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                     <span className="text-xs text-muted-foreground">Dikirim {item.submittedAt} WIB</span>
-                    <StatusBadge status={item.status} />
+                    <UnopenedReportBadge unseen={item.unopened} /><StatusBadge status={item.status} />
                     <Button nativeButton={false} render={<Link href={`/teknisi/laporan-fasilitas?ticket=${encodeURIComponent(item.ticket)}`} />} variant="outline" size="xs" className="bg-primary/5 text-primary-action-hover hover:bg-primary/10 dark:text-primary">Detail<ArrowRight className="size-3.5" /></Button>
                   </div>
                 </article>

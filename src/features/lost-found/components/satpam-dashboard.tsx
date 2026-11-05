@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { SectionCard } from "@/components/ui/section-card"
 import { CollectionEmptyState } from "@/components/reports/collection-empty-state"
+import { UnopenedReportBadge } from "@/components/reports/report-opening"
 import type { SatpamDashboardData, SatpamQueueReport } from "../types"
 import type { CurrentUser } from "@/lib/auth/current-user"
 
@@ -22,7 +23,7 @@ function QueueReport({ report }: { report: SatpamQueueReport }) {
       <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{report.title}</p><p className="mt-1 truncate text-xs text-muted-foreground">{type} · {report.location}</p></div>
     </div>
     <div className="flex flex-wrap items-center justify-between gap-3 sm:shrink-0 sm:justify-end">
-      <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end"><span className="text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</span><StatusBadge status={report.status} /></div>
+      <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end"><span className="text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</span><UnopenedReportBadge unseen={report.unopened} /><StatusBadge status={report.status} /></div>
       <Button nativeButton={false} variant="outline" size="xs" className="rounded-lg border-primary/20 bg-primary/5 text-primary-action-hover hover:bg-primary/10 hover:text-primary-action-hover dark:bg-primary/10 dark:text-primary dark:hover:bg-primary/15 dark:hover:text-primary" aria-label={`Lihat detail laporan ${report.title}, dikirim ${report.submittedAt}`} render={<Link href={`/satpam/kehilangan-temuan?ticket=${encodeURIComponent(report.ticket)}&detail=1`} />}>Detail<ArrowRight aria-hidden="true" /></Button>
     </div>
   </Card>

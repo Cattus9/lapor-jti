@@ -1,503 +1,265 @@
 "use client"
 
-import { useRef, useState } from "react"
-import Link from "next/link"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import Image from "next/image"
-import {
-  ArrowLeft,
-  ArrowRight,
-  CalendarDays,
-  Check,
-  CheckCircle2,
-  FileText,
-  Inbox,
-  Loader2,
-  ListChecks,
-  MapPin,
-  MapPinned,
-  Package,
-  PackageCheck,
-  PackagePlus,
-  PackageSearch,
-  PlusCircle,
-  RotateCcw,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, FileText, ImagePlus, Inbox, ListChecks, MapPin, PackageCheck, PackagePlus, PackageSearch, ShieldCheck, UserRound } from "lucide-react"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { FieldDescription, FieldError } from "@/components/ui/field"
 import { SectionCard } from "@/components/ui/section-card"
-import { Card } from "@/components/ui/card"
-import { FieldError } from "@/components/ui/field"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { CurrentUser } from "@/lib/auth/current-user"
-import { SatpamPelaporanStepper, type PelaporanStepId } from "./satpam-pelaporan-stepper"
-import { FoundItemForm, type FoundFormData } from "./found-item-form"
-import { LossItemForm, type LossFormData } from "./loss-item-form"
+import { registerBeforeSignOut } from "@/lib/pending-work"
 import { cn } from "cn"
+import { emptySatpamDraft, hasSatpamDraftContent, parseSatpamDraft, type SatpamDraftFields, type SatpamDraftKind, type SatpamDraftView } from "../domain/satpam-draft"
+import { FoundItemForm, type FoundFormData } from "./found-item-form"
+import { useItemPhoto } from "./item-photo-field"
+import { LossItemForm, type LossFormData } from "./loss-item-form"
+import { SatpamReportDrafts, writeSatpamDraft } from "./satpam-report-drafts"
+import { pelaporanSteps, SatpamPelaporanStepper, type PelaporanStepId } from "./satpam-pelaporan-stepper"
 
-type ReportType = "kehilangan" | "temuan"
+const choices = [
+  { kind: "kehilangan", title: "Catat kehilangan", description: "Pemilik melaporkan barang yang hilang di pos Satpam.", icon: PackageSearch },
+  { kind: "temuan", title: "Terima barang di pos", description: "Barang temuan sudah diserahkan dan akan dicatat di Inventaris.", icon: PackagePlus },
+] as const
+type Preview = { kind: "kehilangan"; data: LossFormData } | { kind: "temuan"; data: FoundFormData }
+type Success = { kind: SatpamDraftKind; title: string; cleanupError?: string }
+
+function lossFields(data: LossFormData): SatpamDraftFields {
+  return { ...emptySatpamDraft("kehilangan"), ownerName: data.ownerName ?? "", ownerContact: data.ownerContact ?? "", title: data.title, itemName: data.itemName, location: data.location, useCustomTime: data.useCustomTime, incidentDate: data.incidentDate, incidentTime: data.incidentTime, description: data.description }
+}
+function foundFields(data: FoundFormData): SatpamDraftFields {
+  return { ...emptySatpamDraft("temuan"), itemName: data.itemName, description: data.description, foundLocation: data.foundLocation, founderName: data.founderName, sourceFoundTicket: data.sourceFoundTicket ?? "" }
+}
+
+async function loadDrafts(signal: AbortSignal) {
+  const response = await fetch("/api/satpam/drafts", { cache: "no-store", signal })
+  const body = await response.json().catch(() => null)
+  if (!response.ok || !Array.isArray(body?.drafts)) throw new Error(body?.error || "Draft belum berhasil dimuat.")
+  const restored = await Promise.all((body.drafts as SatpamDraftView[]).map(async (draft) => {
+    const fields = parseSatpamDraft(draft.fields)
+    if (typeof draft.id !== "string" || !Number.isSafeInteger(draft.revision) || draft.revision < 1) throw new Error("Data draft tidak valid.")
+    if (!draft.photo) return { draft: { ...draft, fields }, file: null }
+    const photo = await fetch(`/api/satpam/drafts/${encodeURIComponent(draft.id)}/photo/${encodeURIComponent(draft.photo.id)}`, { cache: "no-store", signal })
+    if (!photo.ok) throw new Error("Foto draft belum berhasil dimuat. Coba lagi agar isian tetap utuh.")
+    const blob = await photo.blob()
+    if (blob.size !== draft.photo.size || blob.type !== draft.photo.mimeType) throw new Error("Foto draft belum berhasil dimuat dengan utuh. Coba lagi.")
+    return { draft: { ...draft, fields }, file: new File([blob], draft.photo.name, { type: draft.photo.mimeType }) }
+  }))
+  return new SatpamReportDrafts(restored)
+}
 
 export function SatpamPelaporanWorkspace({ user }: { user: CurrentUser }) {
-  // Default is "kehilangan" as per requirement
-  const [selectedType, setSelectedType] = useState<ReportType>("kehilangan")
-  const [currentStep, setCurrentStep] = useState<PelaporanStepId>("type")
+  const [store, setStore] = useState<SatpamReportDrafts | null>(null)
+  const [loadError, setLoadError] = useState("")
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    const controller = new AbortController()
+    loadDrafts(controller.signal).then((drafts) => { if (!controller.signal.aborted) { setStore(drafts); setLoadError("") } }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setLoadError(error instanceof Error ? error.message : "Draft belum berhasil dimuat.")
+    })
+    return () => controller.abort()
+  }, [attempt])
+  return <DashboardLayout role="satpam"><ContentShell>
+    <PageHeader title="Pelaporan Pos Satpam" description={`Catat kehilangan atau barang yang diterima di pos, ${user.name}.`} />
+    {store ? <SatpamReportingForm store={store} /> : loadError ? <SectionCard title="Formulir pencatatan" icon={FileText}><div className="space-y-3"><FieldError>{loadError}</FieldError><Button variant="outline" onClick={() => { setLoadError(""); setAttempt((value) => value + 1) }}>Coba lagi</Button></div></SectionCard> : <SectionCard title="Formulir pencatatan" icon={FileText}><div aria-label="Memuat draft" role="status" className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-32 w-full" /></div></SectionCard>}
+  </ContentShell></DashboardLayout>
+}
 
-  const [lossData, setLossData] = useState<LossFormData | null>(null)
-  const [foundData, setFoundData] = useState<FoundFormData | null>(null)
-
-  const inventoryCommand = useRef<{ signature: string; key: string } | null>(null)
+function SatpamReportingForm({ store }: { store: SatpamReportDrafts }) {
+  const version = useSyncExternalStore(store.subscribe, store.getVersion, store.getVersion)
+  const router = useRouter()
+  const [kind, setKind] = useState<SatpamDraftKind>("kehilangan")
+  const [step, setStep] = useState<PelaporanStepId>("type")
+  const [preview, setPreview] = useState<Preview | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState("")
-  const [submittedSuccess, setSubmittedSuccess] = useState<{
-    type: ReportType
-    title: string
-    detail: string
-  } | null>(null)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState<Success | null>(null)
+  const [navigationError, setNavigationError] = useState("")
+  const [navigationPending, setNavigationPending] = useState(false)
+  const navigating = useRef(false)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const previousStep = useRef<PelaporanStepId>("type")
+  const captureLoss = useCallback((data: LossFormData) => store.capture("kehilangan", lossFields(data), data.photoFile), [store])
+  const captureFound = useCallback((data: FoundFormData) => store.capture("temuan", foundFields(data), data.photoFile), [store])
 
-  const stepOrder: PelaporanStepId[] = ["type", "details", "review"]
-  const currentStepIndex = stepOrder.indexOf(currentStep)
+  useEffect(() => {
+    if (previousStep.current !== step) headingRef.current?.focus()
+    previousStep.current = step
+  }, [step])
 
-  function handleReset() {
-    inventoryCommand.current = null
-    setSubmittedSuccess(null)
-    setLossData(null)
-    setFoundData(null)
-    setSelectedType("kehilangan")
-    setCurrentStep("type")
-    setSubmitError("")
-  }
+  useEffect(() => {
+    if (preview || submitting || success) return
+    const entry = store.get(kind)
+    if (!store.isDirty(kind) || entry.status === "error") return
+    const timer = setTimeout(() => { void store.save(kind, writeSatpamDraft).catch(() => {}) }, 900)
+    return () => clearTimeout(timer)
+  }, [store, kind, preview, submitting, success, version])
 
-  function handleStepClick(index: number) {
-    if (index === 0) setCurrentStep("type")
-    if (index === 1) setCurrentStep("details")
-  }
-
-  async function handleFinalSubmit() {
-    setSubmitting(true)
-    setSubmitError("")
-
-    try {
-      if (selectedType === "kehilangan" && lossData) {
-        const formData = new FormData()
-        formData.set("ownerName", lossData.ownerName ?? "")
-        formData.set("ownerContact", lossData.ownerContact ?? "")
-        formData.set("title", lossData.title)
-        formData.set("itemName", lossData.itemName)
-        formData.set("location", lossData.location)
-        formData.set("incidentDate", lossData.incidentDate)
-        formData.set("incidentTime", lossData.incidentTime)
-        formData.set("characteristics", (lossData.characteristics || lossData.description).slice(0, 2000))
-        formData.set("description", lossData.description)
-        if (lossData.photoFile) formData.set("photo", lossData.photoFile)
-
-        const response = await fetch("/api/satpam/loss-reports", {
-          method: "POST",
-          body: formData,
-        })
-        const data = await response.json().catch(() => null)
-        if (!response.ok) throw new Error(data?.error || "Gagal mencatat laporan kehilangan.")
-
-        setSubmittedSuccess({
-          type: "kehilangan",
-          title: data.title || data.itemName,
-          detail: "Laporan kehilangan berhasil dicatat dan diteruskan ke menu Kehilangan & Temuan.",
-        })
-      } else if (selectedType === "temuan" && foundData) {
-        const signature = JSON.stringify([foundData.itemName, foundData.description, foundData.foundLocation, foundData.founderName, foundData.photoFile?.name, foundData.photoFile?.size, foundData.photoFile?.lastModified])
-        if (!inventoryCommand.current || inventoryCommand.current.signature !== signature) inventoryCommand.current = { signature, key: crypto.randomUUID() }
-        const formData = new FormData()
-        formData.set("submissionKey", inventoryCommand.current.key)
-        formData.set("itemName", foundData.itemName)
-        if (foundData.description) formData.set("description", foundData.description)
-        if (foundData.foundLocation) formData.set("foundLocation", foundData.foundLocation)
-        if (foundData.founderName) formData.set("founderName", foundData.founderName)
-        if (foundData.photoFile) formData.set("photo", foundData.photoFile)
-
-        const response = await fetch("/api/satpam/inventory", {
-          method: "POST",
-          body: formData,
-        })
-        const data = await response.json().catch(() => null)
-        if (!response.ok) throw new Error(data?.error || "Gagal menyimpan barang inventaris.")
-
-        setSubmittedSuccess({
-          type: "temuan",
-          title: data.itemName,
-          detail: `Barang temuan telah berhasil didaftarkan dan tersimpan di Inventaris Pos Satpam.`,
-        })
-      }
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Terjadi kesalahan saat memproses laporan.")
-    } finally {
-      setSubmitting(false)
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (choices.some(({ kind: value }) => store.isDirty(value) || store.get(value).status === "saving")) { event.preventDefault(); event.returnValue = "" }
     }
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [store])
+
+  useEffect(() => registerBeforeSignOut(async () => {
+    if (submitting) throw new Error("Pencatatan masih diproses.")
+    if (!choices.some(({ kind: value }) => store.isDirty(value) || store.get(value).status === "saving")) return
+    setNavigationPending(true); setNavigationError("")
+    try { await Promise.all(choices.map(({ kind: value }) => store.save(value, writeSatpamDraft))) }
+    catch (cause) { setNavigationError("Draft belum tersimpan. Periksa koneksi sebelum keluar."); throw cause }
+    finally { setNavigationPending(false) }
+  }), [store, submitting])
+
+  useEffect(() => {
+    const beforeNavigation = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return
+      const link = event.target.closest("a[href]") as HTMLAnchorElement | null
+      if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return
+      const destination = new URL(link.href, window.location.href)
+      if (destination.origin !== window.location.origin || `${destination.pathname}${destination.search}` === `${window.location.pathname}${window.location.search}`) return
+      if (!choices.some(({ kind: value }) => store.isDirty(value) || store.get(value).status === "saving")) return
+      event.preventDefault(); event.stopPropagation()
+      if (navigating.current) return
+      navigating.current = true; setNavigationPending(true); setNavigationError("")
+      void Promise.all(choices.map(({ kind: value }) => store.save(value, writeSatpamDraft))).then(() => {
+        router.push(`${destination.pathname}${destination.search}${destination.hash}`)
+      }).catch(() => { setNavigationError("Draft belum tersimpan. Periksa koneksi, lalu coba lagi sebelum meninggalkan halaman."); setNavigationPending(false) }).finally(() => { navigating.current = false })
+    }
+    document.addEventListener("click", beforeNavigation, true)
+    return () => {
+      document.removeEventListener("click", beforeNavigation, true)
+      for (const { kind: value } of choices) if (store.isDirty(value) || store.get(value).status === "saving") void store.save(value, writeSatpamDraft).catch(() => {})
+    }
+  }, [router, store])
+
+  function choose(next: SatpamDraftKind) {
+    if (kind === next || submitting || navigationPending) return
+    void store.save(kind, writeSatpamDraft).catch(() => {})
+    setKind(next); setError("")
   }
+  function goBack(next: "type" | "details") {
+    if (submitting || navigationPending) return
+    void store.save(kind, writeSatpamDraft).catch(() => {})
+    setPreview(null); setError(""); setStep(next)
+  }
+  function beginPreview(value: Preview) {
+    if (value.kind === "kehilangan") captureLoss(value.data); else captureFound(value.data)
+    void store.save(value.kind, writeSatpamDraft).catch(() => {})
+    setError(""); setPreview(value); setStep("review")
+  }
+  async function confirm() {
+    if (!preview || submitting) return
+    setSubmitting(true); setError("")
+    try {
+      await store.save(preview.kind, writeSatpamDraft)
+      const draft = store.get(preview.kind)
+      const form = new FormData()
+      form.set("submissionKey", draft.id)
+      let endpoint: string
+      if (preview.kind === "kehilangan") {
+        const data = preview.data
+        endpoint = "/api/satpam/loss-reports"
+        form.set("draftRevision", String(draft.revision))
+        form.set("ownerName", data.ownerName ?? ""); form.set("ownerContact", data.ownerContact ?? "")
+        form.set("title", data.title); form.set("itemName", data.itemName); form.set("location", data.location)
+        form.set("incidentDate", data.incidentDate); form.set("incidentTime", data.incidentTime)
+        form.set("characteristics", data.description.slice(0, 2000)); form.set("description", data.description)
+      } else {
+        const data = preview.data
+        endpoint = "/api/satpam/inventory"
+        form.set("itemName", data.itemName); form.set("description", data.description)
+        if (data.sourceFoundTicket) form.set("sourceFoundTicket", data.sourceFoundTicket)
+        form.set("foundLocation", data.foundLocation); form.set("founderName", data.founderName)
+        if (data.photoFile) form.set("photo", data.photoFile)
+      }
+      const response = await fetch(endpoint, { method: "POST", body: form })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || typeof result?.id !== "string") throw new Error(result?.error || "Hasil penyimpanan belum terkonfirmasi. Coba lagi dengan data yang sama.")
+      let cleanupError = ""
+      if (preview.kind === "temuan") {
+        store.capture("temuan", emptySatpamDraft("temuan"), null)
+        try { await store.save("temuan", writeSatpamDraft) } catch { cleanupError = "Barang sudah tersimpan, tetapi draft belum berhasil dibersihkan. Coba bersihkan kembali sebelum membuat pencatatan baru." }
+      } else store.reset("kehilangan")
+      setPreview(null); setSuccess({ kind: preview.kind, title: preview.kind === "kehilangan" ? preview.data.title : preview.data.itemName, cleanupError })
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Penyimpanan belum terkonfirmasi. Coba lagi dengan data yang sama.") }
+    finally { setSubmitting(false) }
+  }
+  async function retryCleanup() {
+    setSubmitting(true)
+    try { await store.save("temuan", writeSatpamDraft); setSuccess((value) => value ? { ...value, cleanupError: "" } : null) }
+    catch { /* Keep the confirmed success and offer another attempt. */ }
+    finally { setSubmitting(false) }
+  }
+  if (success) return <SectionCard title="Pencatatan berhasil" icon={CheckCircle2}><div className="flex flex-col items-center gap-4 py-8 text-center"><span className="flex size-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary"><CheckCircle2 className="size-6" aria-hidden="true" /></span><div><h2 className="text-base font-semibold">{success.title}</h2><p className="mt-1 text-sm text-muted-foreground">{success.kind === "kehilangan" ? "Laporan tersimpan di Kehilangan & Temuan." : "Barang tersimpan di Inventaris Pos Satpam."}</p></div>{navigationPending ? <p role="status" className="text-sm text-muted-foreground">Menyimpan draft sebelum berpindah halaman…</p> : null}{navigationError ? <FieldError>{navigationError}</FieldError> : null}{success.cleanupError ? <div className="space-y-2"><FieldError>{success.cleanupError}</FieldError><Button variant="outline" size="sm" disabled={submitting} onClick={() => void retryCleanup()}>Coba bersihkan draft</Button></div> : null}<div className="flex flex-wrap justify-center gap-2"><Button variant="outline" disabled={Boolean(success.cleanupError)} onClick={() => { setSuccess(null); setKind("kehilangan"); setStep("type") }}>Buat pencatatan baru</Button><Button nativeButton={false} render={<Link href={success.kind === "kehilangan" ? "/satpam/kehilangan-temuan" : "/satpam/inventaris"} />}>{success.kind === "kehilangan" ? <Inbox /> : <PackageCheck />}{success.kind === "kehilangan" ? "Buka laporan" : "Buka Inventaris"}<ArrowRight /></Button></div></div></SectionCard>
 
-  return (
-    <DashboardLayout role="satpam">
-      <ContentShell>
-        <PageHeader
-          title="Pelaporan Pos Satpam"
-          description={`Selamat datang, ${user.name}. Catat laporan kehilangan maupun temuan barang dengan alur langkah terpadu.`}
-        />
+  const active = store.get(kind)
+  const stepIndex = pelaporanSteps.findIndex((item) => item.id === step)
+  const draftStatus = active.status === "saving" ? "Menyimpan draft…" : active.status === "error" ? "Draft belum tersimpan" : store.isDirty(kind) ? "Perubahan belum tersimpan" : active.revision > 0 ? "Draft tersimpan" : ""
 
-        {submittedSuccess ? (
-          <Card className="rounded-2xl border-border bg-sidebar p-1.5 shadow-xs">
-            <div className="flex flex-col items-center justify-center space-y-4 rounded-xl border border-border/60 bg-card p-8 text-center sm:p-12">
-              <div className="flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-                <CheckCircle2 className="size-7" aria-hidden="true" />
-              </div>
-              <div className="max-w-md space-y-2">
-                <Badge variant="outline" tone="success">
-                  {submittedSuccess.type === "temuan"
-                    ? "Temuan Masuk Inventaris"
-                    : "Laporan Kehilangan Tersimpan"}
-                </Badge>
-                <h3 className="text-lg font-bold text-foreground">
-                  {submittedSuccess.title}
-                </h3>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {submittedSuccess.detail}
-                </p>
-              </div>
+  return <div className="space-y-6">
+    <SatpamPelaporanStepper current={stepIndex} onStepClick={submitting || navigationPending ? undefined : (index) => goBack(index === 0 ? "type" : "details")} />
+    {navigationPending ? <p role="status" className="text-sm text-muted-foreground">Menyimpan draft sebelum berpindah halaman…</p> : null}
+    {navigationError ? <FieldError>{navigationError}</FieldError> : null}
 
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                <Button
-                  onClick={handleReset}
-                  variant="outline"
-                  className="gap-2 text-xs"
-                >
-                  <PlusCircle className="size-3.5" aria-hidden="true" />
-                  Buat Laporan Baru
-                </Button>
-                {submittedSuccess.type === "temuan" ? (
-                  <Button
-                    nativeButton={false}
-                    className="gap-2 text-xs"
-                    render={<Link href="/satpam/inventaris" />}
-                  >
-                    <PackageCheck className="size-3.5" aria-hidden="true" />
-                    Buka Inventaris
-                    <ArrowRight className="size-3.5" aria-hidden="true" />
-                  </Button>
-                ) : (
-                  <Button
-                    nativeButton={false}
-                    className="gap-2 text-xs"
-                    render={<Link href="/satpam/kehilangan-temuan" />}
-                  >
-                    <Inbox className="size-3.5" aria-hidden="true" />
-                    Buka Kehilangan &amp; Temuan
-                    <ArrowRight className="size-3.5" aria-hidden="true" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {/* Stepper Header */}
-            <SatpamPelaporanStepper
-              current={currentStepIndex}
-              onStepClick={handleStepClick}
-            />
+    {step === "type" ? <SectionCard title="Jenis pelaporan" icon={ListChecks} contentClassName="space-y-5">
+      <div className="space-y-2">
+        <h3 ref={headingRef} tabIndex={-1} id="satpam-type-title" className="text-sm font-medium outline-none">Pilih pencatatan</h3>
+        <FieldDescription id="satpam-draft-guide">Isian tiap pilihan disimpan sebagai draft dan dapat dilanjutkan kembali.</FieldDescription>
+      </div>
+      <fieldset aria-labelledby="satpam-type-title" aria-describedby="satpam-draft-guide" className="grid gap-3 sm:grid-cols-2">
+        {choices.map(({ kind: value, title, description, icon: Icon }) => {
+          const draft = store.get(value), hasContent = hasSatpamDraftContent(draft.fields, Boolean(draft.file)), dirty = store.isDirty(value)
+          return <Button key={value} type="button" variant="outline" disabled={navigationPending} aria-pressed={kind === value} onClick={() => choose(value)} className={cn("h-auto min-w-0 w-full flex-col items-stretch gap-3 rounded-xl p-4 text-left whitespace-normal shadow-none transition-colors motion-reduce:transition-none", kind === value ? "border-primary bg-primary/5 hover:bg-primary/5" : "border-border bg-background/60 hover:border-primary/50 hover:bg-muted/40")}><span className="flex items-center justify-between gap-2"><Badge variant="outline" tone={value === "kehilangan" ? "warning" : "info"} className="size-9 rounded-lg p-0"><span><Icon className="size-4" aria-hidden="true" /></span></Badge><span className="flex items-center gap-2">{hasContent ? <Badge variant="outline" tone={draft.status === "error" ? "destructive" : "primary"}>{draft.status === "saving" ? "Menyimpan…" : draft.status === "error" || dirty ? "Belum tersimpan" : "Draft"}</Badge> : null}{kind === value ? <Check className="size-4 text-primary" aria-hidden="true" /> : null}</span></span><span><span className="block text-sm font-semibold text-foreground">{title}</span><span className="mt-1 block text-xs font-normal leading-relaxed text-muted-foreground">{description}</span></span></Button>
+        })}
+      </fieldset>
+      <div className="flex justify-end border-t border-border/60 pt-4"><Button type="button" disabled={navigationPending} onClick={() => setStep("details")}>Lanjut isi informasi <ArrowRight aria-hidden="true" /></Button></div>
+    </SectionCard> : null}
 
-            {/* STEP 1: Pilih Jenis Pelaporan */}
-            {currentStep === "type" ? (
-              <SectionCard title="Jenis pelaporan" icon={ListChecks} contentClassName="space-y-5">
-                  <p className="text-sm text-muted-foreground">Pilih jenis pencatatan sesuai kondisi di pos Satpam.</p>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {([
-                      { value: "kehilangan", title: "Laporan Kehilangan", icon: PackageSearch, description: "Catat kehilangan yang dilaporkan langsung oleh pemilik ke pos Satpam." },
-                      { value: "temuan", title: "Laporan Temuan (Inventaris Pos)", icon: PackagePlus, description: "Catat barang yang sudah diterima secara fisik di pos Satpam ke Inventaris." },
-                    ] as const).map(({ value, title, icon: Icon, description }) => (
-                      <Button key={value} type="button" variant="outline" aria-pressed={selectedType === value} onClick={() => setSelectedType(value)}
-                        className={cn("group h-auto w-full flex-col items-stretch gap-3 rounded-xl border p-4 text-left whitespace-normal shadow-none transition-colors motion-reduce:transition-none sm:p-5", selectedType === value ? "border-primary bg-primary/5 hover:bg-primary/5 dark:bg-primary/10 dark:hover:bg-primary/10" : "border-border bg-background hover:border-primary/40 hover:bg-muted/40 dark:bg-background dark:hover:bg-muted/40")}>
-                        <span className="flex w-full items-center justify-between gap-3">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary"><Icon className="size-5" aria-hidden="true" /></span>
-                          <Badge variant="outline" tone={selectedType === value ? "primary" : "neutral"}>{selectedType === value ? "Terpilih" : "Pilih"}</Badge>
-                        </span>
-                        <span className="space-y-1"><span className="block text-base font-semibold text-foreground">{title}</span><span className="block text-xs leading-relaxed font-normal text-muted-foreground">{description}</span></span>
-                      </Button>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-end border-t border-border/60 pt-4">
-                    <Button
-                      onClick={() => {
-                        setCurrentStep("details")
-                        window.scrollTo({ top: 0, behavior: "smooth" })
-                      }}
-                      className="gap-2"
-                    >
-                      Lanjut Isi Informasi
-                      <ArrowRight className="size-4" aria-hidden="true" />
-                    </Button>
-                  </div>
-              </SectionCard>
-            ) : null}
-
-            {/* STEP 2: Formulir Informasi & Lampiran */}
-            {currentStep === "details" ? (
-              <SectionCard title="Informasi & lampiran" icon={FileText} contentClassName="space-y-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
-                    <div className="flex items-center gap-3">
-
-                      <div>
-                        <h3 className="text-base font-semibold tracking-tight text-foreground">
-                          {selectedType === "kehilangan"
-                            ? "Laporan kehilangan"
-                            : "Barang temuan diterima di pos"}
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          {selectedType === "kehilangan"
-                            ? "Lengkapi judul, nama barang, lokasi, waktu, detail & kronologi kejadian, dan foto barang hilang."
-                            : "Lengkapi nama barang, deskripsi ciri, lokasi temuan, nama penemu, dan foto."}
-                        </p>
-                      </div>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setCurrentStep("type")
-                        window.scrollTo({ top: 0, behavior: "smooth" })
-                      }}
-                      className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      <RotateCcw className="size-3.5" aria-hidden="true" />
-                      Ganti Jenis ({selectedType === "kehilangan" ? "Kehilangan" : "Temuan"})
-                    </Button>
-                  </div>
-
-                  {selectedType === "kehilangan" ? (
-                    <LossItemForm
-                      idPrefix="pelaporan-loss"
-                      initialData={lossData ?? undefined}
-                      onProceedToReview={(data) => {
-                        setLossData(data)
-                        setCurrentStep("review")
-                        window.scrollTo({ top: 0, behavior: "smooth" })
-                      }}
-                      onCancel={() => {
-                        setCurrentStep("type")
-                        window.scrollTo({ top: 0, behavior: "smooth" })
-                      }}
-                      submitLabel="Lanjut ke Pratinjau"
-                    />
-                  ) : (
-                    <FoundItemForm
-                      idPrefix="pelaporan-found"
-                      initialData={foundData ?? undefined}
-                      onProceedToReview={(data) => {
-                        setFoundData(data)
-                        setCurrentStep("review")
-                        window.scrollTo({ top: 0, behavior: "smooth" })
-                      }}
-                      onCancel={() => {
-                        setCurrentStep("type")
-                        window.scrollTo({ top: 0, behavior: "smooth" })
-                      }}
-                      submitLabel="Lanjut ke Pratinjau"
-                    />
-                  )}
-              </SectionCard>
-            ) : null}
-
-            {/* STEP 3: Pratinjau & Konfirmasi Simpan */}
-            {currentStep === "review" ? (
-              <SectionCard title="Periksa laporan" icon={ShieldCheck} contentClassName="space-y-6">
-                  <p className="text-sm text-muted-foreground">Pastikan seluruh data sudah benar sebelum disimpan.</p>
-
-                  {submitError ? <FieldError>{submitError}</FieldError> : null}
-
-                  {/* Summary definition table */}
-                  <div className="overflow-hidden rounded-xl border border-border/80 bg-card text-xs">
-                    <dl className="divide-y divide-border/60">
-                      <div className="grid grid-cols-3 p-3 sm:grid-cols-4 bg-muted/20">
-                        <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                          <Package className="size-3.5 text-primary" aria-hidden="true" />
-                          Jenis Laporan
-                        </dt>
-                        <dd className="font-semibold text-foreground col-span-2 sm:col-span-3">
-                          <Badge variant="outline" tone={selectedType === "kehilangan" ? "info" : "success"}>
-                            {selectedType === "kehilangan" ? "Laporan Kehilangan" : "Laporan Temuan (Inventaris Pos)"}
-                          </Badge>
-                        </dd>
-                      </div>
-
-                      {selectedType === "kehilangan" && lossData?.title ? (
-                        <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                          <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                            <FileText className="size-3.5 text-primary" aria-hidden="true" />
-                            Judul Laporan
-                          </dt>
-                          <dd className="font-semibold text-foreground col-span-2 sm:col-span-3">
-                            {lossData.title}
-                          </dd>
-                        </div>
-                      ) : null}
-
-                      <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                        <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                          <Package className="size-3.5 text-primary" aria-hidden="true" />
-                          Nama Barang
-                        </dt>
-                        <dd className="font-semibold text-foreground col-span-2 sm:col-span-3">
-                          {selectedType === "kehilangan" ? lossData?.itemName : foundData?.itemName}
-                        </dd>
-                      </div>
-
-                      {selectedType === "kehilangan" ? (
-                        <>
-                          <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                            <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                              <MapPin className="size-3.5 text-primary" aria-hidden="true" />
-                              Lokasi Kejadian
-                            </dt>
-                            <dd className="text-foreground col-span-2 sm:col-span-3">
-                              {lossData?.location}
-                            </dd>
-                          </div>
-
-                          <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                            <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                              <CalendarDays className="size-3.5 text-primary" aria-hidden="true" />
-                              Waktu Kejadian
-                            </dt>
-                            <dd className="text-foreground col-span-2 sm:col-span-3">
-                              {lossData?.incidentDate} · {lossData?.incidentTime} WIB
-                              {!lossData?.useCustomTime && (
-                                <span className="ml-2 text-xs text-muted-foreground">(Waktu saat ini)</span>
-                              )}
-                            </dd>
-                          </div>
-
-                          <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                            <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                              <FileText className="size-3.5 text-primary" aria-hidden="true" />
-                              Detail &amp; Kronologi
-                            </dt>
-                            <dd className="text-foreground whitespace-pre-wrap leading-relaxed col-span-2 sm:col-span-3">
-                              {lossData?.description}
-                            </dd>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                            <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                              <MapPinned className="size-3.5 text-primary" aria-hidden="true" />
-                              Lokasi Temuan
-                            </dt>
-                            <dd className="text-foreground col-span-2 sm:col-span-3">
-                              {foundData?.foundLocation || "Tidak dicatat"}
-                            </dd>
-                          </div>
-
-                          <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                            <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                              <UserRound className="size-3.5 text-primary" aria-hidden="true" />
-                              Nama Penemu
-                            </dt>
-                            <dd className="text-foreground col-span-2 sm:col-span-3">
-                              {foundData?.founderName || "Anonim / Tidak dicatat"}
-                            </dd>
-                          </div>
-
-                          <div className="grid grid-cols-3 p-3 sm:grid-cols-4">
-                            <dt className="flex items-center gap-2 font-medium text-muted-foreground col-span-1">
-                              <FileText className="size-3.5 text-primary" aria-hidden="true" />
-                              Deskripsi &amp; Ciri
-                            </dt>
-                            <dd className="text-foreground whitespace-pre-wrap leading-relaxed col-span-2 sm:col-span-3">
-                              {foundData?.description || "Tidak ada deskripsi tambahan"}
-                            </dd>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Photo preview row if attached */}
-                      {selectedType === "kehilangan" && lossData?.photoPreviewUrl ? (
-                        <div className="grid grid-cols-3 p-3 sm:grid-cols-4 items-center">
-                          <dt className="font-medium text-muted-foreground col-span-1">Foto Barang</dt>
-                          <dd className="col-span-2 sm:col-span-3">
-                            <div className="relative aspect-video w-44 overflow-hidden rounded-lg border border-border bg-muted">
-                              <Image
-                                src={lossData.photoPreviewUrl}
-                                alt="Foto barang pratinjau"
-                                fill
-                                className="object-contain"
-                                unoptimized
-                              />
-                            </div>
-                          </dd>
-                        </div>
-                      ) : null}
-
-                      {selectedType === "temuan" && foundData?.photoPreviewUrl ? (
-                        <div className="grid grid-cols-3 p-3 sm:grid-cols-4 items-center">
-                          <dt className="font-medium text-muted-foreground col-span-1">Foto Barang</dt>
-                          <dd className="col-span-2 sm:col-span-3">
-                            <div className="relative aspect-video w-44 overflow-hidden rounded-lg border border-border bg-muted">
-                              <Image
-                                src={foundData.photoPreviewUrl}
-                                alt="Foto barang pratinjau"
-                                fill
-                                className="object-contain"
-                                unoptimized
-                              />
-                            </div>
-                          </dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-border/60 pt-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={submitting}
-                      onClick={() => {
-                        setCurrentStep("details")
-                        window.scrollTo({ top: 0, behavior: "smooth" })
-                      }}
-                      className="gap-2"
-                    >
-                      <ArrowLeft className="size-4" aria-hidden="true" />
-                      Kembali Ubah
-                    </Button>
-
-                    <Button
-                      type="button"
-                      disabled={submitting}
-                      onClick={handleFinalSubmit}
-                      className="min-w-44 gap-2"
-                    >
-                      {submitting ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                          Menyimpan...
-                        </>
-                      ) : (
-                        <>
-                          <Check className="size-4" aria-hidden="true" />
-                          {selectedType === "kehilangan" ? "Simpan Laporan Kehilangan" : "Simpan ke Inventaris Pos"}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-              </SectionCard>
-            ) : null}
+    {step !== "type" ? <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-(--report-form-desktop-columns)">
+      <SectionCard title={step === "details" ? "Informasi & lampiran" : "Periksa pencatatan"} icon={step === "details" ? FileText : ShieldCheck} contentClassName="space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="space-y-1">
+            <h3 ref={headingRef} tabIndex={-1} className="text-base font-semibold outline-none">{step === "details" ? kind === "kehilangan" ? "Informasi kehilangan" : "Informasi barang" : kind === "kehilangan" ? "Periksa laporan kehilangan" : "Periksa barang yang diterima"}</h3>
+            {step === "review" ? <p className="text-sm text-muted-foreground">{kind === "kehilangan" ? "Pastikan informasi sesuai sebelum laporan disimpan." : "Pastikan barang sudah berada di pos sebelum disimpan ke Inventaris."}</p> : null}
           </div>
-        )}
-      </ContentShell>
-    </DashboardLayout>
-  )
+          <span className="text-xs text-muted-foreground" role="status">{draftStatus}</span>
+        </div>
+        {active.error ? <div className="space-y-2"><FieldError>{active.error}</FieldError><Button type="button" variant="outline" size="sm" disabled={submitting || navigationPending} onClick={() => { void store.save(kind, writeSatpamDraft).catch(() => {}) }}>Coba simpan draft</Button></div> : null}
+        {step === "details" ? kind === "kehilangan" ? <LossItemForm key={active.id} idPrefix="pelaporan-loss" initialData={{ ...active.fields, photoFile: active.file }} disabled={navigationPending} onDraftChange={captureLoss} onProceedToReview={(data) => beginPreview({ kind: "kehilangan", data })} onCancel={() => goBack("type")} submitLabel="Periksa laporan" /> : <FoundItemForm key={active.id} idPrefix="pelaporan-found" initialData={{ ...active.fields, photoFile: active.file }} disabled={navigationPending} onDraftChange={captureFound} onProceedToReview={(data) => beginPreview({ kind: "temuan", data })} onBack={() => goBack("type")} submitLabel="Periksa barang" /> : preview ? <>
+          <ReviewDetails preview={preview} />
+          {error ? <FieldError>{error}</FieldError> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+            <Button type="button" variant="outline" disabled={submitting || navigationPending} onClick={() => goBack("details")}><ArrowLeft aria-hidden="true" /> Kembali mengubah</Button>
+            <Button type="button" disabled={submitting || navigationPending} onClick={() => void confirm()}>{submitting ? "Menyimpan…" : preview.kind === "kehilangan" ? "Simpan laporan" : "Simpan ke Inventaris"}</Button>
+          </div>
+        </> : null}
+      </SectionCard>
+      <ReportingGuidance kind={kind} />
+    </div> : null}
+  </div>
+}
+
+function ReportingGuidance({ kind }: { kind: SatpamDraftKind }) {
+  const items = kind === "kehilangan" ? [[UserRound, "Catat nama atau kontak pemilik bila tersedia."], [MapPin, "Sebutkan lokasi terakhir barang terlihat."], [Clock3, "Atur waktu kejadian jika berbeda dari saat pencatatan."]] as const : [[PackageCheck, "Gunakan jika barang sudah diterima di pos."], [Inbox, "Jika sudah ada laporan temuan, buka laporannya untuk mencatat barang yang terhubung."], [ImagePlus, "Tambahkan foto jika membantu mengenali barang."]] as const
+  return <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start"><Card className="rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardHeader className="gap-3 p-5 pb-4"><div className="flex size-10 items-center justify-center rounded-xl border border-border bg-background shadow-2xs"><ShieldCheck className="size-5 text-primary" aria-hidden="true" /></div><div className="space-y-1"><CardTitle className="text-base">Sebelum menyimpan</CardTitle><CardDescription>Pastikan pencatatan sesuai kondisi di pos.</CardDescription></div></CardHeader><CardContent className="space-y-3 border-t border-border/60 p-5">{items.map(([Icon, text]) => <div key={text} className="flex items-start gap-2.5 text-sm text-muted-foreground"><Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{text}</span></div>)}</CardContent></div></Card></aside>
+}
+
+function ReviewDetails({ preview }: { preview: Preview }) {
+  const rows = preview.kind === "kehilangan" ? [["Jenis pencatatan", "Kehilangan"], ["Judul", preview.data.title], ["Barang", preview.data.itemName], ["Pelapor", preview.data.ownerName || "Tidak dicantumkan"], ["Kontak", preview.data.ownerContact || "Tidak dicantumkan"], ["Lokasi", preview.data.location], ["Waktu kejadian", preview.data.useCustomTime ? `${new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(`${preview.data.incidentDate}T00:00:00+07:00`))}, ${preview.data.incidentTime.replace(":", ".")} WIB` : "Dicatat otomatis saat disimpan"], ["Deskripsi", preview.data.description]] : [["Jenis pencatatan", "Barang diterima di pos"], ["Laporan Temuan", preview.data.sourceFoundTicket ? "Terhubung dengan laporan terpilih" : "Tanpa laporan web"], ["Barang", preview.data.itemName], ["Lokasi ditemukan", preview.data.foundLocation || "Tidak dicantumkan"], ["Penemu", preview.data.founderName || "Tidak dicantumkan"], ["Deskripsi", preview.data.description || "Tidak dicantumkan"]]
+  return <div className="space-y-4"><dl className="overflow-hidden rounded-xl border border-border/60">{rows.map(([label, value]) => <div key={label} className="grid gap-1 border-b border-border/60 p-3 last:border-b-0 sm:grid-cols-3 sm:gap-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="break-words whitespace-pre-wrap text-sm sm:col-span-2">{value}</dd></div>)}</dl>{preview.data.photoFile ? <ReviewPhoto file={preview.data.photoFile} /> : null}</div>
+}
+
+function ReviewPhoto({ file }: { file: File }) {
+  // The form revokes its own preview URL when the step unmounts, so the review owns a separate URL.
+  const { previewUrl } = useItemPhoto(file)
+  return previewUrl ? <div className="relative h-48 overflow-hidden rounded-xl border border-border bg-muted/30"><Image src={previewUrl} alt="Foto barang yang akan disimpan" fill unoptimized className="object-contain" /></div> : null
 }

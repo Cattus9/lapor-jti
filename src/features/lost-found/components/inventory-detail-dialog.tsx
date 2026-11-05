@@ -1,8 +1,9 @@
 "use client"
 
 import { useRef, useState } from "react"
+import { InventoryCorrectionDialog } from "./inventory-correction-dialog"
 import { InventoryPhoto } from "./inventory-photo"
-import { CalendarDays, ClipboardCheck, FileText, Handshake, Images, MapPin, Package, UserRound } from "lucide-react"
+import { CalendarDays, ClipboardCheck, FileText, Handshake, Images, MapPin, Package, Search, UserRound } from "lucide-react"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { ReportDetailSection, ReportDetailTable } from "@/components/reports/report-detail-section"
 import { CollectionEmptyState } from "@/components/reports/collection-empty-state"
@@ -20,8 +21,9 @@ import type { SatpamLostFoundReport, SatpamPage, SatpamWorkspaceData } from "../
 
 export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, onUpdated, linkedLoss }: {
   item: InventoryItem; open: boolean; onOpenChange: (open: boolean) => void; onUpdated: (item: InventoryItem) => void
-  linkedLoss?: { ticket: string; title: string }
+  linkedLoss?: Pick<SatpamLostFoundReport, "ticket" | "title"> & Partial<Pick<SatpamLostFoundReport, "description" | "characteristics" | "location" | "reporter">>
 }) {
+  const [editing, setEditing] = useState(false)
   const [mode, setMode] = useState(false)
   const [recipient, setRecipient] = useState("")
   const [officerId, setOfficerId] = useState("")
@@ -76,11 +78,15 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
       <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" disabled={pending} onClick={() => setMode(false)}>Batal</Button><Button type="submit" disabled={unavailable || !officerId || !recipient.trim() || !evidence.trim() || Boolean(workspace.error)}><Handshake aria-hidden="true" />{pending ? "Menyimpan…" : "Konfirmasi penyerahan"}</Button></div>
     </form></div>
   </DialogContent></Dialog>
-  const action = <div className="rounded-xl border border-border bg-muted/40 p-4">{isStored ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Penyerahan barang</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Periksa kepemilikan, lalu catat penerima dan petugas. Laporan web terkait bersifat opsional.</p></div><Button disabled={unavailable} onClick={() => setMode(true)}><Handshake aria-hidden="true" />Serahkan barang</Button></div> : <p className="text-sm">Barang sudah diserahkan. Catatan tersimpan pada Riwayat.</p>}
+  const action = <div className="rounded-xl border border-border bg-muted/40 p-4">{isStored ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Penyerahan barang</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Periksa kepemilikan, lalu catat penerima dan petugas. Laporan web terkait bersifat opsional.</p></div><Button variant="soft" disabled={unavailable} onClick={() => setEditing(true)}>Koreksi informasi</Button><Button disabled={unavailable} onClick={() => setMode(true)}><Handshake aria-hidden="true" />Serahkan barang</Button></div> : <p className="text-sm">Barang sudah diserahkan. Catatan tersimpan pada Riwayat.</p>}
   </div>
   return <OperationalReportDialog open={open} onOpenChange={value => { if (!pending) onOpenChange(value) }} icon={Package} category="Inventaris Pos Satpam" submittedAt={item.createdAt} status={isStored ? "Tersimpan" : "Diserahkan"} title={item.itemName} updatedAt={item.updatedAt} action={action}>
     {confirmation}
+    {editing ? <InventoryCorrectionDialog key={item.version} item={item} onClose={() => setEditing(false)} onSaved={updated => { setRevision(value => value + 1); onUpdated(updated) }} /> : null}
     <Stepper aria-label="Progres barang inventaris" steps={[{ value: "tersimpan", label: "Tersimpan di pos" }, { value: "diserahkan", label: "Diserahkan" }]} value={item.status} />
+    {linkedLoss ? <ReportDetailSection icon={Search} title="Bandingkan dengan laporan kehilangan" description="Periksa ciri barang dan keterangan pelapor sebelum menyerahkan barang.">
+      <ReportDetailTable rows={[{ icon: FileText, label: "Judul laporan", value: linkedLoss.title }, { icon: UserRound, label: "Pelapor", value: linkedLoss.reporter }, { icon: MapPin, label: "Lokasi kehilangan", value: linkedLoss.location }, { icon: FileText, label: "Keterangan pelapor", value: linkedLoss.description }, { icon: ClipboardCheck, label: "Ciri barang", value: linkedLoss.characteristics }]} />
+    </ReportDetailSection> : null}
     {detail.error ? <FieldError>{detail.error}<Button variant="outline" size="sm" onClick={() => setRevision(v => v + 1)}>Muat ulang</Button></FieldError> : null}
     <ReportDetailSection icon={Package} title="Detail barang" description="Penerimaan dan penyimpanan barang fisik di pos.">
       <ReportDetailTable rows={[{ icon: FileText, label: "Deskripsi", value: item.description }, { icon: MapPin, label: "Lokasi temuan", value: item.foundLocation }, { icon: MapPin, label: "Disimpan di", value: item.storageLocation }, { icon: UserRound, label: "Penemu", value: item.founderName }, { icon: UserRound, label: "Pencatat awal", value: item.registeredByName }, { icon: CalendarDays, label: "Diterima di pos", value: `${item.createdAt} WIB` }, ...(item.sourceFoundTitle ? [{ icon: FileText, label: "Laporan temuan terkait", value: item.sourceFoundTitle }] : [])]} />
@@ -90,6 +96,7 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
     </ReportDetailSection>
     <ReportDetailSection icon={ClipboardCheck} title="Riwayat penanganan" description="Pencatatan penerimaan dan penyerahan barang.">
       <ReportDetailTable rows={[{ icon: UserRound, label: "Diterima melalui akun", value: item.registeredByName }, ...(isStored ? [] : [{ icon: UserRound, label: "Penerima", value: item.handoverRecipient }, { icon: UserRound, label: "Petugas penyerah", value: item.handoverOfficer }, { icon: UserRound, label: "Dicatat melalui akun", value: item.handoverActor }, { icon: CalendarDays, label: "Waktu penyerahan", value: `${item.handedOverAt ?? "Tidak tercatat"} WIB` }, { icon: ClipboardCheck, label: "Pemeriksaan kepemilikan", value: item.ownershipEvidence }, { icon: FileText, label: "Catatan tambahan", value: item.handoverNote }])]} />
+      {item.corrections?.map((change, index) => <div key={`${change.at}-${index}`} className="rounded-xl border border-border/60 bg-background p-3 text-sm"><p className="font-medium">Koreksi oleh {change.actor}</p><p className="mt-1 text-xs text-muted-foreground">{change.at} WIB</p><p className="mt-2 whitespace-pre-wrap">{change.reason}</p></div>)}
       {item.legacyHandover ? <Badge variant="outline" tone="neutral">Data penyerahan lama; petugas tidak tercatat</Badge> : null}
     </ReportDetailSection>
   </OperationalReportDialog>

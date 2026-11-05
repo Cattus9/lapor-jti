@@ -8,6 +8,7 @@ export type MonitoringReportStatus = "Baru" | "Diverifikasi" | "Diproses" | "Bar
 export type ManagementReportStatus = Extract<MonitoringReportStatus, "Baru" | "Diproses" | "Selesai" | "Ditolak">
 export type MonitoringStatusFilter = MonitoringReportStatus | "semua" | "dalam-penanganan"
 export type ManagementReport = {
+  firstOpenedAt?: string | null; unopened?: boolean
   id: string; ticket: string; title: string; category: MonitoringReportCategory; categoryKey: ReportCategory
   status: MonitoringReportStatus; statusKey: ReportStatus; handler: "Satpam" | "Teknisi" | "Manajemen Jurusan" | "TEFA"
   reporter: string; reporterUnit: string; program?: string; service: string; context: string; location: string

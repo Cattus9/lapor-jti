@@ -3,10 +3,10 @@ import assert from "node:assert/strict"
 import { randomInt, randomUUID } from "node:crypto"
 import { unlink } from "node:fs/promises"
 import { join, resolve } from "node:path"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { hashPassword } from "better-auth/crypto"
 import { createDatabaseClient } from "../src/db/client"
-import { accounts, users, reports, locations, facilityObjects, reportDrafts, reportAttachments, reportFacilityObjects, reportStatusHistory, notifications } from "../src/db/schema"
+import { accounts, users, reports, locations, locationAreas, facilityObjects, locationFacilityObjects, reportDrafts, reportAttachments, reportFacilityObjects, reportStatusHistory, notifications } from "../src/db/schema"
 import { emptyReportPayload, type ReportPayload } from "../src/features/reports/domain/report"
 import { getTodayInWib } from "../src/features/reports/domain/report-date"
 
@@ -40,9 +40,16 @@ async function main() {
   let masterLocations: typeof locations.$inferSelect[] = []
   let masterObjects: typeof facilityObjects.$inferSelect[] = []
   try {
-    masterLocations = await db.select().from(locations).where(eq(locations.isActive, true)).limit(2)
-    masterObjects = await db.select().from(facilityObjects).where(eq(facilityObjects.isActive, true)).limit(2)
-    assert.ok(masterLocations.length === 2 && masterObjects.length === 2, "Two existing locations and facility objects required; this test does not seed them.")
+    // Pick a real active mapping: arbitrary catalog entries may not belong to the same room.
+    const [mappedRoom] = await db.select({ location: locations }).from(locations)
+      .innerJoin(locationAreas, eq(locationAreas.id, locations.areaId))
+      .where(and(eq(locations.isActive, true), eq(locationAreas.isActive, true), sql`(select count(*) from ${locationFacilityObjects} mapping join ${facilityObjects} object on object.id = mapping.object_id where mapping.location_id = ${locations.id} and object.is_active = true) >= 2`)).limit(1)
+    assert.ok(mappedRoom, "An active room with two mapped active facilities is required; this test does not seed catalog data.")
+    masterLocations = [mappedRoom.location, mappedRoom.location]
+    masterObjects = (await db.select({ object: facilityObjects }).from(locationFacilityObjects)
+      .innerJoin(facilityObjects, eq(facilityObjects.id, locationFacilityObjects.objectId))
+      .where(and(eq(locationFacilityObjects.locationId, mappedRoom.location.id), eq(facilityObjects.isActive, true))).limit(2)).map(row => row.object)
+    assert.equal(masterObjects.length, 2)
     for (const role of ["pelapor", "teknisi", "teknisi", "satpam", "manajemen"] as const) {
       const id = randomUUID(); userIds.push(id)
       const email = `technician-smoke-${id}@example.test`
@@ -67,12 +74,26 @@ async function main() {
     const other = await submit({ category: "lainnya" }, true) as typeof item
     const draft = await submit({}, true, true) as { id: string; attachments: { id: string }[] }
     assert.equal((await request(`/api/teknisi/reports/${other.ticketNumber}`, cookies[1])).status, 404)
-    assert.equal((await command({ ticket: other.ticketNumber, status: "diverifikasi" })).status, 404)
+    assert.equal((await command({ ticket: other.ticketNumber, status: "selesai", note: "Selesai" })).status, 404)
     assert.equal((await request(`/api/teknisi/attachments/${draft.attachments[0].id}`, cookies[1])).status, 404)
     const otherFiles = await db.select().from(reportAttachments).where(eq(reportAttachments.reportId, other.id))
     assert.equal((await request(`/api/teknisi/attachments/${otherFiles[0].id}`, cookies[1])).status, 404)
     const detail = await json(`/api/teknisi/reports/${item.ticketNumber}`)
     assert.equal(detail.files.length, 2); assert.equal(detail.report.facilities.length, 2); assert.equal(detail.history.length, 1)
+    assert.equal(detail.report.unopened, true)
+    const openedPath = `/api/reports/${item.id}/opened`
+    assert.equal((await request(openedPath, undefined, { method: "POST" })).status, 401)
+    assert.equal((await request(openedPath, cookies[0], { method: "POST" })).status, 404)
+    assert.equal((await request(openedPath, cookies[4], { method: "POST" })).status, 404)
+    assert.equal((await request(openedPath, cookies[1], { method: "POST", headers: { Origin: "https://untrusted.example.test" } })).status, 403)
+    const openings = await Promise.all([request(openedPath, cookies[1], { method: "POST" }), request(openedPath, cookies[2], { method: "POST" })])
+    assert.deepEqual(openings.map((result) => result.status), [200, 200])
+    const openingResults = await Promise.all(openings.map((result) => result.json()))
+    assert.equal(openingResults[0].firstOpenedAt, openingResults[1].firstOpenedAt)
+    const openedDetail = await json(`/api/teknisi/reports/${item.ticketNumber}`)
+    assert.equal(openedDetail.report.unopened, false)
+    assert.equal(openedDetail.report.firstOpenedAt, openingResults[0].firstOpenedAt)
+    assert.equal(openedDetail.report.updatedAt, detail.report.updatedAt)
     const pdf = detail.files.find((file: { mimeType: string }) => file.mimeType === "application/pdf")
     const png = detail.files.find((file: { mimeType: string }) => file.mimeType === "image/png")
     const download = await request(pdf.url, cookies[1]); assert.equal(download.status, 200); assert.equal(await download.text(), "%PDF-1.7\n%%EOF")
@@ -91,25 +112,22 @@ async function main() {
     assert.equal(search.total, 3); assert.ok(search.items.some((r: { id: string }) => r.id === unknown.id))
     const objectSearch = await json(`/api/teknisi/reports?q=${encodeURIComponent(masterObjects[0].name)}`)
     assert.equal(objectSearch.items.filter((r: { id: string }) => r.id === item.id).length, 1)
-    assert.equal((await command({ ticket: item.ticketNumber, status: "diproses" })).status, 409)
+    for (const status of ["diverifikasi", "diproses"]) assert.equal((await command({ ticket: item.ticketNumber, status })).status, 400)
     for (const status of ["selesai", "ditolak"]) assert.equal((await command({ ticket: item.ticketNumber, status, note: " " })).status, 400)
-    const accept = { ticket: item.ticketNumber, status: "diverifikasi", actorId: userIds[0], actorName: "Impersonated" }
-    const concurrent = await Promise.all([command(accept), command(accept, cookies[2])])
+    const complete = { ticket: item.ticketNumber, status: "selesai", note: "Lampu diganti dan diuji.", actorId: userIds[0], actorName: "Impersonated" }
+    const concurrent = await Promise.all([command(complete), command(complete, cookies[2])])
     assert.deepEqual(concurrent.map((r) => r.status).sort(), [200, 409])
-    const verified = await db.select().from(reportStatusHistory).where(and(eq(reportStatusHistory.reportId, item.id), eq(reportStatusHistory.toStatus, "diverifikasi")))
-    assert.equal(verified.length, 1); assert.ok([userIds[1], userIds[2]].includes(verified[0].actorId)); assert.equal(verified[0].actorName, "Akun uji teknisi")
+    const events = await db.select().from(reportStatusHistory).where(and(eq(reportStatusHistory.reportId, item.id), eq(reportStatusHistory.toStatus, "selesai")))
+    assert.equal(events.length, 1); assert.ok([userIds[1], userIds[2]].includes(events[0].actorId)); assert.equal(events[0].actorName, "Akun uji teknisi")
     assert.equal((await command({ ticket: item.ticketNumber, status: "ditolak", note: "Invalid" })).status, 409)
-    assert.equal((await command({ ticket: item.ticketNumber, status: "diproses" })).status, 200)
-    assert.equal((await command({ ticket: item.ticketNumber, status: "selesai", note: "Lampu diganti dan diuji." })).status, 200)
-    assert.equal((await command({ ticket: item.ticketNumber, status: "diproses" })).status, 409)
-    assert.equal((await command({ ticket: reject.ticketNumber, status: "ditolak", note: "Lokasi perlu dikonfirmasi ulang." })).status, 200)
+    assert.equal((await command({ ticket: reject.ticketNumber, status: "ditolak", note: "Laporan duplikat." })).status, 200)
     const completed = await json(`/api/teknisi/history?q=${tag}&period=hari-ini`)
     assert.equal(completed.total, 1); assert.equal(completed.items[0].id, item.id); assert.equal(completed.items[0].completionNote, "Lampu diganti dan diuji."); assert.ok(completed.items[0].completedAt)
     const finalDetail = await json(`/api/teknisi/reports/${item.ticketNumber}`)
-    assert.deepEqual(finalDetail.history.map((event: { status: string }) => event.status), ["Baru", "Diverifikasi", "Diproses", "Selesai"])
+    assert.deepEqual(finalDetail.history.map((event: { status: string }) => event.status), ["Baru", "Selesai"])
     const reporterNotifications = await json("/api/pelapor/notifications", cookies[0])
     assert.ok(reporterNotifications.items.some((n: { ticketNumber: string; description: string }) => n.ticketNumber === item.ticketNumber && n.description.includes("Lampu diganti")))
-    console.log("PASS: unique multi-object aggregation, sequential lifecycle, concurrent one-winner conflict, server actor identity, required completion/rejection notes and Pelapor visibility")
+    console.log("PASS: unique multi-object aggregation, direct completion, concurrent one-winner conflict, server actor identity, required completion/rejection notes and Pelapor visibility")
 
     const sameTimestamp = new Date()
     const pages = Array.from({ length: 25 }, (_, index) => ({ id: randomUUID(), ticketNumber: `LJ-2098-${randomInt(100000000000, 999999999999)}`, submissionKey: randomUUID(), reporterId: userIds[0], category: "fasilitas" as const, handlerRole: "teknisi" as const, title: `Page ${tag} ${index === 0 ? "%_" : index}`, description: "Pagination fixture.", incidentDate: getTodayInWib(), incidentTime: "09:00", locationId: masterLocations[1].id, locationText: masterLocations[1].name, submittedAt: sameTimestamp }))

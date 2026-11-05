@@ -14,7 +14,7 @@ export const statusLabels: Record<ReportStatus, string> = { baru: "Baru", diveri
 export const handlerByCategory: Record<ReportCategory, ReportHandler> = { "kehilangan-temuan": "satpam", fasilitas: "teknisi", layanan: "manajemen", lainnya: "manajemen" }
 export const lifecycleByCategory: Record<ReportCategory, readonly ReportStatus[]> = {
   "kehilangan-temuan": ["baru", "diproses", "barang_teridentifikasi", "diserahkan", "selesai"],
-  fasilitas: ["baru", "diverifikasi", "diproses", "selesai"],
+  fasilitas: ["baru", "selesai"],
   layanan: ["baru", "diproses", "selesai"], lainnya: ["baru", "diproses", "selesai"],
 }
 export class ReportError extends Error {
@@ -23,7 +23,13 @@ export class ReportError extends Error {
 export function requireReporter(actor: ReportActor) {
   if (actor.role !== "pelapor") throw new ReportError("Akses hanya untuk Pelapor.", 403)
 }
+// Keep the actual old active stage visible without rewriting historical records.
+export function reportLifecycleForStatus(category: ReportCategory, status: ReportStatus): readonly ReportStatus[] {
+  if (category === "fasilitas" && (status === "diverifikasi" || status === "diproses")) return [status, "selesai"]
+  return lifecycleByCategory[category]
+}
 export function assertTransition(category: ReportCategory, from: ReportStatus, to: ReportStatus) {
+  if (category === "fasilitas" && (from === "diverifikasi" || from === "diproses") && (to === "selesai" || to === "ditolak")) return
   const stages = lifecycleByCategory[category]
   if (stages.indexOf(from) < 0 || from === "selesai" || from === "ditolak" || (to !== stages[stages.indexOf(from) + 1] && !(from === "baru" && to === "ditolak"))) {
     throw new ReportError("Perubahan status tidak valid.")

@@ -29,7 +29,7 @@ export function TechnicianReportTimingCells({ report, timing }: { report: Techni
       <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 className="size-3.5" aria-hidden="true" />Dikirim</dt>
       <dd className="mt-1.5 break-words text-sm font-medium">
         {report.submittedAt}
-        {waiting ? <span className="mt-1 block text-xs font-normal leading-relaxed text-muted-foreground" title="Durasi dihitung saat detail dimuat.">Menunggu {waiting}</span> : null}
+        {waiting ? <span className="mt-1 block text-xs font-normal leading-relaxed text-muted-foreground" title="Durasi dihitung saat detail dimuat.">Sejak dikirim: {waiting}</span> : null}
       </dd>
     </div>
     <div className="p-4">

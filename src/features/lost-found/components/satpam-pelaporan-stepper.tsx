@@ -5,9 +5,9 @@ import { cn } from "cn"
 export type PelaporanStepId = "type" | "details" | "review"
 
 export const pelaporanSteps: { id: PelaporanStepId; title: string; description: string; icon: LucideIcon }[] = [
-  { id: "type", title: "Pilih jenis", description: "Kehilangan atau Temuan", icon: ListChecks },
+  { id: "type", title: "Pilih jenis", description: "Kehilangan atau barang di pos", icon: ListChecks },
   { id: "details", title: "Informasi & lampiran", description: "Detail dan foto", icon: FileText },
-  { id: "review", title: "Periksa laporan", description: "Konfirmasi simpan", icon: ClipboardCheck },
+  { id: "review", title: "Periksa pencatatan", description: "Konfirmasi simpan", icon: ClipboardCheck },
 ]
 
 export function SatpamPelaporanStepper({

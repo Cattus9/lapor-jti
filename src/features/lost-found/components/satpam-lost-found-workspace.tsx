@@ -3,10 +3,10 @@
 // Komponen ini bukan guard akses; role database dan pemeriksaan server tetap diperlukan saat memakai Google Workspace.
 
 import Image from "next/image"
-import Link from "next/link"
 import { CollectionEmptyState } from "@/components/reports/collection-empty-state"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { ReportAttachmentsEmptyState } from "@/components/reports/report-attachments-empty-state"
+import { ReportOpeningTracker, UnopenedReportBadge } from "@/components/reports/report-opening"
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -32,8 +32,10 @@ import {
   UserRound,
 } from "lucide-react"
 import { ReportDetailSection, ReportDetailTable } from "@/components/reports/report-detail-section"
+import { SatpamExceptionAction } from "./satpam-exception-action"
 import { RegisterInventoryDialog, InventoryDetailDialog } from "./satpam-inventory-workspace"
 import type { InventoryItem } from "../domain/inventory"
+import { inventoryCandidateId, matchingCandidates, type CandidateCustody, type MatchingCandidate } from "../domain/matching-candidates"
 
 import { ContentShell } from "@/components/layout/content-shell"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
@@ -81,7 +83,7 @@ const statusActions: Partial<Record<SatpamReportStatus, { label: string; nextSta
 
 const tabMeta: Record<SatpamReportKind, { label: string; description: string }> = {
   kehilangan: { label: "Kehilangan", description: "Laporan barang hilang dari pelapor." },
-  temuan: { label: "Temuan", description: "Barang yang ditemukan dan dititipkan kepada Satpam." },
+  temuan: { label: "Temuan", description: "Informasi barang temuan dan penerimaannya di pos." },
 }
 
 function statusStep(status: SatpamReportStatus) {
@@ -137,12 +139,12 @@ function StatusActionPanel({
   }
 
   if (report.status === "Selesai") {
-    return <div className="rounded-xl border border-border/60 bg-muted/50 p-3.5 sm:p-4"><p className="text-sm font-medium text-foreground">Laporan selesai</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Tiket telah ditutup dan dapat dilihat kembali pada Riwayat.</p></div>
+    return <div className="rounded-xl border border-border/60 bg-muted/50 p-3.5 sm:p-4"><p className="text-sm font-medium text-foreground">Laporan selesai</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Laporan telah ditutup. Catatan penanganan tersedia pada riwayat status di bawah.</p></div>
   }
 
   if (report.status === "Diproses") {
     if (report.kind === "temuan" && report.inventoryId) {
-      return <div className="rounded-xl border border-border/60 bg-muted/50 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Barang sudah tercatat di pos</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Lanjutkan pemeriksaan dan penyerahan melalui Inventaris.</p></div><Button nativeButton={false} render={<Link href="/satpam/inventaris" />}><PackagePlus aria-hidden="true" />Buka Inventaris</Button></div></div>
+      return <div className="rounded-xl border border-border/60 bg-muted/50 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Barang sudah tercatat di pos</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Barang tetap tersedia di Pencocokan dengan penanda Tersimpan di pos.</p></div><Button type="button" onClick={onOpenMatching}><ArrowLeftRight aria-hidden="true" />Buka pencocokan</Button></div></div>
     }
     return <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-background text-primary"><ArrowLeftRight className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="text-sm font-medium text-foreground">Lanjutkan melalui pencocokan barang</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Periksa ciri barang, lokasi, dan waktu pada kedua laporan. Konfirmasi pencocokan setelah hasil pemeriksaan sesuai.</p></div></div><Button type="button" className="shrink-0" onClick={onOpenMatching}><ArrowLeftRight />Buka pencocokan</Button></div></div>
   }
@@ -195,10 +197,10 @@ function StatusActivity({ activities }: { activities: StatusHistoryItem[] }) {
 
 const ReportDetailContext = createContext<((report: SatpamLostFoundReport, trigger: HTMLButtonElement, selectTab?: boolean) => void) | null>(null)
 
-function ReportDetailTrigger({ report, compact = false }: { report: SatpamLostFoundReport; compact?: boolean }) {
+function ReportDetailTrigger({ report, compact = false, label, quiet = false }: { report: SatpamLostFoundReport; compact?: boolean; label?: string; quiet?: boolean }) {
   const openReport = useContext(ReportDetailContext)
-  return <Button type="button" variant={compact ? "soft" : "default"} size="sm" className="shrink-0 gap-1.5" aria-haspopup="dialog" data-report-detail={report.id} onClick={(event) => openReport?.(report, event.currentTarget)}>
-    {compact ? <><Eye className="size-3.5" aria-hidden="true" /><span>Detail</span></> : "Lihat detail"}
+  return <Button type="button" variant={quiet ? "ghost" : compact ? "soft" : "default"} size="sm" className={cn("shrink-0 gap-1.5", quiet && "text-muted-foreground")} aria-haspopup="dialog" data-report-detail={report.id} onClick={(event) => openReport?.(report, event.currentTarget)}>
+    {compact ? <><Eye className="size-3.5" aria-hidden="true" /><span>{label ?? "Detail"}</span></> : (label ?? "Lihat detail")}
   </Button>
 }
 
@@ -211,6 +213,7 @@ function ReportDetailDialog({
   onOpenMatching,
   onOpenHandover,
   onReceived,
+  onMarked,
 }: {
   report: SatpamLostFoundReport
   open: boolean
@@ -219,7 +222,8 @@ function ReportDetailDialog({
   onStatusChange: (ticket: string, status: SatpamReportStatus, note?: string) => Promise<boolean>
   onOpenMatching: () => void
   onOpenHandover?: () => void
-  onReceived: () => void
+  onReceived: (item: InventoryItem) => void
+  onMarked: () => void
 }) {
   const [receiveOpen, setReceiveOpen] = useState(false)
   const isFound = sourceReport.kind === "temuan"
@@ -239,21 +243,23 @@ function ReportDetailDialog({
       updatedAt={report.updatedAt}
       action={<fieldset disabled={detail.loading || Boolean(detail.error)} className="space-y-3">
         <StatusActionPanel report={report} onStatusChange={onStatusChange} onOpenMatching={() => { onOpenChange(false); onOpenMatching() }} onOpenHandover={onOpenHandover ? () => { onOpenChange(false); onOpenHandover() } : undefined} />
+        <SatpamExceptionAction report={report} onSaved={onMarked} />
         {isFound && !report.inventoryId && ["Baru", "Diproses"].includes(report.status) ? <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Barang sudah diserahkan ke pos?</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Catat langsung sebagai barang titipan di Inventaris.</p></div><Button type="button" variant="soft" aria-haspopup="dialog" onClick={() => setReceiveOpen(true)}><PackagePlus aria-hidden="true" />Catat barang di pos</Button></div> : null}
       </fieldset>}
     >
+      <ReportOpeningTracker reportId={open && detail.data && !detail.data.report.firstOpenedAt ? detail.data.report.id : undefined} onMarked={onMarked} />
       <section>
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-foreground">Progres penanganan</p>
-            <p className="mt-1 text-xs text-muted-foreground">{report.status === "Ditolak" ? "Tidak melanjutkan lifecycle" : `Tahap ${statusStep(report.status) + 1} dari ${lifecycle.length}`}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{detail.data?.closureNote ? "Ditutup tanpa penyerahan" : report.status === "Ditolak" ? "Tidak melanjutkan lifecycle" : `Tahap ${statusStep(report.status) + 1} dari ${lifecycle.length}`}</p>
           </div>
           <StatusBadge status={report.status} />
         </div>
-        <div className="mt-5"><ReportStepper status={report.status} /></div>
+        <div className="mt-5">{detail.data?.closureNote ? <p className="rounded-xl border border-border bg-background p-4 text-sm">{detail.data.closureNote}</p> : <ReportStepper status={report.status} />}</div>
       </section>
       {report.reporterContact ? <ReportDetailSection icon={UserRound} title="Pelapor langsung" description="Kontak disimpan privat untuk tindak lanjut Satpam."><ReportDetailTable rows={[{ icon: UserRound, label: "Nama pelapor", value: report.reporter }, { icon: UserRound, label: "Kontak", value: report.reporterContact }, { icon: UserRound, label: "Pencatat", value: report.recordedBy }]} /></ReportDetailSection> : null}
-      <RegisterInventoryDialog open={receiveOpen} onOpenChange={setReceiveOpen} sourceFound={{ ticket: report.ticket, title: report.title, location: report.location, description: report.description }} onSuccess={() => { onReceived(); setReceiveOpen(false); onOpenChange(false); onOpenMatching() }} />
+      <RegisterInventoryDialog open={receiveOpen} onOpenChange={setReceiveOpen} sourceFound={{ ticket: report.ticket, title: report.title, location: report.location, description: report.description }} onSuccess={(item) => { onReceived(item); setReceiveOpen(false); onOpenChange(false); onOpenMatching() }} />
       <SatpamPageFeedback loading={detail.loading} error={detail.error} />
       <section className="border-t border-border/60 pt-6">
             <div className="flex items-center gap-2">
@@ -361,7 +367,7 @@ function ReportRow({ report }: { report: SatpamLostFoundReport }) {
               <h3 className="text-sm font-semibold text-foreground md:text-base">{report.title}</h3>
               <p className="mt-1 text-xs text-muted-foreground">{report.reporter} · Dikirim {report.submittedAt} WIB</p>
             </div>
-            <StatusBadge status={report.status} />
+            <div className="flex flex-wrap items-center gap-2"><UnopenedReportBadge unseen={report.unopened} /><StatusBadge status={report.status} /></div>
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"><span className="flex min-w-0 items-center gap-1.5"><MapPin className="size-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{report.location}</span></span><span className="flex items-center gap-1.5"><CalendarDays className="size-3.5 shrink-0" aria-hidden="true" />{report.eventDate}</span><span className="flex items-center gap-1.5"><Paperclip className="size-3.5 shrink-0" aria-hidden="true" />{report.attachments} lampiran</span></div>
         </div>
@@ -384,12 +390,14 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
   officers: SecurityOfficer[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (recipient: string, note: string, officerId: string, location: string) => Promise<boolean>
+  onConfirm: (recipient: string, note: string, officerId: string, location: string, ownershipEvidence: string, submissionKey: string) => Promise<boolean>
 }) {
   const [recipient, setRecipient] = useState("")
   const [note, setNote] = useState("")
   const [officerId, setOfficerId] = useState("")
   const [location, setLocation] = useState("Pos Satpam Gedung JTI")
+  const [evidence, setEvidence] = useState("")
+  const command = useRef<{ fingerprint: string; key: string } | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   if (!pair) return null
@@ -398,14 +406,16 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
     <DialogContent>
       <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16">
         <DialogTitle className="text-xl leading-tight md:text-2xl">Konfirmasi penyerahan</DialogTitle>
-        <DialogDescription className="mt-2">Catat penerima dan petugas sebelum kedua tiket menjadi Diserahkan.</DialogDescription>
+        <DialogDescription className="mt-2">Konfirmasi setelah barang diterima pemilik. Kedua laporan langsung selesai.</DialogDescription>
       </div>
       <form className="space-y-5 p-5 md:p-6" aria-busy={pending} onSubmit={async (event) => {
         event.preventDefault()
-        if (pending || !validOfficer || !recipient.trim() || !location.trim()) return
+        if (pending || !validOfficer || !recipient.trim() || !location.trim() || !evidence.trim()) return
         setPending(true); setError("")
         try {
-          if (await onConfirm(recipient.trim(), note.trim(), officerId, location.trim())) onOpenChange(false)
+          const fingerprint = JSON.stringify([recipient.trim(), note.trim(), officerId, location.trim(), evidence.trim()])
+          if (!command.current || command.current.fingerprint !== fingerprint) command.current = { fingerprint, key: crypto.randomUUID() }
+          if (await onConfirm(recipient.trim(), note.trim(), officerId, location.trim(), evidence.trim(), command.current.key)) onOpenChange(false)
           else setError("Penyerahan belum berhasil. Periksa pesan kesalahan dan coba kembali.")
         } finally { setPending(false) }
       }}>
@@ -420,11 +430,12 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
         </Field>
         <Field><FieldLabel htmlFor="handover-recipient">Nama penerima</FieldLabel><Input id="handover-recipient" value={recipient} onChange={(event) => setRecipient(event.target.value)} className="h-9 bg-background" maxLength={150} required disabled={pending} placeholder="Nama penerima barang" /></Field>
         <Field><FieldLabel htmlFor="handover-location">Lokasi penyerahan</FieldLabel><Input id="handover-location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-9 bg-background" maxLength={200} required disabled={pending} /></Field>
+        <Field><FieldLabel htmlFor="handover-evidence">Hasil pemeriksaan kepemilikan</FieldLabel><Textarea id="handover-evidence" value={evidence} onChange={event => setEvidence(event.target.value)} maxLength={1000} required disabled={pending} className="bg-background/70" placeholder="Contoh: Pemilik menjelaskan ciri khusus barang." /><FieldDescription>Catat hasil pemeriksaan sebelum mengonfirmasi penyerahan.</FieldDescription></Field>
         <Field><FieldLabel htmlFor="handover-note">Catatan penyerahan (opsional)</FieldLabel><Textarea id="handover-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} disabled={pending} placeholder="Contoh: Identitas penerima telah diperiksa oleh petugas." /></Field>
         {error ? <FieldError>{error}</FieldError> : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button type="submit" disabled={pending || !validOfficer || !recipient.trim() || !location.trim()}><Handshake />{pending ? "Menyimpan..." : "Konfirmasi penyerahan"}</Button>
+          <Button type="submit" disabled={pending || !validOfficer || !recipient.trim() || !location.trim() || !evidence.trim()}><Handshake />{pending ? "Menyimpan..." : "Konfirmasi penyerahan"}</Button>
         </div>
       </form>
     </DialogContent>
@@ -450,23 +461,46 @@ function MatchingConfirmationDialog({
   const [error, setError] = useState("")
   if (!loss || !found) return null
 
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16"><div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><BadgeCheck className="size-4" aria-hidden="true" /></span><span>Konfirmasi manual</span></div><DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">Catat kecocokan</DialogTitle><DialogDescription className="mt-2">Pastikan kedua laporan merujuk pada barang yang sama sebelum melanjutkan.</DialogDescription></div><div className="space-y-5 p-5 md:p-6"><div className="grid gap-3 md:grid-cols-2"><MatchPreviewCard label="Laporan kehilangan" report={loss} /><MatchPreviewCard label="Barang temuan" report={found} /></div><FieldError>{error}</FieldError><p className="text-xs leading-relaxed text-muted-foreground">{canValidate ? "Kedua tiket akan berstatus Barang teridentifikasi dan dapat dilanjutkan ke proses penyerahan." : "Kedua tiket harus berstatus Diproses sebelum kecocokan dapat dicatat."}</p><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="bg-card" onClick={() => onOpenChange(false)}>Kembali</Button><Button type="button" disabled={!canValidate || pending} onClick={async () => { if (pending) return; setPending(true); setError(""); try { if (!await onConfirm()) setError("Pencocokan belum berhasil. Periksa pesan kesalahan dan coba kembali.") } finally { setPending(false) } }}><BadgeCheck />Catat kecocokan</Button></div></div></DialogContent></Dialog>
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16"><div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><BadgeCheck className="size-4" aria-hidden="true" /></span><span>Konfirmasi manual</span></div><DialogTitle className="mt-4 text-xl leading-tight md:text-2xl">Catat kecocokan</DialogTitle><DialogDescription className="mt-2">Lakukan saat pemilik hadir. Pastikan barang tersedia dan kedua laporan merujuk pada barang yang sama.</DialogDescription></div><div className="space-y-5 p-5 md:p-6"><div className="grid gap-3 md:grid-cols-2"><MatchPreviewCard label="Laporan kehilangan" report={loss} /><MatchPreviewCard label="Barang temuan" report={found} /></div><FieldError>{error}</FieldError><p className="text-xs leading-relaxed text-muted-foreground">{canValidate ? "Kedua tiket akan berstatus Barang teridentifikasi dan dapat dilanjutkan ke proses penyerahan." : "Kedua tiket harus berstatus Diproses sebelum kecocokan dapat dicatat."}</p><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="bg-card" onClick={() => onOpenChange(false)}>Kembali</Button><Button type="button" disabled={!canValidate || pending} onClick={async () => { if (pending) return; setPending(true); setError(""); try { if (!await onConfirm()) setError("Pencocokan belum berhasil. Periksa pesan kesalahan dan coba kembali.") } finally { setPending(false) } }}><BadgeCheck />Catat kecocokan</Button></div></div></DialogContent></Dialog>
 }
 
 function MatchPreviewCard({ label, report }: { label: string; report: SatpamLostFoundReport }) {
   return <section className="rounded-xl border border-border/60 bg-background/60 p-4"><div className="flex items-start gap-3"><ReportPhotoThumbnail report={report} size="large" /><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold text-foreground">{report.title}</p><p className="mt-1 text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</p><div className="mt-2"><StatusBadge status={report.status} /></div></div></div><dl className="mt-4 space-y-3 text-xs"><div><dt className="text-muted-foreground">Deskripsi barang</dt><dd className="mt-1 leading-relaxed whitespace-pre-wrap text-foreground">{report.description || report.characteristics}</dd></div><div className="grid gap-2 sm:grid-cols-2"><div><dt className="text-muted-foreground">Lokasi</dt><dd className="mt-1 text-foreground">{report.location}</dd></div><div><dt className="text-muted-foreground">Waktu</dt><dd className="mt-1 text-foreground">{report.eventDate}, {report.eventTime}</dd></div></div></dl></section>
 }
 
+export function MatchingCandidateCard({ candidate, selected, disabled, onSelect, detail }: {
+  candidate: MatchingCandidate; selected: boolean; disabled: boolean; onSelect: () => void; detail: React.ReactNode
+}) {
+  const [failedPhoto, setFailedPhoto] = useState<string>()
+  const stored = candidate.custody === "di-pos"
+  return <Card className={cn("gap-3 rounded-xl border bg-card p-4 shadow-none ring-0 transition-colors", selected ? "border-primary/60" : "border-border/70 hover:border-primary/30")}>
+    <div className="flex items-start gap-3">
+      <div className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/40">
+        {candidate.photoUrl && failedPhoto !== candidate.photoUrl ? <Image src={candidate.photoUrl} alt={`Foto ${candidate.title}`} fill sizes="48px" unoptimized className="object-cover" onError={() => setFailedPhoto(candidate.photoUrl)} /> : <div className="flex size-full items-center justify-center text-muted-foreground"><PackageSearch className="size-5" aria-hidden="true" /></div>}
+      </div>
+      <div className="min-w-0 space-y-1.5"><h4 className="text-sm font-semibold text-foreground">{candidate.title}</h4><Badge variant="outline" tone={stored ? "success" : "neutral"}>{stored ? "Tersimpan di pos" : "Belum diterima di pos"}</Badge></div>
+    </div>
+    <div className="flex-1 space-y-2 text-xs leading-relaxed text-muted-foreground">
+      <p className="flex items-start gap-1.5"><MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" /><span>{candidate.location}</span></p>
+      {candidate.description ? <p className="line-clamp-2">{candidate.description}</p> : null}
+    </div>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+      <Button type="button" variant={selected ? "default" : "soft"} size="sm" disabled={disabled} aria-pressed={selected} aria-label={`${selected ? "Batalkan pilihan" : "Pilih barang"}: ${candidate.title}`} onClick={onSelect}>{selected ? <Check aria-hidden="true" /> : null}{selected ? "Terpilih" : "Pilih barang"}</Button>
+      {detail}
+    </div>
+  </Card>
+}
+
 function MatchingWorkspace({
   onRecordMatch,
-  onOpenHandover,
-  pendingCount,
   onRefresh,
+  receivedItem,
+  onReceiptAcknowledged,
 }: {
   onRecordMatch: (lossTicket: string, foundTicket: string) => Promise<boolean>
-  onOpenHandover: () => void
-  pendingCount: number
   onRefresh?: () => void
+  receivedItem?: InventoryItem
+  onReceiptAcknowledged: () => void
 }) {
   const lostPage = useSatpamPage<SatpamLostFoundReport>("/api/satpam/reports?kind=kehilangan&matching=1")
   const lostReports = lostPage.items
@@ -474,106 +508,70 @@ function MatchingWorkspace({
   const [inventoryRev, setInventoryRev] = useState(0)
 
   const [selectedLost, setSelectedLost] = useState("")
-  const [selectedFound, setSelectedFound] = useState("")
-  const [selectedInventoryId, setSelectedInventoryId] = useState("")
+  const [selectedCandidateId, setSelectedCandidateId] = useState("")
   const [matchingPreviewOpen, setMatchingPreviewOpen] = useState(false)
-
-  // Candidate Search & Filter states
   const [searchQuery, setSearchQuery] = useState("")
-  const debouncedSearch = useDebouncedSatpamQuery(searchQuery).toLowerCase().trim()
-  const [sourceFilter, setSourceFilter] = useState<"semua" | "temuan" | "inventaris">("semua")
-  const [statusFilter, setStatusFilter] = useState<"diproses" | "baru" | "semua">("diproses")
-  const foundPage = useSatpamPage<SatpamLostFoundReport>(`/api/satpam/reports?kind=temuan&matching=1&q=${encodeURIComponent(debouncedSearch)}&status=${statusFilter}`)
-  const foundReports = foundPage.items
-  // Search/status belong in SQL so candidates beyond the first page remain discoverable.
-  const inventoryParams = new URLSearchParams({ rev: String(inventoryRev), q: debouncedSearch, status: "tersimpan" })
-  const inventoryResource = useSatpamPage<InventoryItem>(`/api/satpam/inventory?${inventoryParams}`)
-  const inventoryItems = inventoryResource.items
-
-  // Dialog states
+  const debouncedSearch = useDebouncedSatpamQuery(searchQuery).trim()
+  const [custodyFilter, setCustodyFilter] = useState<CandidateCustody>("semua")
+  const foundPage = useSatpamPage<SatpamLostFoundReport>(`/api/satpam/reports?kind=temuan&matching=1&rev=${inventoryRev}&q=${encodeURIComponent(debouncedSearch)}&status=semua`)
+  const inventoryResource = useSatpamPage<InventoryItem>(`/api/satpam/inventory?rev=${inventoryRev}&q=${encodeURIComponent(debouncedSearch)}&status=tersimpan`)
   const [registerInventoryOpen, setRegisterInventoryOpen] = useState(false)
+  const [receiptSource, setReceiptSource] = useState<SatpamLostFoundReport>()
   const [selectedInventoryDetail, setSelectedInventoryDetail] = useState<InventoryItem | null>(null)
   const [inventoryDetailOpen, setInventoryDetailOpen] = useState(false)
-
-  const activeLossTicket = lostReports.some((report) => report.ticket === selectedLost) ? selectedLost : ""
-  const activeFoundTicket = foundReports.some((report) => report.ticket === selectedFound) ? selectedFound : ""
-  const loss = lostReports.find((report) => report.ticket === activeLossTicket)
-  const found = foundReports.find((report) => report.ticket === activeFoundTicket)
-  const selectedInventoryItem = inventoryItems.find((item) => item.id === selectedInventoryId)
-
+  const [receipt, setReceipt] = useState<InventoryItem>()
+  const [receivedId, setReceivedId] = useState<string>()
+  if (receivedItem && receivedItem.id !== receivedId) {
+    setReceivedId(receivedItem.id)
+    setReceipt(receivedItem)
+    setSelectedCandidateId(inventoryCandidateId(receivedItem))
+    setCustodyFilter("semua")
+    setSearchQuery("")
+  }
+  useEffect(() => { if (receivedItem) onReceiptAcknowledged() }, [receivedItem, onReceiptAcknowledged])
+  const loss = lostReports.find(report => report.ticket === selectedLost)
+  const waitingForSearch = searchQuery.trim() !== debouncedSearch
+  const candidatesLoading = foundPage.loading || inventoryResource.loading || waitingForSearch
+  const candidatesError = foundPage.error || inventoryResource.error
+  // A just-confirmed receipt bridges the refresh, never an old failed response.
+  const items = receipt && inventoryResource.loading && !debouncedSearch
+    ? [receipt, ...inventoryResource.items.filter(item => item.id !== receipt.id)] : inventoryResource.items
+  const candidates = matchingCandidates(foundPage.items, items, custodyFilter)
+  const selectedCandidate = candidates.find(candidate => candidate.id === selectedCandidateId)
+  const found = selectedCandidate?.custody === "belum-diterima" ? selectedCandidate.report : undefined
+  const selectedInventoryItem = selectedCandidate?.custody === "di-pos" ? selectedCandidate.item : undefined
   const canValidate = Boolean(loss && found && loss.status === "Diproses" && found.status === "Diproses")
-  const hasSelectedPair = Boolean(loss && (found || selectedInventoryItem))
+  const hasSelectedPair = Boolean(loss && selectedCandidate)
   const reportNeedingAcceptance = loss && loss.status !== "Diproses" ? loss : found && found.status !== "Diproses" ? found : undefined
-
-  // Filter temuan reports based on status filter and search query
-  const filteredTemuanReports = foundReports.filter((report) => {
-    if (sourceFilter === "inventaris") return false
-
-    // Status filter:
-    // Default is "diproses" (ready to match). User can select "baru" or "semua"
-    if (statusFilter === "diproses" && report.status !== "Diproses") return false
-    if (statusFilter === "baru" && report.status !== "Baru") return false
-
-    // Query filter:
-    if (debouncedSearch) {
-      const matchTitle = report.title.toLowerCase().includes(debouncedSearch)
-      const matchDesc = report.description.toLowerCase().includes(debouncedSearch)
-      const matchChar = report.characteristics.toLowerCase().includes(debouncedSearch)
-      const matchLoc = report.location.toLowerCase().includes(debouncedSearch)
-      const matchTicket = report.ticket.toLowerCase().includes(debouncedSearch)
-      if (!matchTitle && !matchDesc && !matchChar && !matchLoc && !matchTicket) return false
-    }
-
-    return true
-  })
-
-  // Filter inventory items based on status and search query
-  const filteredInventoryItems = inventoryItems.filter((item) => {
-    if (item.status !== "tersimpan") return false
-    if (sourceFilter === "temuan") return false
-
-    // If status filter is "baru", inventory items don't have "Baru" (they are accepted in pos)
-    if (statusFilter === "baru") return false
-
-    // If status filter is "diproses", show "tersimpan" (ready in pos)
-    if (statusFilter === "diproses" && item.status !== "tersimpan") return false
-
-    // Query filter:
-    if (debouncedSearch) {
-      const matchName = item.itemName.toLowerCase().includes(debouncedSearch)
-      const matchDesc = item.description.toLowerCase().includes(debouncedSearch)
-      const matchLoc = item.storageLocation.toLowerCase().includes(debouncedSearch)
-      const matchFounder = (item.founderName ?? "").toLowerCase().includes(debouncedSearch)
-      if (!matchName && !matchDesc && !matchLoc && !matchFounder) return false
-    }
-
-    return true
-  })
-
-  const totalCandidates = filteredTemuanReports.length + filteredInventoryItems.length
+  const totalCandidates = candidates.length
+  const candidatesUnavailable = candidatesLoading || Boolean(candidatesError) || lostPage.loading || Boolean(lostPage.error)
+  const moreCandidates = (custodyFilter !== "di-pos" && foundPage.nextCursor) || (custodyFilter !== "belum-diterima" && inventoryResource.nextCursor)
 
   function handleInventoryCreated(item: InventoryItem) {
-    setInventoryRev((prev) => prev + 1)
+    setReceipt(item)
+    setSelectedCandidateId(inventoryCandidateId(item))
+    setCustodyFilter("semua")
+    setSearchQuery("")
+    setInventoryRev(value => value + 1)
     onRefresh?.()
-    setSelectedInventoryId(item.id)
-    setSelectedFound("")
     setRegisterInventoryOpen(false)
+    setReceiptSource(undefined)
   }
 
   function handleInventoryItemUpdated(item: InventoryItem) {
     setInventoryRev((prev) => prev + 1)
     onRefresh?.()
     setSelectedInventoryDetail(item)
-    if (item.status === "diserahkan") { setSelectedLost(""); setSelectedInventoryId("") }
+    if (item.status === "diserahkan") { setSelectedLost(""); setSelectedCandidateId(""); setReceipt(undefined) }
   }
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-semibold text-foreground">Cocokkan barang</h2>{!loss && !lostPage.loading && !lostPage.error && lostPage.total > 0 ? <Badge variant="secondary">{lostPage.total} laporan</Badge> : null}</div>
-          {loss ? <p className="text-sm text-muted-foreground">Pilih barang yang sesuai dengan laporan kehilangan.</p> : lostReports.length ? <p className="text-sm text-muted-foreground">Pilih laporan kehilangan untuk melihat kandidat barang.</p> : null}
+          {!loss && lostReports.length ? <p className="text-sm text-muted-foreground">Pilih laporan kehilangan.</p> : null}
         </div>
-        <Button type="button" className="self-start sm:self-auto" aria-haspopup="dialog" onClick={() => setRegisterInventoryOpen(true)}><PackagePlus aria-hidden="true" />Terima barang</Button>
+        <Button type="button" variant={loss ? "soft" : "default"} className="self-start sm:self-auto" aria-haspopup="dialog" onClick={() => { setReceiptSource(undefined); setRegisterInventoryOpen(true) }}><PackagePlus aria-hidden="true" />Terima barang</Button>
       </div>
 
       {!loss ? (
@@ -592,11 +590,9 @@ function MatchingWorkspace({
               {lostReports.map((report) => (
                 <Card
                   key={report.ticket}
-                  className="group flex flex-col gap-0 justify-between rounded-xl border border-border/70 bg-background p-3.5 shadow-xs transition-all duration-200 motion-safe:hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-xs motion-reduce:transition-none cursor-pointer"
+                  className="group flex flex-col gap-0 justify-between rounded-xl border border-border/70 bg-background p-3.5 shadow-none ring-0 transition-colors hover:border-primary/40 motion-reduce:transition-none"
                   onClick={() => {
                     setSelectedLost(report.ticket)
-                    setSelectedFound("")
-                    setSelectedInventoryId("")
                     setMatchingPreviewOpen(false)
                   }}
                 >
@@ -638,8 +634,6 @@ function MatchingWorkspace({
                       onClick={(e) => {
                         e.stopPropagation()
                         setSelectedLost(report.ticket)
-                        setSelectedFound("")
-                        setSelectedInventoryId("")
                         setMatchingPreviewOpen(false)
                       }}
                     >
@@ -657,36 +651,26 @@ function MatchingWorkspace({
         /* Step 2: Loss Report Selected -> Show Detail at Top, Candidate Section Below */
         <div className="space-y-5">
           {/* Top Card: Selected Loss Report Compact Summary */}
-          <Card className="gap-0 rounded-xl border border-border bg-background p-4 shadow-none">
+          <Card className="gap-0 rounded-xl border border-border/60 bg-background p-4 shadow-none ring-0">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <ReportPhotoThumbnail report={loss} size="compact" />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" tone="warning" className="text-xs px-1.5 py-0 font-medium">
-                      Laporan Kehilangan
-                    </Badge>
-                    <StatusBadge status={loss.status} />
-                    <span className="text-xs text-muted-foreground truncate">
-                      {loss.location} · Pelapor: <strong className="text-foreground font-medium">{loss.reporter}</strong>
-                    </span>
-                  </div>
-                  <h3 className="text-base font-bold text-foreground truncate mt-0.5">
-                    {loss.title}
-                  </h3>
+                <div className="min-w-0 space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Laporan kehilangan</p>
+                  <div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-semibold text-foreground">{loss.title}</h3><StatusBadge status={loss.status} /></div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{loss.location} · Pelapor: {loss.reporter}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <ReportDetailTrigger report={loss} compact />
+                <ReportDetailTrigger report={loss} compact quiet />
                 <Button
                   type="button"
                   variant="soft"
                   size="sm"
                   onClick={() => {
                     setSelectedLost("")
-                    setSelectedFound("")
-                    setSelectedInventoryId("")
+                    setSelectedCandidateId("")
                   }}
                 >
                   <RotateCcw className="size-3.5" aria-hidden="true" />
@@ -697,406 +681,58 @@ function MatchingWorkspace({
           </Card>
 
           {/* Bottom Section: Candidates for Matching with Temuan / Inventory */}
-          <section className="rounded-xl border border-border/60 bg-background p-4 space-y-4">
+          <section aria-labelledby="matching-candidates-title" className="space-y-4 border-t border-border/60 pt-5">
             {/* Header Toolbar */}
-            <div className="flex flex-col gap-2 pb-3 border-b border-border/60 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Pilih barang yang sesuai
+                  <h3 id="matching-candidates-title" className="text-sm font-semibold text-foreground">
+                    Barang temuan
                   </h3>
-                  <Badge variant="secondary" className="text-xs">
-                    {totalCandidates} ditampilkan
+                  <Badge variant="secondary" className="text-xs" aria-label={`${totalCandidates} barang ditampilkan`}>
+                    {totalCandidates}
                   </Badge>
                 </div>
               </div>
 
             </div>
 
-            {/* Search and Filters Toolbar */}
-            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-              {/* Search Bar */}
-              <div className="relative flex-1">
-                <Search
-                  className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  placeholder="Cari nama, ciri, atau lokasi barang"
-                  aria-label="Cari kandidat barang"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-background pl-9"
-                />
-              </div>
-
-              {/* Filter Selects */}
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="w-full sm:w-48">
-                  <Select
-                    value={sourceFilter}
-                    onValueChange={(val) => setSourceFilter(val as typeof sourceFilter)}
-                  >
-                    <SelectTrigger aria-label="Sumber kandidat barang" className="h-9 w-full bg-background">
-                      <SelectValue className="min-w-0 truncate">
-                        {sourceFilter === "semua"
-                          ? "Semua Sumber"
-                          : sourceFilter === "temuan"
-                          ? "Laporan Temuan"
-                          : "Inventaris Pos Satpam"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent matchTriggerWidth={false} className="min-w-52">
-                      <SelectItem value="semua">Semua Sumber</SelectItem>
-                      <SelectItem value="temuan">Laporan Temuan</SelectItem>
-                      <SelectItem value="inventaris">Inventaris Pos Satpam</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <Field className="min-w-0 sm:flex-1">
+                <FieldLabel className="sr-only" htmlFor="matching-search">Cari barang</FieldLabel>
+                <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input id="matching-search" type="search" maxLength={100} placeholder="Nama, ciri, atau lokasi barang" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} className="bg-background pl-9" />
                 </div>
-
-                <div className="w-full sm:w-52">
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(val) => setStatusFilter(val as typeof statusFilter)}
-                  >
-                    <SelectTrigger aria-label="Status kandidat barang" className="h-9 w-full bg-background">
-                      <SelectValue className="min-w-0 truncate">
-                        {statusFilter === "diproses"
-                          ? "Diproses (Siap cocok)"
-                          : statusFilter === "baru"
-                          ? "Baru (Belum diterima)"
-                          : "Semua Status"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent matchTriggerWidth={false} className="min-w-56">
-                      <SelectItem value="diproses">
-                        Diproses (Siap cocok)
-                      </SelectItem>
-                      <SelectItem value="baru">
-                        Baru (Belum diterima)
-                      </SelectItem>
-                      <SelectItem value="semua">Semua Status</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              </Field>
+              <Field className="min-w-0 sm:w-60 sm:flex-none">
+                <FieldLabel className="sr-only" htmlFor="matching-custody">Keberadaan barang</FieldLabel>
+                <Select items={[{ value: "semua", label: "Semua barang" }, { value: "belum-diterima", label: "Belum diterima di pos" }, { value: "di-pos", label: "Tersimpan di pos" }]} value={custodyFilter} onValueChange={value => setCustodyFilter(value as CandidateCustody)}>
+                  <SelectTrigger id="matching-custody" className="w-full bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="semua">Semua barang</SelectItem><SelectItem value="belum-diterima">Belum diterima di pos</SelectItem><SelectItem value="di-pos">Tersimpan di pos</SelectItem></SelectContent>
+                </Select>
+              </Field>
+              {searchQuery || custodyFilter !== "semua" ? <Button type="button" variant="ghost" size="sm" onClick={() => { setSearchQuery(""); setCustodyFilter("semua") }}>Reset filter</Button> : null}
+            </div>
+            {receipt ? <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm"><span><strong className="font-medium">{receipt.sourceFoundTitle || receipt.itemName}</strong> sudah diterima di pos.</span><Button variant="ghost" size="sm" onClick={() => setReceipt(undefined)}>Tutup</Button></div> : null}
+            <div className="space-y-3 rounded-xl bg-background p-3 md:p-4">
+            <SatpamPageFeedback loading={candidatesLoading} error={candidatesError} />
+            {candidatesError ? <Button type="button" variant="outline" onClick={() => setInventoryRev(value => value + 1)}>Muat ulang barang</Button> : null}
+            {totalCandidates === 0 && !candidatesLoading && !candidatesError ? (
+              <CollectionEmptyState icon={PackageSearch} title={searchQuery || custodyFilter !== "semua" ? "Tidak ada barang yang sesuai" : "Belum ada barang untuk dicocokkan"} description={searchQuery || custodyFilter !== "semua" ? "Ubah pencarian atau reset filter untuk melihat barang lain." : "Laporan temuan dan barang yang diterima di pos akan muncul di sini."} size="compact" className="border-border/60 bg-background" />
+            ) : <div role="group" aria-label="Kandidat barang" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {candidates.map(candidate => <MatchingCandidateCard key={candidate.id} candidate={candidate} selected={selectedCandidateId === candidate.id} disabled={candidatesUnavailable} onSelect={() => { setSelectedCandidateId(candidate.id === selectedCandidateId ? "" : candidate.id); setMatchingPreviewOpen(false) }} detail={candidate.custody === "belum-diterima" ? <ReportDetailTrigger report={candidate.report} compact quiet /> : <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" disabled={candidatesUnavailable} onClick={() => { setSelectedInventoryDetail(candidate.item); setInventoryDetailOpen(true) }}><Eye aria-hidden="true" />Detail</Button>} />)}
+            </div>}
+            {moreCandidates ? <Button type="button" variant="outline" disabled={candidatesUnavailable} onClick={() => { if (custodyFilter !== "di-pos") foundPage.loadMore(); if (custodyFilter !== "belum-diterima") inventoryResource.loadMore() }}>Muat barang berikutnya</Button> : null}
             </div>
 
-            {/* Page Feedback */}
-            <SatpamPageFeedback
-              loading={foundPage.loading || inventoryResource.loading}
-              error={foundPage.error || inventoryResource.error}
-              nextCursor={foundPage.nextCursor}
-              loadMore={foundPage.loadMore}
-            />
-            {sourceFilter !== "temuan" && statusFilter !== "baru" && inventoryResource.nextCursor ? <Button type="button" variant="outline" disabled={inventoryResource.loading || Boolean(inventoryResource.error)} onClick={inventoryResource.loadMore}>Muat inventaris berikutnya</Button> : null}
-            {inventoryResource.error ? <Button type="button" variant="outline" onClick={() => setInventoryRev((value) => value + 1)}>Muat ulang inventaris</Button> : null}
-
-            {/* Candidate Items List */}
-            {totalCandidates === 0 && !foundPage.loading && !inventoryResource.loading && !foundPage.error && !inventoryResource.error ? (
-              <CollectionEmptyState icon={PackageSearch} title="Belum ada barang yang sesuai" description="Ubah pencarian atau filter untuk melihat kandidat lain." size="compact" className="bg-background" />
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {/* Temuan Reports */}
-                {filteredTemuanReports.map((report) => (
-                  <Card
-                    key={`report-${report.ticket}`}
-                    className={cn(
-                      "group flex flex-col gap-0 justify-between rounded-xl border p-3.5 transition-all duration-200 cursor-pointer",
-                      selectedFound === report.ticket
-                        ? "border-primary bg-primary/5 ring-2 ring-primary/25 shadow-xs"
-                        : "border-border/70 bg-background motion-safe:hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-xs motion-reduce:transition-none"
-                    )}
-                    onClick={() => {
-                      setSelectedFound(report.ticket === selectedFound ? "" : report.ticket)
-                      setSelectedInventoryId("")
-                      setMatchingPreviewOpen(false)
-                    }}
-                  >
-                    <div>
-                      <div className="flex items-start gap-3">
-                        <ReportPhotoThumbnail report={report} size="compact" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <Badge variant="outline" tone="cyan" className="text-xs px-1.5 py-0">
-                              Laporan Temuan
-                            </Badge>
-                            {selectedFound === report.ticket && (
-                              <Badge variant="default" className="text-xs px-1.5 py-0 gap-1 bg-primary text-primary-foreground">
-                                <Check className="size-2.5" />
-                                Dipilih
-                              </Badge>
-                            )}
-                          </div>
-                          <h4 className="mt-1 font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
-                            {report.title}
-                          </h4>
-                          <div className="mt-1 flex items-center gap-1.5">
-                            <StatusBadge status={report.status} />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                        <p className="truncate">
-                          Lokasi: <span className="text-foreground">{report.location}</span>
-                        </p>
-                        <p className="truncate">
-                          Waktu: {report.submittedAt} WIB
-                        </p>
-                        {(report.description || report.characteristics) && (
-                          <p className="line-clamp-2 mt-1.5 bg-muted/30 p-2 rounded-lg leading-relaxed">
-                            {report.description || report.characteristics}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5">
-                      <Button
-                        type="button"
-                        variant={selectedFound === report.ticket ? "default" : "outline"}
-                        size="sm"
-                        className="h-8 text-xs font-medium gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedFound(report.ticket === selectedFound ? "" : report.ticket)
-                          setSelectedInventoryId("")
-                          setMatchingPreviewOpen(false)
-                        }}
-                      >
-                        {selectedFound === report.ticket ? (
-                          <>
-                            <Check className="size-3" />
-                            <span>Terpilih</span>
-                          </>
-                        ) : (
-                          <span>Pilih Pasangan</span>
-                        )}
-                      </Button>
-                      <ReportDetailTrigger report={report} compact />
-                    </div>
-                  </Card>
-                ))}
-
-                {/* Inventory Items */}
-                {filteredInventoryItems.map((item) => (
-                  <Card
-                    key={`inv-${item.id}`}
-                    className={cn(
-                      "group flex flex-col gap-0 justify-between rounded-xl border p-3.5 transition-all duration-200 cursor-pointer",
-                      selectedInventoryId === item.id
-                        ? "border-primary bg-primary/5 ring-2 ring-primary/25 shadow-xs"
-                        : "border-border/70 bg-background motion-safe:hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-xs motion-reduce:transition-none"
-                    )}
-                    onClick={() => {
-                      setSelectedInventoryId(item.id === selectedInventoryId ? "" : item.id)
-                      setSelectedFound("")
-                      setMatchingPreviewOpen(false)
-                    }}
-                  >
-                    <div>
-                      <div className="flex items-start gap-3">
-                        <div className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/40">
-                          {item.photoUrl ? (
-                            <Image
-                              src={item.photoUrl}
-                              alt={item.itemName}
-                              fill
-                              className="object-cover"
-                              sizes="48px"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="flex size-full items-center justify-center text-muted-foreground">
-                              <PackageSearch className="size-5" aria-hidden="true" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <Badge variant="outline" tone="warning" className="text-xs px-1.5 py-0">
-                              Inventaris Pos
-                            </Badge>
-                            {selectedInventoryId === item.id && (
-                              <Badge variant="default" className="text-xs px-1.5 py-0 gap-1 bg-primary text-primary-foreground">
-                                <Check className="size-2.5" />
-                                Dipilih
-                              </Badge>
-                            )}
-                          </div>
-                          <h4 className="mt-1 font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
-                            {item.itemName}
-                          </h4>
-                          <div className="mt-1">
-                            <Badge variant="outline" tone={item.status === "tersimpan" ? "success" : "neutral"}>{item.status === "tersimpan" ? "Tersimpan" : "Diserahkan"}</Badge>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                        <p className="truncate">
-                          Lokasi Simpan: <span className="text-foreground">{item.storageLocation}</span>
-                        </p>
-                        {item.founderName && (
-                          <p className="truncate">
-                            Penemu: <span className="text-foreground">{item.founderName}</span>
-                          </p>
-                        )}
-                        <p className="truncate">
-                          Dicatat: {item.createdAt} WIB
-                        </p>
-                        {item.description && (
-                          <p className="line-clamp-2 mt-1.5 bg-muted/30 p-2 rounded-lg leading-relaxed">
-                            {item.description}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2.5">
-                      <Button
-                        type="button"
-                        variant={selectedInventoryId === item.id ? "default" : "outline"}
-                        size="sm"
-                        className="h-8 text-xs font-medium gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedInventoryId(item.id === selectedInventoryId ? "" : item.id)
-                          setSelectedFound("")
-                          setMatchingPreviewOpen(false)
-                        }}
-                      >
-                        {selectedInventoryId === item.id ? (
-                          <>
-                            <Check className="size-3" />
-                            <span>Terpilih</span>
-                          </>
-                        ) : (
-                          <span>Pilih Pasangan</span>
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 gap-1.5 bg-card hover:bg-muted h-8 text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedInventoryDetail(item)
-                          setInventoryDetailOpen(true)
-                        }}
-                      >
-                        <Eye className="size-3.5" aria-hidden="true" />
-                        <span>Detail</span>
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+            {selectedCandidate ? <div className="sticky bottom-3 z-10 space-y-3 rounded-xl border border-border bg-card p-4 shadow-none">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0"><p className="text-sm font-semibold">{selectedCandidate.title}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedInventoryItem ? "Cocokkan ciri barang sebelum penyerahan." : reportNeedingAcceptance ? `Laporan ${reportNeedingAcceptance.title} masih berstatus ${reportNeedingAcceptance.status}. Tinjau laporan untuk melanjutkan.` : "Barang belum diterima di pos."}</p></div>
+                {selectedInventoryItem ? <Button type="button" disabled={candidatesUnavailable} onClick={() => { setSelectedInventoryDetail(selectedInventoryItem); setInventoryDetailOpen(true) }}><SearchCheck aria-hidden="true" />Periksa kecocokan</Button> : hasSelectedPair && canValidate ? <Button type="button" disabled={candidatesUnavailable} onClick={() => setMatchingPreviewOpen(true)}><SearchCheck aria-hidden="true" />Periksa kecocokan</Button> : reportNeedingAcceptance ? <ReportDetailTrigger report={reportNeedingAcceptance} compact label="Tinjau laporan" /> : null}
               </div>
-            )}
-
-            {/* Bottom Action Shelf (Photo 4 Style) */}
-            {hasSelectedPair && canValidate ? (
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 sm:p-4 shadow-xs">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary shadow-2xs">
-                      <BadgeCheck className="size-5" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">
-                        Konfirmasi kecocokan
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Pastikan kedua laporan merujuk pada barang yang sama.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="shrink-0">
-                    <Button
-                      type="button"
-                      className="gap-2"
-                      onClick={() => setMatchingPreviewOpen(true)}
-                    >
-                      <BadgeCheck className="size-4" aria-hidden="true" />
-                      <span>Catat kecocokan</span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : hasSelectedPair && selectedInventoryItem ? (
-              <div className="rounded-xl border border-border bg-muted/40 p-3.5 sm:p-4 shadow-xs">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-primary shadow-2xs">
-                      <PackageSearch className="size-5" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">
-                        {selectedInventoryItem.itemName}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Periksa barang, lalu lanjutkan penyerahan kepada pemilik.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="shrink-0">
-                    <Button
-                      type="button"
-                      className="gap-2"
-                      onClick={() => {
-                        setSelectedInventoryDetail(selectedInventoryItem)
-                        setInventoryDetailOpen(true)
-                      }}
-                    >
-                      <Handshake className="size-4" aria-hidden="true" />
-                      <span>Periksa &amp; serahkan</span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : hasSelectedPair && found && reportNeedingAcceptance ? (
-              <div className="rounded-xl border border-border/70 bg-muted/40 p-3.5 sm:p-4 shadow-xs">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-2xs">
-                      <ArrowLeftRight className="size-5" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">
-                        Proses laporan terlebih dahulu
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {reportNeedingAcceptance.title} masih berstatus {reportNeedingAcceptance.status}.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="shrink-0">
-                    <ReportDetailTrigger report={reportNeedingAcceptance} compact />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/70 bg-muted/20 p-3.5 text-xs text-muted-foreground">
-                <ArrowLeftRight className="size-4 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-                <span>Pilih barang untuk melanjutkan.</span>
-              </div>
-            )}
+              {found ? <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Barang sudah diserahkan ke pos?</p></div><Button type="button" variant="soft" disabled={candidatesUnavailable} onClick={() => { setReceiptSource(found); setRegisterInventoryOpen(true) }}><PackagePlus aria-hidden="true" />Catat barang di pos</Button></div> : null}
+            </div> : null}
           </section>
-        </div>
-      )}
-
-      {/* Pending Handover notification banner if any */}
-      {pendingCount > 0 && (
-        <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background p-3.5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2.5">
-            <Handshake className="size-4 shrink-0 text-primary" aria-hidden="true" />
-            <p className="text-sm text-foreground">
-              <span className="font-medium">{pendingCount} pasangan</span> siap diserahkan
-            </p>
-          </div>
-          <Button type="button" variant="soft" size="sm" onClick={onOpenHandover}>Buka penyerahan<ArrowRight aria-hidden="true" /></Button>
         </div>
       )}
 
@@ -1104,15 +740,15 @@ function MatchingWorkspace({
       <MatchingConfirmationDialog
         loss={loss}
         found={found}
-        canValidate={canValidate}
+        canValidate={canValidate && !candidatesUnavailable}
         open={matchingPreviewOpen}
         onOpenChange={setMatchingPreviewOpen}
         onConfirm={async () => {
-          if (!loss || !found || !canValidate) return false
+          if (!loss || !found || !canValidate || candidatesUnavailable) return false
           const ok = await onRecordMatch(loss.ticket, found.ticket)
           if (ok) {
             setSelectedLost("")
-            setSelectedFound("")
+            setSelectedCandidateId("")
             setMatchingPreviewOpen(false)
           }
           return ok
@@ -1123,15 +759,16 @@ function MatchingWorkspace({
       <RegisterInventoryDialog
         open={registerInventoryOpen}
         onOpenChange={setRegisterInventoryOpen}
+        sourceFound={receiptSource ? { ticket: receiptSource.ticket, title: receiptSource.title, location: receiptSource.location, description: receiptSource.description } : undefined}
         onSuccess={handleInventoryCreated}
       />
 
       {/* Inventory Item Detail & Handover Dialog */}
       {selectedInventoryDetail && (
         <InventoryDetailDialog
-          key={selectedInventoryDetail.id}
+          key={`${selectedInventoryDetail.id}:${loss?.ticket ?? "none"}`}
           item={selectedInventoryDetail}
-          linkedLoss={loss ? { ticket: loss.ticket, title: loss.title } : undefined}
+          linkedLoss={loss}
           open={inventoryDetailOpen}
           onOpenChange={(open) => {
             setInventoryDetailOpen(open)
@@ -1145,9 +782,10 @@ function MatchingWorkspace({
 }
 
 
-function HandoverWorkspace({ officers, onConfirmHandover }: {
+function HandoverWorkspace({ officers, onConfirmHandover, onRefresh }: {
   officers: SecurityOfficer[]
-  onConfirmHandover: (pair: MatchedPair, recipient: string, note: string, officerId: string, location: string) => Promise<boolean>
+  onRefresh: () => void
+  onConfirmHandover: (pair: MatchedPair, recipient: string, note: string, officerId: string, location: string, ownershipEvidence: string, submissionKey: string) => Promise<boolean>
 }) {
   const page = useSatpamPage<MatchedPair>("/api/satpam/pending")
   const pendingPairs = page.items
@@ -1157,7 +795,7 @@ function HandoverWorkspace({ officers, onConfirmHandover }: {
     <div className="space-y-4">
       <div className="border-b border-border/60 pb-4">
         <h2 className="text-base font-semibold text-foreground">Menunggu penyerahan</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Barang yang sudah dicocokkan dan siap diserahkan kepada pelapor.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Periksa keberadaan barang dan kepemilikan saat pemilik datang.</p>
       </div>
       <p className="text-xs text-muted-foreground">{page.total} pasangan menunggu penyerahan</p>
       <SatpamPageFeedback loading={page.loading} error={page.error} nextCursor={page.nextCursor} loadMore={page.loadMore} />
@@ -1177,7 +815,7 @@ function HandoverWorkspace({ officers, onConfirmHandover }: {
               </div>
               <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden="true" />Dicocokkan {pair.matchedAt}</span>
-                <Button type="button" size="sm" onClick={() => setSelectedPair(pair)}><Handshake />Catat penyerahan</Button>
+                <SatpamExceptionAction matchId={pair.id} onSaved={onRefresh} /><Button type="button" size="sm" onClick={() => setSelectedPair(pair)}><Handshake />Catat penyerahan</Button>
               </div>
             </Card>
           ))}
@@ -1189,7 +827,7 @@ function HandoverWorkspace({ officers, onConfirmHandover }: {
           <p className="mt-1 text-xs text-muted-foreground">Pasangan yang dicatat akan muncul di sini.</p>
         </div>
       ) : null}
-      <HandoverDialog key={selectedPair?.id ?? "closed"} officers={officers} pair={selectedPair} open={Boolean(selectedPair)} onOpenChange={(open) => { if (!open) setSelectedPair(null) }} onConfirm={async (recipient, note, officerId, location) => selectedPair ? onConfirmHandover(selectedPair, recipient, note, officerId, location) : false} />
+      <HandoverDialog key={selectedPair?.id ?? "closed"} officers={officers} pair={selectedPair} open={Boolean(selectedPair)} onOpenChange={(open) => { if (!open) setSelectedPair(null) }} onConfirm={async (recipient, note, officerId, location, evidence, key) => selectedPair ? onConfirmHandover(selectedPair, recipient, note, officerId, location, evidence, key) : false} />
     </div>
   )
 }
@@ -1204,6 +842,7 @@ function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { us
   const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState<"kehilangan" | "temuan" | "pencocokan" | "penyerahan">("kehilangan")
   // Detail outlives list skeletons, pagination and removal from the current status filter.
+  const [receivedInventory, setReceivedInventory] = useState<InventoryItem>()
   const [selectedReport, setSelectedReport] = useState<SatpamLostFoundReport | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailOpenCycle, setDetailOpenCycle] = useState(0)
@@ -1241,7 +880,7 @@ function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { us
     return execute({ type: "status", ticket, status: canonical, note })
   }
   const recordMatch = (lossTicket: string, foundTicket: string) => execute({ type: "match", lossTicket, foundTicket })
-  const confirmHandover = (pair: MatchedPair, recipient: string, note: string, officerId: string, location: string) => execute({ type: "handover", matchId: pair.id, recipient, note, officerId, location })
+  const confirmHandover = (pair: MatchedPair, recipient: string, note: string, officerId: string, location: string, ownershipEvidence: string, submissionKey: string) => execute({ type: "handover", matchId: pair.id, recipient, note, officerId, location, ownershipEvidence, submissionKey })
   return <SatpamRefreshContext.Provider value={revision}><ReportDetailContext.Provider value={openReport}><div ref={workspace} tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-1 flex-col"><ContentShell>
     <PageHeader title="Kehilangan & Temuan" description={`Kelola laporan, pencocokan, dan penyerahan barang, ${user.name}.`} />
     {error ? <FieldError>{error}<Button type="button" variant="link" size="sm" onClick={() => { setRevision((value) => value + 1); router.refresh() }}>Muat ulang data</Button></FieldError> : null}
@@ -1260,9 +899,9 @@ function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { us
           <TabsContent value="temuan"><ReportList kind="temuan" /></TabsContent>
           <TabsContent value="pencocokan">
             <MatchingWorkspace
+              receivedItem={receivedInventory}
+              onReceiptAcknowledged={() => setReceivedInventory(undefined)}
               onRecordMatch={recordMatch}
-              onOpenHandover={() => setActiveTab("penyerahan")}
-              pendingCount={data.pending.total}
               onRefresh={() => {
                 setRevision((value) => value + 1)
                 router.refresh()
@@ -1270,11 +909,11 @@ function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { us
             />
           </TabsContent>
 
-          <TabsContent value="penyerahan"><HandoverWorkspace officers={data.officers} onConfirmHandover={confirmHandover} /></TabsContent>
+          <TabsContent value="penyerahan"><HandoverWorkspace onRefresh={() => setRevision(value => value + 1)} officers={data.officers} onConfirmHandover={confirmHandover} /></TabsContent>
         </Tabs>
       </CardContent></div>
     </Card>
-    {selectedReport ? <ReportDetailDialog key={`${selectedReport.id}:${detailOpenCycle}`} report={selectedReport} open={detailOpen} onOpenChange={setDetailOpen} finalFocus={restoreDetailFocus} onStatusChange={updateStatus} onReceived={() => { setRevision(value => value + 1); router.refresh(); notify({ title: "Barang diterima di pos", description: "Temuan sudah ditautkan ke Inventaris.", tone: "success" }) }} onOpenMatching={() => setActiveTab("pencocokan")} onOpenHandover={() => setActiveTab("penyerahan")} /> : null}
+    {selectedReport ? <ReportDetailDialog key={`${selectedReport.id}:${detailOpenCycle}`} report={selectedReport} open={detailOpen} onOpenChange={setDetailOpen} finalFocus={restoreDetailFocus} onStatusChange={updateStatus} onMarked={() => setRevision(value => value + 1)} onReceived={(item) => { setReceivedInventory(item); setRevision(value => value + 1); router.refresh(); notify({ title: "Barang diterima di pos", description: "Barang tetap tersedia di Pencocokan dengan penanda Tersimpan di pos.", tone: "success" }) }} onOpenMatching={() => setActiveTab("pencocokan")} onOpenHandover={() => setActiveTab("penyerahan")} /> : null}
   </ContentShell></div></ReportDetailContext.Provider></SatpamRefreshContext.Provider>
 }
 

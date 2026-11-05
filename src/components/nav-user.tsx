@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/sidebar"
 import { ChevronsUpDownIcon, LogOutIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react"
 import { getThemeSnapshot, setTheme, subscribeToTheme, type AppTheme } from "@/lib/theme"
+import { flushBeforeSignOut } from "@/lib/pending-work"
 
 export function NavUser({
   user,
@@ -50,6 +51,8 @@ export function NavUser({
     setIsPending(true)
     setLogoutError("")
     try {
+      try { await flushBeforeSignOut() }
+      catch { setLogoutError("Tunggu pencatatan selesai atau pastikan draft tersimpan sebelum keluar."); return }
       const result = await authClient.signOut()
       if (result.error) {
         setLogoutError("Gagal keluar. Silakan coba lagi.")

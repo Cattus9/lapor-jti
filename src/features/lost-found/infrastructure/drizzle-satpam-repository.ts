@@ -1,11 +1,11 @@
 import "server-only"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, notExists, notInArray, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { getDb } from "@/db"
 import { sequentialQueries } from "@/db/sequential"
 import { DrizzleInventoryRepository, type InventoryPhoto } from "./drizzle-inventory-repository"
-import { users, reports, reportLostFoundDetails, reportAttachments, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory, satpamLossReports, reportTicketCounters } from "@/db/schema"
+import { users, reports, reportDrafts, reportLostFoundDetails, reportAttachments, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory, satpamLossReports, reportTicketCounters, operationalAudit } from "@/db/schema"
 import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor, type ReportStatus } from "../../reports/domain/report"
 import { getIncidentDateTimeInWib } from "../../reports/domain/report-date"
 import { DrizzleReportRepository } from "../../reports/infrastructure/drizzle-report-repository"
@@ -14,6 +14,7 @@ import { expectedStatus, type SatpamCommand } from "../domain/satpam"
 import { type InventoryFilter } from "../domain/inventory"
 import { validateCreateLossReport, type CreateLossReportInput, type LossReport } from "../domain/loss-report"
 import { validateCreateFoundReport, type CreateFoundReportInput, type FoundReport } from "../domain/found-report"
+import { parseSatpamDraft } from "../domain/satpam-draft"
 import type { SatpamRepository } from "../application/ports"
 
 import type { SatpamDashboardData, SatpamHandoverHistoryItem, SatpamHistoryFilter, SatpamListFilter, SatpamLostFoundReport, SatpamPage, SatpamPendingHandover, SatpamReportStatus } from "../types"
@@ -71,9 +72,9 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const files = ids.length ? await this.db.select({ id: reportAttachments.id, reportId: reportAttachments.reportId, mime: reportAttachments.mimeType }).from(reportAttachments).where(inArray(reportAttachments.reportId, ids)).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)) : []
     const items = page.map(({ report: r, kind, characteristics, reporter, reporterContact, recordedBy, inventoryId }): SatpamLostFoundReport => {
       const attached = files.filter((file) => file.reportId === r.id), photo = attached.find((file) => file.mime.startsWith("image/"))
-      return { id: r.id, inventoryId: inventoryId ?? undefined, reporterContact: reporterContact ?? undefined, recordedBy, ticket: r.ticketNumber, kind: kind as "kehilangan" | "temuan", title: r.title, reporter, location: r.locationText,
+      return { id: r.id, firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status), inventoryId: inventoryId ?? undefined, reporterContact: reporterContact ?? undefined, recordedBy, ticket: r.ticketNumber, kind: kind as "kehilangan" | "temuan", title: r.title, reporter, location: r.locationText,
         eventDate: new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(`${r.incidentDate}T00:00:00+07:00`)),
-        eventTime: r.incidentTime.slice(0, 5).replace(":", "."), submittedAt: dateLabel(r.submittedAt), updatedAt: dateLabel(r.updatedAt), status: statusLabels[r.status] as SatpamReportStatus,
+        eventTime: r.incidentTime.slice(0, 5).replace(":", "."), submittedAt: dateLabel(r.submittedAt), submittedAtIso: r.submittedAt.toISOString(), updatedAt: dateLabel(r.updatedAt), status: statusLabels[r.status] as SatpamReportStatus,
         description: r.description, characteristics, attachments: attached.length, photoUrl: photo ? `/api/satpam/attachments/${photo.id}?preview=1` : undefined }
     })
     const last = page.at(-1)
@@ -89,15 +90,17 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       this.db.select().from(reportStatusHistory).where(eq(reportStatusHistory.reportId, report.id)).orderBy(asc(reportStatusHistory.createdAt), asc(reportStatusHistory.id)),
       this.db.select({ id: reportAttachments.id, name: reportAttachments.name }).from(reportAttachments).where(eq(reportAttachments.reportId, report.id)).orderBy(asc(reportAttachments.createdAt)),
     ])
-    return { report, history: history.map((h) => ({ status: statusLabels[h.toStatus] as SatpamReportStatus, actor: h.actorName, timestamp: dateLabel(h.createdAt), note: h.note })), files: files.map((f) => ({ ...f, url: `/api/satpam/attachments/${f.id}` })) }
+    const [closure] = report.status === "Selesai" ? await this.db.select({ after: operationalAudit.after }).from(operationalAudit).where(and(eq(operationalAudit.entity, "satpam_report"), eq(operationalAudit.entityId, report.id), eq(operationalAudit.action, "close"))).orderBy(desc(operationalAudit.createdAt)).limit(1) : []
+    const closureNote = closure ? `Ditutup tanpa penyerahan barang. ${String((closure.after as { note?: string })?.note ?? "")}` : undefined
+    return { closureNote, report, history: history.map((h) => ({ status: statusLabels[h.toStatus] as SatpamReportStatus, actor: h.actorName, timestamp: dateLabel(h.createdAt), note: h.note })), files: files.map((f) => ({ ...f, url: `/api/satpam/attachments/${f.id}` })) }
   }
 
   async pending(cursor?: string): Promise<SatpamPage<SatpamPendingHandover>> {
     const after = cursorValue(cursor)
     const criteria = and(isNull(reportHandovers.id), isNull(lostFoundMatches.completedAt))!
     const [rows, totals] = await Promise.all([
-      this.db.select({ id: lostFoundMatches.id, lossTicket: lost.ticketNumber, foundTicket: found.ticketNumber, title: lost.title, reporter: users.name, matchedAt: lostFoundMatches.matchedAt, lossSubmittedAt: lost.submittedAt, foundSubmittedAt: found.submittedAt }).from(lostFoundMatches)
-        .innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId)).innerJoin(users, eq(users.id, lost.reporterId))
+      this.db.select({ id: lostFoundMatches.id, lossTicket: lost.ticketNumber, foundTicket: found.ticketNumber, title: lost.title, reporter: sql<string>`case when ${satpamLossReports.id} is not null then coalesce(${satpamLossReports.ownerName}, 'Pelapor langsung') else ${users.name} end`, matchedAt: lostFoundMatches.matchedAt, lossSubmittedAt: lost.submittedAt, foundSubmittedAt: found.submittedAt }).from(lostFoundMatches)
+        .innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId)).innerJoin(users, eq(users.id, lost.reporterId)).leftJoin(satpamLossReports, eq(satpamLossReports.id, lost.id))
         .leftJoin(reportHandovers, eq(reportHandovers.matchId, lostFoundMatches.id))
         .where(and(criteria, after ? or(lt(lostFoundMatches.matchedAt, after.date), and(eq(lostFoundMatches.matchedAt, after.date), lt(lostFoundMatches.id, after.id))) : undefined))
         .orderBy(desc(lostFoundMatches.matchedAt), desc(lostFoundMatches.id)).limit(pageSize + 1),
@@ -125,13 +128,13 @@ export class DrizzleSatpamRepository implements SatpamRepository {
           .innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId))
           .leftJoin(reportHandovers, eq(reportHandovers.matchId, lostFoundMatches.id))
           .where(and(isNull(reportHandovers.id), isNull(lostFoundMatches.completedAt), eq(lost.category, "kehilangan-temuan"), eq(found.category, "kehilangan-temuan"), eq(lost.handlerRole, "satpam"), eq(found.handlerRole, "satpam"))),
-        tx.select({ id: reports.id, ticket: reports.ticketNumber, kind: reportLostFoundDetails.kind, title: reports.title, location: reports.locationText, status: reports.status, submittedAt: reports.submittedAt })
+        tx.select({ id: reports.id, ticket: reports.ticketNumber, kind: reportLostFoundDetails.kind, title: reports.title, location: reports.locationText, status: reports.status, submittedAt: reports.submittedAt, firstOpenedAt: reports.firstOpenedAt, firstOpenedTracking: reports.firstOpenedTracking })
           .from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id))
           .where(and(scope, notInArray(reports.status, ["selesai", "ditolak"])))
           .orderBy(asc(reports.submittedAt), asc(reports.id)).limit(5),
         tx.select({ count: sql<number>`count(*)::integer` }).from(satpamInventory).where(eq(satpamInventory.status, "tersimpan")),
       ])
-      return { ...totals[0], storedItems: inventory[0].count, readyForHandover: handovers[0].count, queue: queue.map((row) => ({ ...row, kind: row.kind as "kehilangan" | "temuan", status: statusLabels[row.status] as SatpamReportStatus, submittedAt: dateLabel(row.submittedAt) })), updatedAt: dateLabel(new Date()) }
+      return { ...totals[0], storedItems: inventory[0].count, readyForHandover: handovers[0].count, queue: queue.map((row) => ({ ...row, unopened: row.firstOpenedTracking && !row.firstOpenedAt, kind: row.kind as "kehilangan" | "temuan", status: statusLabels[row.status] as SatpamReportStatus, submittedAt: dateLabel(row.submittedAt) })), updatedAt: dateLabel(new Date()) }
     }, { isolationLevel: "repeatable read", accessMode: "read only" })
   }
 
@@ -140,15 +143,36 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       const [account] = await tx.select({ name: users.name }).from(users).where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true))).for("share")
       if (!account) throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
       const now = new Date()
-      const update = async (rows: Array<typeof reports.$inferSelect>, target: ReportStatus, note: string) => {
+      const update = async (rows: Array<typeof reports.$inferSelect>, target: ReportStatus, note: string, exceptional = false, notify = true, at = now) => {
         for (const r of rows) {
-          assertTransition("kehilangan-temuan", r.status, target)
-          await tx.update(reports).set({ status: target, updatedAt: now, completedAt: target === "selesai" ? now : null }).where(eq(reports.id, r.id))
-          await tx.insert(reportStatusHistory).values({ reportId: r.id, actorId: actor.id, actorName: account.name, fromStatus: r.status, toStatus: target, note, createdAt: now })
-          await tx.insert(notifications).values({ recipientId: r.reporterId, reportId: r.id, kind: "status", title: `Laporan ${statusLabels[target].toLowerCase()}`, description: `${r.ticketNumber}: ${note || statusLabels[target]}`, createdAt: now })
+          if (!exceptional) assertTransition("kehilangan-temuan", r.status, target)
+          await tx.update(reports).set({ status: target, updatedAt: at, completedAt: target === "selesai" ? at : null }).where(eq(reports.id, r.id))
+          await tx.insert(reportStatusHistory).values({ reportId: r.id, actorId: actor.id, actorName: account.name, fromStatus: r.status, toStatus: target, note, createdAt: at })
+          if (notify) await tx.insert(notifications).values({ recipientId: r.reporterId, reportId: r.id, kind: "status", title: `Laporan ${statusLabels[target].toLowerCase()}`, description: `${r.ticketNumber}: ${note || statusLabels[target]}`, createdAt: at })
         }
       }
-      if (command.type === "match") {
+      if (command.type === "cancel-match") {
+        const [pair] = await tx.select().from(lostFoundMatches).where(eq(lostFoundMatches.id, command.matchId))
+        if (!pair) throw new ReportError("Pasangan sudah berubah. Muat ulang data.", 409)
+        const rows = await this.lockPair(tx, pair)
+        const [handover] = await tx.select({ id: reportHandovers.id }).from(reportHandovers).where(eq(reportHandovers.matchId, pair.id))
+        if (handover || pair.completedAt || rows.some(row => row.status !== "barang_teridentifikasi")) throw new ReportError("Penyerahan yang sudah tercatat tidak dapat dibatalkan.", 409)
+        await tx.insert(operationalAudit).values({ actorId: actor.id, actorName: account.name, entity: "satpam_match", entityId: pair.id, action: "cancel", before: pair, after: { reason: command.note } })
+        await tx.delete(lostFoundMatches).where(eq(lostFoundMatches.id, pair.id))
+        await update(rows, "diproses", `Kecocokan dibatalkan: ${command.note}`, true)
+      } else if (command.type === "close") {
+        const [report] = await tx.select().from(reports).where(and(scope, eq(reports.ticketNumber, command.ticket))).for("update")
+        if (!report) throw new ReportError("Laporan tidak ditemukan.", 404)
+        if (report.status !== command.expectedStatus) throw new ReportError("Status telah berubah. Muat ulang laporan.", 409)
+        const [pair] = await tx.select({ id: lostFoundMatches.id }).from(lostFoundMatches).where(or(eq(lostFoundMatches.lossReportId, report.id), eq(lostFoundMatches.foundReportId, report.id)))
+        const [item] = await tx.select({ id: satpamInventory.id }).from(satpamInventory).where(eq(satpamInventory.sourceFoundReportId, report.id))
+        if (pair || item) throw new ReportError("Laporan masih terhubung dengan pasangan atau Inventaris. Tangani barang atau batalkan pasangan terlebih dahulu.", 409)
+        const [detail] = await tx.select().from(reportLostFoundDetails).where(eq(reportLostFoundDetails.reportId, report.id))
+        if (command.reason === "self_found" && detail?.kind !== "kehilangan") throw new ReportError("Alasan ditemukan sendiri hanya untuk laporan Kehilangan.")
+        const label = { self_found: "Barang ditemukan sendiri oleh pemilik", withdrawn: "Laporan ditarik pelapor", duplicate: "Laporan duplikat" }[command.reason]
+        await tx.insert(operationalAudit).values({ actorId: actor.id, actorName: account.name, entity: "satpam_report", entityId: report.id, action: "close", before: { status: report.status }, after: { status: "selesai", reason: command.reason, note: command.note } })
+        await update([report], "selesai", `${label}. ${command.note}`, true)
+      } else if (command.type === "match") {
         // All workflows lock report UUIDs in the same order to avoid crossed-pair deadlocks.
         const rows = await tx.select().from(reports).where(and(scope, inArray(reports.ticketNumber, [command.lossTicket, command.foundTicket]))).orderBy(asc(reports.id)).for("update")
         const loss = rows.find((r) => r.ticketNumber === command.lossTicket), foundReport = rows.find((r) => r.ticketNumber === command.foundTicket)
@@ -164,14 +188,24 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         await update([loss], "barang_teridentifikasi", `Dicocokkan dengan tiket ${foundReport.ticketNumber}.`)
         await update([foundReport], "barang_teridentifikasi", `Dicocokkan dengan tiket ${loss.ticketNumber}.`)
       } else if (command.type === "handover") {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${command.submissionKey}, 0))`)
+        const fingerprint = createHash("sha256").update(JSON.stringify({ actor: actor.id, ...command })).digest("hex")
+        const [retry] = await tx.select().from(reportHandovers).where(eq(reportHandovers.submissionKey, command.submissionKey))
+        if (retry) {
+          if (retry.submissionFingerprint !== fingerprint) throw new ReportError("Kunci penyerahan telah digunakan untuk data berbeda.", 409)
+          return
+        }
         const [pair] = await tx.select().from(lostFoundMatches).where(eq(lostFoundMatches.id, command.matchId))
         if (!pair) throw new ReportError("Pasangan laporan tidak ditemukan.", 404)
         const rows = await this.lockPair(tx, pair)
         const [officer] = await tx.select().from(securityOfficers).where(and(eq(securityOfficers.id, command.officerId), eq(securityOfficers.isActive, true))).for("share")
         if (!officer) throw new ReportError("Petugas tidak tersedia atau sudah nonaktif.")
         if (rows.some((r) => r.status !== "barang_teridentifikasi") || pair.completedAt) throw new ReportError("Pasangan sudah berubah atau telah diserahkan. Muat ulang data.", 409)
-        await tx.insert(reportHandovers).values({ matchId: pair.id, officerId: officer.id, officerName: officer.name, actorId: actor.id, actorName: account.name, recipient: command.recipient, location: command.location, note: command.note, handedOverAt: now })
-        await update(rows, "diserahkan", `Barang diterima oleh ${command.recipient}. Petugas penyerahan: ${officer.name}. Lokasi: ${command.location}.${command.note ? ` ${command.note}` : ""}`)
+        await tx.insert(reportHandovers).values({ matchId: pair.id, submissionKey: command.submissionKey, submissionFingerprint: fingerprint, ownershipEvidence: command.ownershipEvidence, officerId: officer.id, officerName: officer.name, actorId: actor.id, actorName: account.name, recipient: command.recipient, location: command.location, note: command.note, handedOverAt: now })
+        await update(rows, "diserahkan", `Barang diterima oleh ${command.recipient}. Petugas: ${officer.name}. Pemeriksaan: ${command.ownershipEvidence}.${command.note ? ` ${command.note}` : ""}`, false, false)
+        const finishedAt = new Date(now.getTime() + 1)
+        await update(rows.map(row => ({ ...row, status: "diserahkan" as const })), "selesai", "Penyerahan dikonfirmasi; laporan selesai.", false, true, finishedAt)
+        await tx.update(lostFoundMatches).set({ completedAt: finishedAt }).where(eq(lostFoundMatches.id, pair.id))
       } else {
         if (command.status === "selesai") {
           const [report] = await tx.select({ id: reports.id }).from(reports).where(and(scope, eq(reports.ticketNumber, command.ticket)))
@@ -195,6 +229,8 @@ export class DrizzleSatpamRepository implements SatpamRepository {
   }
   private async lockPair(tx: Transaction, pair: typeof lostFoundMatches.$inferSelect) {
     const rows = await tx.select().from(reports).where(and(scope, inArray(reports.id, [pair.lossReportId, pair.foundReportId]))).orderBy(asc(reports.id)).for("update")
+    const [current] = await tx.select({ id: lostFoundMatches.id }).from(lostFoundMatches).where(eq(lostFoundMatches.id, pair.id))
+    if (!current) throw new ReportError("Pasangan telah berubah. Muat ulang data.", 409)
     if (rows.length !== 2) throw new ReportError("Pasangan laporan tidak valid.", 409)
     return rows
   }
@@ -250,6 +286,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
   listInventory(filter: InventoryFilter) { return new DrizzleInventoryRepository(this.db).list(filter) }
   getInventoryItem(id: string) { return new DrizzleInventoryRepository(this.db).detail(id) }
   createInventory(actor: ReportActor, raw: unknown, photo?: InventoryPhoto) { return new DrizzleInventoryRepository(this.db).create(actor, raw, photo) }
+  correctInventory(actor: ReportActor, id: string, raw: unknown) { return new DrizzleInventoryRepository(this.db).correct(actor, id, raw) }
   handoverInventory(actor: ReportActor, raw: unknown) { return new DrizzleInventoryRepository(this.db).handover(actor, raw) }
 
   async getInventoryPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null> {
@@ -304,13 +341,6 @@ export class DrizzleSatpamRepository implements SatpamRepository {
 
   async createLossReport(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string; size?: number }): Promise<LossReport> {
     const input = validateCreateLossReport(raw as CreateLossReportInput)
-    const [account] = await this.db
-      .select({ name: users.name })
-      .from(users)
-      .where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true)))
-      .limit(1)
-    if (!account) throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
-
     const now = new Date()
     const currentWib = getIncidentDateTimeInWib(now)
     const incidentDate = input.incidentDate || currentWib.incidentDate
@@ -320,6 +350,25 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const locationText = input.location?.trim() || "Lingkungan Kampus JTI"
 
     return await this.db.transaction(async (tx) => {
+      const [account] = await tx.select({ name: users.name }).from(users).where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true))).for("share")
+      if (!account || actor.role !== "satpam") throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
+      let draftPhoto: typeof reportAttachments.$inferSelect | undefined
+      if (input.submissionKey) {
+        if (storedPhoto) throw new ReportError("Foto harus disimpan ke draft sebelum dikirim.")
+        const [draft] = await tx.select().from(reportDrafts).where(eq(reportDrafts.id, input.submissionKey)).for("update")
+        if (!draft || draft.reporterId !== actor.id || draft.schemaVersion !== 2) throw new ReportError("Draft tidak ditemukan.", 404)
+        if (draft.revision !== Number(input.draftRevision)) throw new ReportError("Draft telah berubah. Muat ulang sebelum mengirim.", 409)
+        const saved = parseSatpamDraft(draft.payload)
+        const matches = saved.kind === "kehilangan" && saved.ownerName.trim() === (input.ownerName ?? "") && saved.ownerContact.trim() === (input.ownerContact ?? "") && saved.title.trim() === (input.title ?? "") && saved.itemName.trim() === input.itemName && saved.location.trim() === (input.location ?? "") && saved.description.trim() === input.description && saved.description.trim().slice(0, 2000).trim() === input.characteristics && (saved.useCustomTime ? saved.incidentDate : "") === (input.incidentDate ?? "") && (saved.useCustomTime ? saved.incidentTime : "") === (input.incidentTime ?? "")
+        if (!matches) throw new ReportError("Isian berbeda dari draft yang tersimpan. Simpan draft sebelum mengirim.", 409)
+        if (draft.submittedReportId) {
+          const [existing] = await tx.select({ report: reports, loss: satpamLossReports }).from(reports).innerJoin(satpamLossReports, eq(satpamLossReports.id, reports.id)).where(and(eq(reports.id, draft.submittedReportId), eq(reports.reporterId, actor.id))).limit(1)
+          if (!existing) throw new ReportError("Laporan tidak ditemukan.", 404)
+          return { ...this.lossReportView(existing.loss), ticket: existing.report.ticketNumber, ticketNumber: existing.report.ticketNumber }
+        }
+        ;[draftPhoto] = await tx.select().from(reportAttachments).where(and(eq(reportAttachments.draftId, draft.id), eq(reportAttachments.ownerId, actor.id))).limit(1)
+      }
+      const finalPhoto = draftPhoto ?? storedPhoto
       // 1. Generate unique sequential ticket code LJ-YYYY-XXXXX
       const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Jakarta" }).format(now))
       const [counter] = await tx
@@ -334,7 +383,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         .insert(reports)
         .values({
           ticketNumber,
-          submissionKey: randomUUID(),
+          submissionKey: input.submissionKey ?? randomUUID(),
           reporterId: actor.id,
           category: "kehilangan-temuan",
           title,
@@ -357,9 +406,11 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         itemDetails: input.characteristics || input.description,
       })
 
-      const photoId = storedPhoto ? randomUUID() : undefined
+      const photoId = finalPhoto ? randomUUID() : undefined
       // 4. Attach photo if available
-      if (storedPhoto) {
+      if (draftPhoto) {
+        await tx.update(reportAttachments).set({ reportId: reportRow.id, draftId: null }).where(eq(reportAttachments.id, draftPhoto.id))
+      } else if (storedPhoto) {
         await tx.insert(reportAttachments).values({
           id: photoId!,
           ownerId: actor.id,
@@ -398,14 +449,16 @@ export class DrizzleSatpamRepository implements SatpamRepository {
           characteristics: input.characteristics || input.description,
           description: input.description,
           photoUrl: input.photoUrl,
-          photoStorageKey: storedPhoto?.storageKey,
-          photoMimeType: storedPhoto?.mimeType,
-          photoName: storedPhoto?.name,
+          photoStorageKey: finalPhoto?.storageKey,
+          photoMimeType: finalPhoto?.mimeType,
+          photoName: finalPhoto?.name,
           registeredBy: actor.id,
           registeredByName: account.name,
           createdAt: now,
         })
         .returning()
+
+      if (input.submissionKey) await tx.update(reportDrafts).set({ submittedReportId: reportRow.id, updatedAt: now }).where(eq(reportDrafts.id, input.submissionKey))
 
       return {
         ...this.lossReportView(inserted),

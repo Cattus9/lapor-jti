@@ -127,6 +127,20 @@
       "when": 1792939035447,
       "tag": "0017_satpam_walk_in_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793414267244,
+      "tag": "0018_report_first_opened",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793416344522,
+      "tag": "0019_satpam_draft_owner_kind",
+      "breakpoints": true
     }
   ]
 }

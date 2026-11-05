@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { ClipboardList, MapPin, MessageSquareText, Search } from "lucide-react"
 import { useDebouncedOperationalQuery } from "@/components/reports/use-operational-data"
+import { UnopenedReportBadge } from "@/components/reports/report-opening"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -45,7 +46,7 @@ function ReportList({ page, openReport, retry }: { page: ReturnType<typeof useMa
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
               <span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : `Dikirim ${report.submittedAt}`}</span>
-              <ManagementStatusBadge status={report.status} />
+              <UnopenedReportBadge unseen={report.unopened} /><ManagementStatusBadge status={report.status} />
               <Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" aria-haspopup="dialog" disabled={page.loading || Boolean(page.error)} onClick={(event) => openReport(report, event.currentTarget)}>Lihat detail</Button>
             </div>
           </article>

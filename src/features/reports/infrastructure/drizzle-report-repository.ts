@@ -1,4 +1,5 @@
 import "server-only"
+import { operationalAudit } from "@/db/operations-schema"
 import { and, desc, eq, gte, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { sequentialQueries } from "@/db/sequential"
@@ -163,7 +164,7 @@ export class DrizzleReportRepository implements ReportRepository {
 
     const [rows, drafts, selected, olderRow] = await sequentialQueries([
       this.db.select(listColumns).from(reports).where(conditions).orderBy(desc(reports.submittedAt), desc(reports.id)).limit(pageSize + 1),
-      this.db.select({ id: reportDrafts.id, payload: reportDrafts.payload, updatedAt: reportDrafts.updatedAt }).from(reportDrafts).where(and(eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId), draftAfter ? or(lt(reportDrafts.updatedAt, draftAfter.date), and(eq(reportDrafts.updatedAt, draftAfter.date), lt(reportDrafts.id, draftAfter.id))) : undefined)).orderBy(desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(pageSize + 1),
+      this.db.select({ id: reportDrafts.id, payload: reportDrafts.payload, updatedAt: reportDrafts.updatedAt }).from(reportDrafts).where(and(eq(reportDrafts.reporterId, ownerId), eq(reportDrafts.schemaVersion, 1), isNull(reportDrafts.submittedReportId), draftAfter ? or(lt(reportDrafts.updatedAt, draftAfter.date), and(eq(reportDrafts.updatedAt, draftAfter.date), lt(reportDrafts.id, draftAfter.id))) : undefined)).orderBy(desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(pageSize + 1),
       ticket ? this.db.select(listColumns).from(reports).where(and(eq(reports.reporterId, ownerId), eq(reports.ticketNumber, ticket))).limit(1) : Promise.resolve([]),
       olderConditions ? this.db.select({ maxDate: sql<string | null>`max(${reports.submittedAt})::text` }).from(reports).where(olderConditions) : Promise.resolve([]),
     ])
@@ -207,7 +208,7 @@ export class DrizzleReportRepository implements ReportRepository {
     return rows.map((row) => draftView(row, files.filter((file) => file.draftId === row.id)))
   }
   async draft(ownerId: string, id: string) {
-    const [row] = await this.db.select().from(reportDrafts).where(and(eq(reportDrafts.id, id), eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId))).limit(1)
+    const [row] = await this.db.select().from(reportDrafts).where(and(eq(reportDrafts.id, id), eq(reportDrafts.reporterId, ownerId), eq(reportDrafts.schemaVersion, 1), isNull(reportDrafts.submittedReportId))).limit(1)
     if (!row) return null
     const files = await this.db.select().from(reportAttachments).where(and(eq(reportAttachments.draftId, row.id), eq(reportAttachments.ownerId, ownerId)))
     return draftView(row, files)
@@ -233,7 +234,9 @@ export class DrizzleReportRepository implements ReportRepository {
       const [detail] = await this.db.select().from(reportOtherDetails).where(eq(reportOtherDetails.reportId, id))
       if (detail) fields = [{ label: "Kategori umum", value: detail.categoryText }]
     }
-    return { ...listItem(row), detail: {
+    const [closure] = row.category === "kehilangan-temuan" && row.status === "selesai" ? await this.db.select({ after: operationalAudit.after }).from(operationalAudit).where(and(eq(operationalAudit.entity, "satpam_report"), eq(operationalAudit.entityId, row.id), eq(operationalAudit.action, "close"))).orderBy(desc(operationalAudit.createdAt)).limit(1) : []
+    const closureNote = closure ? `Ditutup tanpa penyerahan barang. ${String((closure.after as { note?: string })?.note ?? "")}` : undefined
+    return { ...listItem(row), closureNote, detail: {
       incidentDate: new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(row.incidentDate + "T00:00:00+07:00")),
       incidentTime: row.incidentTime.slice(0, 5).replace(":", "."), location: row.locationText, description: row.description, fields,
       attachments: files.map((file) => ({ id: file.id, name: file.name, type: file.mimeType.startsWith("image/") ? "image" : "document", downloadUrl: `/api/pelapor/attachments/${file.id}`, previewUrl: file.mimeType.startsWith("image/") ? `/api/pelapor/attachments/${file.id}?preview=1` : undefined })),

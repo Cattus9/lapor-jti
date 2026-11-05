@@ -71,7 +71,7 @@ export class DrizzleManagementRepository implements ManagementRepository {
     return rows.map(({ report: r, reporter, unit }) => {
       const service = serviceMap.get(r.id)
       const context = service?.serviceName ?? otherMap.get(r.id) ?? lostMap.get(r.id) ?? objects.get(r.id)?.join(", ") ?? categoryLabels[r.category]
-      return { id: r.id, ticket: r.ticketNumber, title: r.title, category: categoryLabels[r.category], categoryKey: r.category,
+      return { id: r.id, firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status), ticket: r.ticketNumber, title: r.title, category: categoryLabels[r.category], categoryKey: r.category,
         status: statusLabels[r.status] as MonitoringReportStatus, statusKey: r.status, handler: handlerLabels[r.handlerRole], reporter, reporterUnit: unit ?? "Belum diisi",
         service: context, context, program: service?.program, location: r.locationText, submittedAt: dateLabel(r.submittedAt), submittedAtIso: r.submittedAt.toISOString(), reportedOn: dayLabel(r.submittedAt),
         updatedAt: dateLabel(r.updatedAt), completedOn: r.completedAt ? dayLabel(r.completedAt) : undefined, completedAt: r.completedAt ? dateLabel(r.completedAt) : undefined, description: r.description, attachments: countMap.get(r.id) ?? 0,

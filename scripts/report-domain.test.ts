@@ -87,10 +87,10 @@ test("routing depends on category, not an input role", () => {
   assert.throws(() => requireReporter({ ...actor, role: "teknisi" }), ReportError)
 })
 test("lifecycle rejects skipped, terminal, and category-incompatible transitions", () => {
-  assertTransition("fasilitas", "baru", "diverifikasi")
+  assertTransition("fasilitas", "baru", "selesai")
   assertTransition("layanan", "baru", "diproses")
   assertTransition("kehilangan-temuan", "baru", "ditolak")
-  for (const [category, from, to] of [["fasilitas", "baru", "selesai"], ["layanan", "baru", "diverifikasi"], ["fasilitas", "diserahkan", "baru"], ["fasilitas", "selesai", "baru"]] as const) assert.throws(() => assertTransition(category, from, to), ReportError)
+  for (const [category, from, to] of [["fasilitas", "baru", "diverifikasi"], ["layanan", "baru", "diverifikasi"], ["fasilitas", "diserahkan", "baru"], ["fasilitas", "selesai", "baru"]] as const) assert.throws(() => assertTransition(category, from, to), ReportError)
 })
 test("attachment limits and signature validation are enforced without UI", () => {
   const file = { name: "bukti.pdf", mimeType: "application/pdf", bytes: new TextEncoder().encode("%PDF-1.7\n") }

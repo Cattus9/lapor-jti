@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "satpam_drafts_owner_kind_active_unique" ON "report_drafts" USING btree ("reporter_id",("payload"->>'kind')) WHERE "report_drafts"."schema_version" = 2 and "report_drafts"."submitted_report_id" is null;

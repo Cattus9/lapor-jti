@@ -47,7 +47,8 @@ test("Dashboard SQL prioritizes the five oldest active scoped reports, includes 
         assert.equal(result.foundReports, baseline.foundReports + 3)
         assert.equal(result.newFindings, baseline.newFindings + 1)
         assert.equal(result.readyForHandover, baseline.readyForHandover + 1, "A matched pair counts once, not twice")
-        assert.deepEqual(Object.keys(result.queue[0]).sort(), ["id", "ticket", "kind", "title", "location", "status", "submittedAt"].sort())
+        assert.deepEqual(Object.keys(result.queue[0]).sort(), ["id", "ticket", "kind", "title", "location", "status", "submittedAt", "firstOpenedAt", "firstOpenedTracking", "unopened"].sort())
+        assert.equal(result.queue[0].unopened, true)
         throw rollback
       })
     } catch (error) { if (error !== rollback) throw error }

@@ -104,11 +104,11 @@ export function InventoryResults({ items, loading, error, filtered, onSelect, on
   items: InventoryItem[]; loading: boolean; error?: string; filtered: boolean
   onSelect: (item: InventoryItem) => void; onRetry: () => void
 }) {
-  if (loading && !items.length) return <div role="status" aria-label="Memuat inventaris" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <Card key={index} className="gap-3 rounded-xl border border-border p-4 shadow-none ring-0"><Skeleton className="aspect-video w-full rounded-lg" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></Card>)}</div>
+  if (loading && !items.length) return <div role="status" aria-label="Memuat inventaris" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 6 }, (_, index) => <Card key={index} className="gap-3 rounded-xl border border-border p-4 shadow-none ring-0"><Skeleton className="aspect-video w-full rounded-lg" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></Card>)}</div>
 
   return <div className="space-y-4">
     {error ? <div role="alert" className="space-y-3 rounded-xl border border-border bg-empty-surface p-4"><FieldError>{error}</FieldError><Button type="button" variant="outline" size="sm" onClick={onRetry}>Coba lagi</Button></div> : null}
-    {items.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{items.map((item) => <InventoryCard key={item.id} item={item} disabled={loading || Boolean(error)} onClick={() => onSelect(item)} />)}</div> : !loading && !error ? (
+    {items.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{items.map((item) => <InventoryCard key={item.id} item={item} disabled={loading || Boolean(error)} onClick={() => onSelect(item)} />)}</div> : !loading && !error ? (
       <CollectionEmptyState icon={filtered ? Search : PackageSearch} title={filtered ? "Tidak ada barang yang sesuai" : "Belum ada barang inventaris"} description={filtered ? "Ubah kata kunci atau reset filter untuk melihat barang lain." : "Barang temuan yang dicatat di Pos Satpam akan tampil di sini. Gunakan Tambah barang untuk mencatatnya."} />
     ) : null}
   </div>
@@ -146,7 +146,7 @@ function InventoryCard({
       {/* Top Image Area */}
       <div className="relative aspect-4/3 w-full overflow-hidden bg-muted/40 p-2 border-b border-border/40">
         <div className="relative h-full w-full overflow-hidden rounded-xl bg-muted/60">
-          <InventoryPhoto key={item.photoUrl ?? "empty"} url={item.photoUrl} name={item.itemName} sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-cover transition-transform duration-200 motion-safe:group-hover:scale-105 motion-reduce:transition-none" />
+          <InventoryPhoto key={item.photoUrl ?? "empty"} url={item.photoUrl} name={item.itemName} sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-cover transition-transform duration-200 motion-safe:group-hover:scale-105 motion-reduce:transition-none" />
 
           {/* Top-Left Founder Badge */}
           <Badge variant="outline" tone="neutral" className="absolute top-2 left-2 h-auto gap-1.5 rounded-lg px-2.5 py-1">

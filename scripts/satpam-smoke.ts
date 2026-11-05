@@ -7,7 +7,7 @@ import { join, resolve } from "node:path"
 import { eq, inArray, or } from "drizzle-orm"
 import { hashPassword } from "better-auth/crypto"
 import { createDatabaseClient } from "../src/db/client"
-import { accounts, users, reports, reportDrafts, reportAttachments, reportLostFoundDetails, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory } from "../src/db/schema"
+import { accounts, users, reports, reportDrafts, reportAttachments, reportLostFoundDetails, reportStatusHistory, notifications, securityOfficers, lostFoundMatches, reportHandovers, satpamInventory, operationalAudit } from "../src/db/schema"
 import { emptyReportPayload, type ReportPayload } from "../src/features/reports/domain/report"
 import { getTodayInWib } from "../src/features/reports/domain/report-date"
 
@@ -88,7 +88,7 @@ async function main() {
     assert.ok(pairRows.every((r) => r.status === "barang_teridentifikasi"))
     console.log("PASS: sequential lifecycle, concurrent status conflict and crossed matching (one winner, no partial pair)")
 
-    const handover = { type: "handover", matchId: pair.id, officerId: officerIds[0], recipient: "Penerima uji", location: "Pos Satpam", note: "Identitas diperiksa.", officerName: "Nama palsu", actorId: userIds[0] }
+    const handover = { ownershipEvidence: "Menjelaskan ciri khusus barang", submissionKey: randomUUID(), type: "handover", matchId: pair.id, officerId: officerIds[0], recipient: "Penerima uji", location: "Pos Satpam", note: "Identitas diperiksa.", officerName: "Nama palsu", actorId: userIds[0] }
     assert.equal((await command({ ...handover, officerId: undefined })).status, 400)
     assert.equal((await command({ ...handover, officerId: officerIds[2] })).status, 400)
     assert.equal((await command({ ...handover, officerId: randomUUID() })).status, 400)
@@ -104,13 +104,13 @@ async function main() {
     assert.ok(["Petugas uji pertama", "Petugas uji kedua"].includes(snapshotName))
     await db.update(securityOfficers).set({ name: "Petugas uji diubah", isActive: false }).where(eq(securityOfficers.id, winningOfficer))
     const history = await (await request(`/api/satpam/history?officerId=${winningOfficer}`, cookies[1])).json()
-    assert.equal(history.items[0].handler, snapshotName); assert.equal(history.items[0].status, "Diserahkan")
+    assert.equal(history.items[0].handler, snapshotName); assert.equal(history.items[0].status, "Selesai")
     const both = await db.select().from(reports).where(inArray(reports.id, [pair.lossReportId, pair.foundReportId]))
-    assert.ok(both.every((r) => r.status === "diserahkan" && r.completedAt === null))
+    assert.ok(both.every((r) => r.status === "selesai" && r.completedAt !== null))
     const events = await db.select().from(reportStatusHistory).where(inArray(reportStatusHistory.reportId, both.map((r) => r.id)))
     assert.equal(events.filter((event) => event.toStatus === "diserahkan").length, 2)
     assert.ok(events.filter((event) => event.toStatus === "diserahkan").every((event) => event.note.includes(snapshotName)))
-    assert.equal((await command({ type: "status", ticket: loss.ticketNumber, status: "selesai" })).status, 200)
+    assert.equal((await command(handover, cookies[userIds.indexOf(recorded[0].actorId!)])).status, 200)
     const closed = await db.select().from(reports).where(inArray(reports.id, both.map((r) => r.id)))
     assert.ok(closed.every((r) => r.status === "selesai" && r.completedAt !== null))
     assert.equal((await command({ type: "status", ticket: loss.ticketNumber, status: "selesai" })).status, 409)
@@ -188,6 +188,19 @@ async function main() {
     assert.equal(photo.headers.get("cache-control"), "private, no-store")
     assert.equal((await request(inventory.photoUrl, cookies[0])).status, 403)
     assert.equal((await request("/api/satpam/inventory", cookies[1], { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemName: "External", photoUrl: "https://example.test/item.png" }) })).status, 400)
+    const receiptSource = await submit("Temuan") as { id: string; ticketNumber: string }
+    const correction = { itemName: `Inventory HTTP ${tag}`, description: "Nama dan lokasi diperjelas", storageLocation: "Lemari pos", sourceFoundTicket: receiptSource.ticketNumber, reason: "Menghubungkan laporan asal", version: inventory.version }
+    const correct = (cookie: string, requestOrigin = origin) => request(`/api/satpam/inventory/${inventory.id}`, cookie, { method: "PATCH", headers: { "Content-Type": "application/json", Origin: requestOrigin }, body: JSON.stringify(correction) })
+    assert.equal((await correct(cookies[0])).status, 403)
+    assert.equal((await correct(cookies[1], "https://untrusted.example.invalid")).status, 403)
+    const corrected = await correct(cookies[1]); assert.equal(corrected.status, 200)
+    assert.equal((await corrected.json()).sourceFoundTicket, receiptSource.ticketNumber)
+    assert.equal((await correct(cookies[1])).status, 409)
+    const closedWithoutReturn = await submit("Kehilangan") as { id: string; ticketNumber: string }
+    assert.equal((await command({ type: "close", ticket: closedWithoutReturn.ticketNumber, expectedStatus: "baru", reason: "self_found", note: "Pemilik mengonfirmasi sudah ditemukan." })).status, 200)
+    const closedDetail = await (await request(`/api/pelapor/reports/${closedWithoutReturn.id}`, cookies[0])).json()
+    assert.match(closedDetail.closureNote, /tanpa penyerahan/)
+    console.log("PASS: correction role/origin/version guards, explicit finding linkage and honest self-found closure")
     const inventoryLoss = await submit("Kehilangan") as { id: string; ticketNumber: string }
     const returnInput = { officerId: officerIds[1], recipient: "Pemilik inventaris", ownershipEvidence: "Ciri khusus terkonfirmasi", submissionKey: randomUUID(), lossTicket: inventoryLoss.ticketNumber }
     // The earlier shared-flow test may have retired this officer; restore only our own fixture.
@@ -218,6 +231,7 @@ async function main() {
       if (draftIds.length) await db.delete(reportDrafts).where(inArray(reportDrafts.id, draftIds))
       if (reportIds.length) await db.delete(reports).where(inArray(reports.id, reportIds))
       if (officerIds.length) await db.delete(securityOfficers).where(inArray(securityOfficers.id, officerIds))
+      if (userIds.length) await db.delete(operationalAudit).where(inArray(operationalAudit.actorId, userIds))
       if (userIds.length) await db.delete(users).where(inArray(users.id, userIds))
       const root = resolve(process.env.REPORT_UPLOAD_DIR!)
       for (const file of [...files, ...inventoryRows.filter(r => r.photoStorageKey).map(r => ({ key: r.photoStorageKey! }))]) {

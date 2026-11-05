@@ -27,6 +27,7 @@ export const reports = pgTable("reports", {
   locationId: text("location_id").references(() => locations.id, { onDelete: "restrict" }), locationText: text("location_text").notNull(),
   handlerRole: reportHandler("handler_role").notNull(), status: reportStatus("status").notNull().default("baru"),
   submittedAt: timestamp("submitted_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(), completedAt: timestamp("completed_at", { withTimezone: true, precision: 3 }),
+  firstOpenedAt: timestamp("first_opened_at", { withTimezone: true, precision: 3 }), firstOpenedTracking: boolean("first_opened_tracking").notNull().default(true),
   ...auditDates(),
 }, (t) => [
   index("reports_reporter_date_idx").on(t.reporterId, t.submittedAt.desc(), t.id.desc()),
@@ -55,7 +56,7 @@ export const reportDrafts = pgTable("report_drafts", {
   id: uuid("id").primaryKey(), reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "restrict" }),
   payload: jsonb("payload").$type<ReportPayload>().notNull(), schemaVersion: integer("schema_version").notNull().default(1), revision: integer("revision").notNull().default(0),
   submittedReportId: uuid("submitted_report_id").references(() => reports.id, { onDelete: "restrict" }), ...auditDates(),
-}, (t) => [index("drafts_reporter_updated_idx").on(t.reporterId, t.updatedAt.desc(), t.id.desc()).where(sql`${t.submittedReportId} is null`), check("draft_revision_check", sql`${t.revision} >= 0 and ${t.schemaVersion} > 0`)])
+}, (t) => [index("drafts_reporter_updated_idx").on(t.reporterId, t.updatedAt.desc(), t.id.desc()).where(sql`${t.submittedReportId} is null`), uniqueIndex("satpam_drafts_owner_kind_active_unique").on(t.reporterId, sql`(${t.payload}->>'kind')`).where(sql`${t.schemaVersion} = 2 and ${t.submittedReportId} is null`), check("draft_revision_check", sql`${t.revision} >= 0 and ${t.schemaVersion} > 0`)])
 export const reportAttachments = pgTable("report_attachments", {
   id: uuid("id").primaryKey(), ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "restrict" }),
   reportId: uuid("report_id").references(() => reports.id, { onDelete: "cascade" }), draftId: uuid("draft_id").references(() => reportDrafts.id, { onDelete: "cascade" }),

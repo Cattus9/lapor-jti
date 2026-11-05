@@ -1,5 +1,5 @@
 import { validateSatpamIncident } from "./incident-time"
-import { ReportError } from "../../reports/domain/report"
+import { isUuid, ReportError } from "../../reports/domain/report"
 
 export type LossReport = {
   id: string
@@ -18,6 +18,8 @@ export type LossReport = {
 }
 
 export type CreateLossReportInput = {
+  submissionKey?: string
+  draftRevision?: string
   ownerName?: string
   ownerContact?: string
   title?: string
@@ -33,6 +35,8 @@ export type CreateLossReportInput = {
 export function validateCreateLossReport(input: CreateLossReportInput) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ReportError("Isian laporan tidak valid.")
   for (const value of Object.values(input)) if (value !== undefined && typeof value !== "string") throw new ReportError("Isian laporan tidak valid.")
+  if (input.submissionKey && (!isUuid(input.submissionKey) || !/^\d+$/.test(input.draftRevision ?? "") || !Number.isSafeInteger(Number(input.draftRevision)))) throw new ReportError("Identitas draft tidak valid.")
+  if (!input.submissionKey && input.draftRevision) throw new ReportError("Identitas draft tidak valid.")
   const ownerName = input.ownerName?.trim() || undefined
   const ownerContact = input.ownerContact?.trim() || undefined
   if ((ownerName?.length ?? 0) > 150 || (ownerContact?.length ?? 0) > 150) throw new ReportError("Nama dan kontak pemilik maksimal 150 karakter.")
@@ -69,6 +73,8 @@ export function validateCreateLossReport(input: CreateLossReportInput) {
   if (photoUrl) throw new ReportError("Gunakan unggahan foto privat. Tautan foto eksternal tidak didukung.")
 
   return {
+    submissionKey: input.submissionKey || undefined,
+    draftRevision: input.submissionKey ? input.draftRevision : undefined,
     ownerName,
     ownerContact,
     title,

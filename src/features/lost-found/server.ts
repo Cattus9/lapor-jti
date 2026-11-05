@@ -3,5 +3,8 @@ import "server-only"
 import { SatpamService } from "./application/satpam-service"
 import { DrizzleSatpamRepository } from "./infrastructure/drizzle-satpam-repository"
 import { PrivateFileStorage } from "../reports/infrastructure/private-file-storage"
+import { SatpamDraftService } from "./application/satpam-draft-service"
+import { DrizzleSatpamDrafts } from "./infrastructure/drizzle-satpam-drafts"
 
 export function getSatpamService() { return new SatpamService(new DrizzleSatpamRepository(), new PrivateFileStorage()) }
+export function getSatpamDraftService() { return new SatpamDraftService(new DrizzleSatpamDrafts(), new PrivateFileStorage()) }

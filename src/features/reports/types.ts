@@ -19,6 +19,7 @@ export type ReportDetail = {
 }
 
 export type ReportSummary = {
+  closureNote?: string
   ticketNumber: string
   title: string
   category: ReportCategory

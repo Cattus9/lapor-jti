@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Armchair, ArrowRight, ChevronDown, ClipboardList, LampCeiling, Layers3, ListTodo, MapPin, Monitor, RotateCcw, Search, Snowflake, Table2, Tv, Wrench, type LucideIcon } from "lucide-react"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
 import { OperationalRefreshContext, useDebouncedOperationalQuery, useOperationalPage, useOperationalResource } from "@/components/reports/use-operational-data"
+import { UnopenedReportBadge } from "@/components/reports/report-opening"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -25,7 +26,7 @@ import { cn } from "cn"
 
 type ReportView = "queue" | "priority"
 const workspaceTabClassName = "data-active:bg-accent data-active:text-accent-foreground data-active:font-semibold data-active:shadow-none data-active:inset-ring data-active:inset-ring-primary/25"
-const activeStatuses = technicianStatuses.filter((value) => value !== "selesai" && value !== "ditolak")
+const activeStatuses = technicianStatuses.filter((value) => value === "baru")
 const periodOptions = Object.entries(reportPeriods).filter(([value]) => value !== "rentang").map(([value, label]) => ({ value, label }))
 const sortOptions = [{ value: "terbaru", label: "Terbaru" }, { value: "terlama", label: "Terlama" }]
 type OpenReport = (report: TechnicianFacilityReport, trigger: HTMLButtonElement) => void
@@ -39,7 +40,7 @@ function Feedback({ loading, error }: { loading: boolean; error: string }) {
 
 function FacilityReportRow({ report }: { report: TechnicianFacilityReport }) {
   const openReport = useContext(ReportContext)
-  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : report.status === "Ditolak" ? `Ditolak ${report.updatedAt}` : `Dikirim ${report.submittedAt}`}</span><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
+  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : report.status === "Ditolak" ? `Ditolak ${report.updatedAt}` : `Dikirim ${report.submittedAt}`}</span><UnopenedReportBadge unseen={report.unopened} /><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
 }
 
 function ReportPage({ url, emptyContext = "room-reports", hasFilters = false, onReset }: {

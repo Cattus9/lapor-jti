@@ -26,7 +26,7 @@ test("New and verified reports wait from submission, not from verification or in
       report: { ...report, status: status === "baru" ? "Baru" : "Diverifikasi" }, timing: result,
     }))
     assert.match(html, /5 Okt 2026, 08\.00/)
-    assert.match(html, /Menunggu 2 hari 2 jam/)
+    assert.match(html, /Sejak dikirim: 2 hari 2 jam/)
     assert.doesNotMatch(html, /Diproses sejak|Berjalan|terlambat|SLA/i)
   }
 })

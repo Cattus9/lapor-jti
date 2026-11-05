@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ArrowRight, CalendarDays, Check, Clock3, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -41,6 +41,8 @@ export function LossItemForm({
   onProceedToReview,
   onCancel,
   submitLabel,
+  onDraftChange,
+  disabled = false,
 }: {
   idPrefix: string
   initialData?: Partial<LossFormData>
@@ -48,6 +50,8 @@ export function LossItemForm({
   onProceedToReview?: (data: LossFormData) => void
   onCancel?: () => void
   submitLabel?: string
+  onDraftChange?: (data: LossFormData) => void
+  disabled?: boolean
 }) {
   const [ownerName, setOwnerName] = useState(initialData?.ownerName ?? "")
   const [ownerContact, setOwnerContact] = useState(initialData?.ownerContact ?? "")
@@ -68,6 +72,10 @@ export function LossItemForm({
   const [error, setError] = useState("")
   const photo = useItemPhoto(initialData?.photoFile)
 
+  useEffect(() => {
+    onDraftChange?.({ ownerName, ownerContact, title, itemName, location, useCustomTime, incidentDate: useCustomTime && incidentDate ? formatCalendarDate(incidentDate) : "", incidentTime: useCustomTime ? incidentTime : "", description, characteristics: description, photoFile: photo.file, photoPreviewUrl: photo.previewUrl })
+  }, [onDraftChange, ownerName, ownerContact, title, itemName, location, useCustomTime, incidentDate, incidentTime, description, photo.file, photo.previewUrl])
+
   const todayStr = getTodayInWib()
   const formattedSelectedDate = incidentDate ? formatCalendarDate(incidentDate) : ""
   const dateError = useCustomTime && formattedSelectedDate && formattedSelectedDate > todayStr
@@ -76,6 +84,7 @@ export function LossItemForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (disabled) return
     if (!title.trim()) {
       setError("Judul laporan wajib diisi.")
       return
@@ -103,7 +112,7 @@ export function LossItemForm({
       }
     }
     if (!description.trim()) {
-      setError("Detail & kronologi kejadian wajib diisi.")
+      setError("Deskripsi laporan wajib diisi.")
       return
     }
 
@@ -161,90 +170,96 @@ export function LossItemForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6"><fieldset disabled={disabled} className="space-y-6">
       {error ? <FieldError>{error}</FieldError> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field><FieldLabel htmlFor={`${idPrefix}-owner-name`}>Nama pelapor langsung (opsional)</FieldLabel><Input id={`${idPrefix}-owner-name`} value={ownerName} maxLength={150} onChange={event => setOwnerName(event.target.value)} disabled={submitting} /><FieldDescription>Orang yang melaporkan kehilangan di pos, terpisah dari akun Satpam pencatat.</FieldDescription></Field>
-        <Field><FieldLabel htmlFor={`${idPrefix}-owner-contact`}>Kontak yang dapat dihubungi (opsional)</FieldLabel><Input id={`${idPrefix}-owner-contact`} value={ownerContact} maxLength={150} onChange={event => setOwnerContact(event.target.value)} disabled={submitting} /><FieldDescription>Email atau nomor kontak untuk tindak lanjut oleh Satpam.</FieldDescription></Field>
+        <Field><FieldLabel htmlFor={`${idPrefix}-owner-name`}>Nama pelapor langsung (opsional)</FieldLabel><Input id={`${idPrefix}-owner-name`} value={ownerName} maxLength={150} onChange={event => setOwnerName(event.target.value)} disabled={submitting} className="h-11 bg-background/70" placeholder="Contoh: Ayu Santoso" /><FieldDescription>Nama orang yang melaporkan kehilangan di pos.</FieldDescription></Field>
+        <Field><FieldLabel htmlFor={`${idPrefix}-owner-contact`}>Kontak yang dapat dihubungi (opsional)</FieldLabel><Input id={`${idPrefix}-owner-contact`} value={ownerContact} maxLength={150} onChange={event => setOwnerContact(event.target.value)} disabled={submitting} className="h-11 bg-background/70" placeholder="Email atau nomor telepon" /></Field>
       </div>
       <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
         {/* Judul Laporan */}
         <Field className="space-y-1.5 sm:col-span-2">
           <FieldLabel htmlFor={`${idPrefix}-title`}>
-            Judul Laporan <span className="text-destructive">*</span>
+            Judul laporan <span className="text-destructive">*</span>
           </FieldLabel>
           <Input
             id={`${idPrefix}-title`}
+            maxLength={200}
+            className="h-11 bg-background/70"
             placeholder="Contoh: Dompet hilang di Ruang 3.4"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             disabled={submitting}
             required
           />
-          <FieldDescription>Ringkasan singkat barang yang hilang dan lokasinya.</FieldDescription>
         </Field>
 
         {/* Nama Barang */}
         <Field className="space-y-1.5">
           <FieldLabel htmlFor={`${idPrefix}-item-name`}>
-            Nama Barang <span className="text-destructive">*</span>
+            Nama barang <span className="text-destructive">*</span>
           </FieldLabel>
           <Input
             id={`${idPrefix}-item-name`}
+            maxLength={200}
+            className="h-11 bg-background/70"
             placeholder="Contoh: Dompet kulit warna hitam"
             value={itemName}
             onChange={(event) => setItemName(event.target.value)}
             disabled={submitting}
             required
           />
-          <FieldDescription>Nama atau sebutan barang yang mudah diidentifikasi.</FieldDescription>
         </Field>
 
         {/* Lokasi Kejadian */}
         <Field className="space-y-1.5">
           <FieldLabel htmlFor={`${idPrefix}-location`}>
-            Lokasi Kejadian <span className="text-destructive">*</span>
+            Lokasi kejadian <span className="text-destructive">*</span>
           </FieldLabel>
           <Input
             id={`${idPrefix}-location`}
+            maxLength={200}
+            className="h-11 bg-background/70"
             placeholder="Contoh: Gedung JTI, Ruang 3.4"
             value={location}
             onChange={(event) => setLocation(event.target.value)}
             disabled={submitting}
             required
           />
-          <FieldDescription>Tempat barang hilang atau perkiraan lokasi terakhir terlihat.</FieldDescription>
+          <FieldDescription>Lokasi terakhir barang terlihat jika tempat kehilangan tidak diketahui.</FieldDescription>
         </Field>
 
         {/* Detail & Kronologi Kejadian (Tunggal / Gabungan) */}
         <Field className="space-y-1.5 sm:col-span-2">
           <FieldLabel htmlFor={`${idPrefix}-desc`}>
-            Detail &amp; Kronologi Kejadian <span className="text-destructive">*</span>
+            Deskripsi laporan <span className="text-destructive">*</span>
           </FieldLabel>
           <Textarea
             id={`${idPrefix}-desc`}
-            placeholder="Jelaskan ciri khusus fisik barang (warna, merk, tipe, nomor seri, stiker/tanda) beserta kronologi saat menyadari barang hilang atau terakhir terlihat..."
+            maxLength={5000}
+            placeholder="Contoh: Dompet hitam terakhir terlihat di ruang kelas."
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             disabled={submitting}
             rows={4}
-            className="resize-none"
+            className="resize-none bg-background/70"
             required
           />
           <FieldDescription>
-            Sertakan ciri spesifik fisik barang dan kronologi kejadian untuk membantu proses pencarian dan pencocokan.
+            Sertakan ciri barang dan kronologi singkat.
           </FieldDescription>
         </Field>
 
         {/* Date & Time Settings (like in Pelapor form) */}
-        <div className="rounded-xl border border-border/70 bg-muted/20 p-4 space-y-3 sm:col-span-2">
-          <div className="flex items-center justify-between gap-4">
-            <FieldLabel htmlFor={`${idPrefix}-custom-time`} className="text-xs font-semibold">
+        <div className="space-y-4 sm:col-span-2">
+          <Field><div className="flex items-center gap-3">
+            <FieldLabel htmlFor={`${idPrefix}-custom-time`}>
               Gunakan tanggal &amp; waktu tertentu
             </FieldLabel>
             <Switch
               id={`${idPrefix}-custom-time`}
+              aria-describedby={`${idPrefix}-custom-time-description`}
               checked={useCustomTime}
               disabled={submitting}
               onCheckedChange={(checked) => {
@@ -259,16 +274,12 @@ export function LossItemForm({
               }}
             />
           </div>
-          <FieldDescription>
-            {useCustomTime
-              ? "Pilih tanggal dan waktu kejadian yang sesuai (WIB)."
-              : "Tanggal dan waktu kejadian otomatis dicatat saat laporan dikirim (WIB). Aktifkan jika kejadian berlangsung pada waktu lain."}
-          </FieldDescription>
+          <FieldDescription id={`${idPrefix}-custom-time-description`}>Aktifkan jika kejadian berlangsung pada waktu lain.</FieldDescription></Field>
 
           {useCustomTime ? (
             <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2">
               <Field className="space-y-1">
-                <FieldLabel htmlFor={`${idPrefix}-date`}>Tanggal Kejadian</FieldLabel>
+                <FieldLabel htmlFor={`${idPrefix}-date`}>Tanggal kejadian</FieldLabel>
                 <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                   <PopoverTrigger
                     render={
@@ -277,7 +288,7 @@ export function LossItemForm({
                         type="button"
                         variant="outline"
                         disabled={submitting}
-                        className="h-10 w-full justify-start text-left font-normal bg-background/80"
+                        className="h-11 w-full justify-start bg-background/70 text-left font-normal"
                       />
                     }
                   >
@@ -305,7 +316,7 @@ export function LossItemForm({
               </Field>
 
               <Field className="space-y-1">
-                <FieldLabel htmlFor={`${idPrefix}-time`}>Waktu Kejadian (WIB)</FieldLabel>
+                <FieldLabel htmlFor={`${idPrefix}-time`}>Waktu kejadian (WIB)</FieldLabel>
                 <div className="relative">
                   <Clock3 className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <Input
@@ -314,7 +325,7 @@ export function LossItemForm({
                     value={incidentTime}
                     onChange={(event) => setIncidentTime(event.target.value)}
                     disabled={submitting}
-                    className="h-10 pl-9 bg-background/80"
+                    className="h-11 bg-background/70 pl-9"
                     placeholder="00:00"
                   />
                 </div>
@@ -329,8 +340,7 @@ export function LossItemForm({
         <ItemPhotoField
           idPrefix={idPrefix}
           photo={photo}
-          disabled={submitting}
-          description="Contoh gambar atau foto barang yang serupa untuk memudahkan identifikasi."
+          disabled={submitting || disabled}
         />
       </div>
 
@@ -359,6 +369,6 @@ export function LossItemForm({
           )}
         </Button>
       </div>
-    </form>
+    </fieldset></form>
   )
 }

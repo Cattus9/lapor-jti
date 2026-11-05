@@ -6,6 +6,7 @@ import type { TechnicianReportTiming } from "./domain/technician-report-timing"
 export type TechnicianStatus = Extract<ReportStatus, "baru" | "diverifikasi" | "diproses" | "selesai" | "ditolak">
 export type TechnicianReportStatus = "Baru" | "Diverifikasi" | "Diproses" | "Selesai" | "Ditolak"
 export type TechnicianFacilityReport = {
+  firstOpenedAt?: string | null; unopened?: boolean
   id: string; ticket: string; title: string; facility: string; facilities: string[]; locationId: string | null
   room: string; location: string; reporter: string; submittedAt: string; updatedAt: string
   eventDate: string; eventTime: string; completedAt?: string; status: TechnicianReportStatus

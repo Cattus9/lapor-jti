@@ -87,6 +87,8 @@ export class SatpamService {
     return { photo: { ...photo, mimeType: result.mimeType }, bytes: result.bytes }
   }
 
+  correctInventory(actor: ReportActor, id: string, raw: unknown) { requireSatpam(actor); return this.repository.correctInventory(actor, id, raw) }
+
   async getInventoryItem(actor: ReportActor, id: string) {
     requireSatpam(actor)
     if (!isUuid(id)) throw new ReportError("Barang tidak ditemukan.", 404)
@@ -111,7 +113,9 @@ export class SatpamService {
       storedPhoto = stored
     }
     try {
-      return await this.repository.createLossReport(actor, validated, storedPhoto)
+      const result = await this.repository.createLossReport(actor, validated, storedPhoto)
+      if (storedPhoto && (await this.repository.getLossReportPhoto(result.id))?.storageKey !== storedPhoto.storageKey) await this.storage.remove([{ ...storedPhoto, id: "", size: 0 }])
+      return result
     } catch (error) {
       if (storedPhoto) await this.storage.remove([{ ...storedPhoto, id: "", size: 0 }])
       throw error

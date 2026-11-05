@@ -5,7 +5,7 @@ import { users, reports, locations, facilityObjects, reportFacilityObjects, repo
 import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor } from "../../reports/domain/report"
 import { defaultReportFilters, reportDateBounds } from "../../reports/domain/report-list-filters"
 import { DrizzleReportRepository } from "../../reports/infrastructure/drizzle-report-repository"
-import { technicianExpectedStatus, type TechnicianCommand } from "../domain/technician"
+import { technicianCanTransition, type TechnicianCommand } from "../domain/technician"
 import { getTechnicianReportTiming } from "../domain/technician-report-timing"
 import type { TechnicianRepository } from "../application/ports"
 import type { TechnicianFacilityReport, TechnicianFilter, TechnicianPage, TechnicianReportStatus, TechnicianRoomPriority } from "../types"
@@ -42,6 +42,7 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
     for (const object of objects) names.set(object.reportId, [...(names.get(object.reportId) ?? []), object.objectText])
     for (const file of files) if (file.reportId) counts.set(file.reportId, (counts.get(file.reportId) ?? 0) + 1)
     return rows.map(({ report: r, reporter }) => ({
+      firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status),
       id: r.id, ticket: r.ticketNumber, title: r.title, facility: (names.get(r.id) ?? []).join(", "), facilities: names.get(r.id) ?? [],
       locationId: r.locationId, room: r.locationText, location: r.locationText, reporter, description: r.description,
       status: statusLabels[r.status] as TechnicianReportStatus, submittedAt: dateLabel(r.submittedAt), updatedAt: dateLabel(r.updatedAt),
@@ -123,9 +124,9 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
       if (!account) throw new ReportError("Akun tidak memiliki akses Teknisi.", 403)
       const [report] = await tx.select().from(reports).where(and(scope, eq(reports.ticketNumber, command.ticket))).for("update")
       if (!report) throw new ReportError("Laporan fasilitas tidak ditemukan.", 404)
-      if (report.status !== technicianExpectedStatus(command.status)) throw new ReportError("Status laporan telah berubah. Muat ulang sebelum melanjutkan.", 409)
+      if (!technicianCanTransition(report.status as import("../types").TechnicianStatus, command.status)) throw new ReportError("Status laporan telah berubah. Muat ulang sebelum melanjutkan.", 409)
       assertTransition("fasilitas", report.status, command.status)
-      const now = new Date(), note = command.note || (command.status === "diverifikasi" ? "Detail kerusakan dan lokasi telah diverifikasi." : "Penanganan fasilitas dimulai.")
+      const now = new Date(), note = command.note
       await tx.update(reports).set({ status: command.status, updatedAt: now, completedAt: command.status === "selesai" ? now : null }).where(eq(reports.id, report.id))
       await tx.insert(reportStatusHistory).values({ reportId: report.id, actorId: actor.id, actorName: account.name, fromStatus: report.status, toStatus: command.status, note, createdAt: now })
       await tx.insert(notifications).values({ recipientId: report.reporterId, reportId: report.id, kind: "status", title: `Laporan fasilitas ${statusLabels[command.status].toLowerCase()}`, description: `${report.ticketNumber}: ${note}`, createdAt: now })

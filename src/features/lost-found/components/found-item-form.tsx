@@ -1,15 +1,17 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowRight, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import type { InventoryItem } from "../domain/inventory"
+import { FoundReportSelector } from "./found-report-selector"
 import { ItemPhotoField, useItemPhoto } from "./item-photo-field"
 
 export type FoundFormData = {
+  sourceFoundTicket?: string
   itemName: string
   description: string
   foundLocation: string
@@ -28,17 +30,24 @@ export function FoundItemForm({
   onSuccess,
   onProceedToReview,
   onCancel,
+  onBack,
   submitLabel,
   sourceFoundTicket,
+  onDraftChange,
+  disabled = false,
 }: {
   idPrefix: string
   initialData?: Partial<FoundFormData>
   onSuccess?: (item: InventoryItem) => void
   onProceedToReview?: (data: FoundFormData) => void
   onCancel?: () => void
+  onBack?: () => void
   submitLabel?: string
   sourceFoundTicket?: string
+  onDraftChange?: (data: FoundFormData) => void
+  disabled?: boolean
 }) {
+  const [selectedSource, setSelectedSource] = useState(initialData?.sourceFoundTicket ?? sourceFoundTicket ?? "")
   const [itemName, setItemName] = useState(initialData?.itemName ?? "")
   const [description, setDescription] = useState(initialData?.description ?? "")
   const [foundLocation, setFoundLocation] = useState(initialData?.foundLocation ?? "")
@@ -48,7 +57,12 @@ export function FoundItemForm({
   const photo = useItemPhoto(initialData?.photoFile)
   const command = useRef<{ signature: string; key: string } | null>(null)
 
+  useEffect(() => {
+    onDraftChange?.({ sourceFoundTicket: selectedSource, itemName, description, foundLocation, founderName, photoFile: photo.file, photoPreviewUrl: photo.previewUrl })
+  }, [onDraftChange, selectedSource, itemName, description, foundLocation, founderName, photo.file, photo.previewUrl])
+
   function resetForm() {
+    setSelectedSource(sourceFoundTicket ?? "")
     setItemName("")
     setDescription("")
     setFoundLocation("")
@@ -59,6 +73,7 @@ export function FoundItemForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (disabled) return
     if (!itemName.trim()) {
       setError("Nama barang wajib diisi.")
       return
@@ -67,6 +82,7 @@ export function FoundItemForm({
     if (onProceedToReview) {
       setError("")
       onProceedToReview({
+        sourceFoundTicket: selectedSource,
         itemName: itemName.trim(),
         description: description.trim(),
         foundLocation: foundLocation.trim(),
@@ -82,10 +98,10 @@ export function FoundItemForm({
 
     try {
       const formData = new FormData()
-      const signature = JSON.stringify([itemName, description, foundLocation, founderName, sourceFoundTicket, photo.file?.name, photo.file?.size, photo.file?.lastModified])
+      const signature = JSON.stringify([itemName, description, foundLocation, founderName, selectedSource, photo.file?.name, photo.file?.size, photo.file?.lastModified])
       if (!command.current || command.current.signature !== signature) command.current = { signature, key: crypto.randomUUID() }
       formData.set("submissionKey", command.current.key)
-      if (sourceFoundTicket) formData.set("sourceFoundTicket", sourceFoundTicket)
+      if (selectedSource) formData.set("sourceFoundTicket", selectedSource)
       formData.set("itemName", itemName.trim())
       if (description.trim()) formData.set("description", description.trim())
       if (foundLocation.trim()) formData.set("foundLocation", foundLocation.trim())
@@ -107,62 +123,67 @@ export function FoundItemForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-5"><fieldset disabled={disabled} className="space-y-5">
       {error ? <FieldError>{error}</FieldError> : null}
 
+      {sourceFoundTicket ? <FieldDescription>Barang dihubungkan dengan laporan Temuan yang sedang dibuka.</FieldDescription> : <FoundReportSelector id={`${idPrefix}-source`} value={selectedSource} disabled={disabled || submitting} onChange={(ticket, report) => { setSelectedSource(ticket); if (report) { if (!itemName.trim()) setItemName(report.title); if (!description.trim()) setDescription(report.description.slice(0, 2000)); if (!foundLocation.trim()) setFoundLocation(report.location) } }} />}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field className="space-y-1.5 sm:col-span-2">
           <FieldLabel htmlFor={`${idPrefix}-item-name`}>
-            Nama Barang <span className="text-destructive">*</span>
+            Nama barang <span className="text-destructive">*</span>
           </FieldLabel>
           <Input
             id={`${idPrefix}-item-name`}
-            placeholder="Contoh: Dompet Hitam Kulit, Kunci Motor..."
+            maxLength={200}
+            className="h-11 bg-background/70"
+            placeholder="Contoh: Dompet kulit hitam"
             value={itemName}
             onChange={(event) => setItemName(event.target.value)}
             disabled={submitting}
             required
           />
-          <FieldDescription>Nama atau sebutan barang temuan yang mudah dikenali oleh pemilik.</FieldDescription>
         </Field>
 
         <Field className="space-y-1.5">
-          <FieldLabel htmlFor={`${idPrefix}-found-location`}>Lokasi Temuan (Opsional)</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-found-location`}>Lokasi temuan (opsional)</FieldLabel>
           <Input
             id={`${idPrefix}-found-location`}
-            placeholder="Contoh: Kantin Gedung A, Parkiran Motor..."
+            maxLength={200}
+            className="h-11 bg-background/70"
+            placeholder="Contoh: Kantin Gedung A"
             value={foundLocation}
             onChange={(event) => setFoundLocation(event.target.value)}
             disabled={submitting}
           />
-          <FieldDescription>Tempat barang ditemukan, bukan tempat penyimpanannya.</FieldDescription>
+          <FieldDescription>Lokasi ditemukan, bukan tempat penyimpanan.</FieldDescription>
         </Field>
 
         <Field className="space-y-1.5">
-          <FieldLabel htmlFor={`${idPrefix}-founder-name`}>Nama Penemu (Opsional)</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-founder-name`}>Nama penemu (opsional)</FieldLabel>
           <Input
             id={`${idPrefix}-founder-name`}
-            placeholder="Nama orang yang menyerahkan barang..."
+            maxLength={150}
+            className="h-11 bg-background/70"
+            placeholder="Nama orang yang menemukan barang"
             value={founderName}
             onChange={(event) => setFounderName(event.target.value)}
             disabled={submitting}
           />
-          <FieldDescription>Dapat dikosongkan jika penemu tidak menyebutkan identitas (anonim).</FieldDescription>
         </Field>
 
         <Field className="space-y-1.5 sm:col-span-2">
-          <FieldLabel htmlFor={`${idPrefix}-description`}>Deskripsi &amp; Ciri-Ciri (Opsional)</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-description`}>Deskripsi barang (opsional)</FieldLabel>
           <Textarea
             id={`${idPrefix}-description`}
-            placeholder="Warna, merk, kondisi, atau ciri khusus..."
+            placeholder="Contoh: Payung biru dengan gagang kayu"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             disabled={submitting}
             rows={3}
-            className="resize-none"
+            className="resize-none bg-background/70"
             maxLength={2000}
           />
-          <FieldDescription>Catatan ciri khusus untuk memudahkan verifikasi saat ada yang menanyakan.</FieldDescription>
+          <FieldDescription>Sertakan ciri barang untuk membantu pencocokan.</FieldDescription>
         </Field>
       </div>
 
@@ -171,13 +192,16 @@ export function FoundItemForm({
         <ItemPhotoField
           idPrefix={idPrefix}
           photo={photo}
-          disabled={submitting}
-          description="Foto barang mempermudah pencocokan saat pemilik mencari barangnya."
+          disabled={submitting || disabled}
         />
       </div>
 
       <div className="flex items-center justify-end gap-2.5 border-t border-border/60 pt-4">
-        {onCancel ? (
+        {onBack ? (
+          <Button type="button" variant="outline" disabled={submitting} onClick={onBack}>
+            Kembali
+          </Button>
+        ) : onCancel ? (
           <Button
             type="button"
             variant="outline"
@@ -209,6 +233,6 @@ export function FoundItemForm({
           )}
         </Button>
       </div>
-    </form>
+    </fieldset></form>
   )
 }

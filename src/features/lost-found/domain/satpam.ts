@@ -17,10 +17,20 @@ function text(value: unknown, label: string, max: number, required = false) {
 export type SatpamCommand =
   | { type: "status"; ticket: string; status: "diproses" | "ditolak" | "selesai"; note: string }
   | { type: "match"; lossTicket: string; foundTicket: string }
-  | { type: "handover"; matchId: string; officerId: string; recipient: string; location: string; note: string }
+  | { type: "handover"; matchId: string; officerId: string; recipient: string; location: string; note: string; ownershipEvidence: string; submissionKey: string }
+  | { type: "cancel-match"; matchId: string; note: string }
+  | { type: "close"; ticket: string; expectedStatus: "baru" | "diproses"; reason: "self_found" | "withdrawn" | "duplicate"; note: string }
 export function parseSatpamCommand(raw: unknown): SatpamCommand {
   if (!raw || typeof raw !== "object") throw new ReportError("Permintaan tidak valid.")
   const v = raw as Record<string, unknown>
+  if (v.type === "cancel-match") {
+    if (!isUuid(v.matchId)) throw new ReportError("Pasangan laporan tidak valid.")
+    return { type: "cancel-match", matchId: v.matchId, note: text(v.note, "Alasan pembatalan", 2000, true) }
+  }
+  if (v.type === "close") {
+    if (!["self_found", "withdrawn", "duplicate"].includes(String(v.reason)) || !["baru", "diproses"].includes(String(v.expectedStatus))) throw new ReportError("Alasan atau status penutupan tidak valid.")
+    return { type: "close", ticket: requireTicket(v.ticket), reason: v.reason as "self_found" | "withdrawn" | "duplicate", expectedStatus: v.expectedStatus as "baru" | "diproses", note: text(v.note, "Catatan penutupan", 2000, true) }
+  }
   if (v.type === "status") {
     if (!["diproses", "ditolak", "selesai"].includes(String(v.status))) throw new ReportError("Aksi status tidak valid. Gunakan pencocokan atau penyerahan untuk tahap berikutnya.")
     return { type: "status", ticket: requireTicket(v.ticket), status: v.status as "diproses" | "ditolak" | "selesai", note: text(v.note, "Catatan", 2000, v.status === "ditolak") }
@@ -31,9 +41,10 @@ export function parseSatpamCommand(raw: unknown): SatpamCommand {
     return { type: "match", lossTicket, foundTicket }
   }
   if (v.type === "handover") {
+    if (!isUuid(v.submissionKey)) throw new ReportError("Kunci penyerahan tidak valid.")
     if (!isUuid(v.matchId)) throw new ReportError("Pasangan laporan tidak valid.")
     if (!isUuid(v.officerId)) throw new ReportError("Pilih petugas penanggung jawab penyerahan.")
-    return { type: "handover", matchId: v.matchId, officerId: v.officerId, recipient: text(v.recipient, "Nama penerima", 150, true), location: text(v.location, "Lokasi penyerahan", 200, true), note: text(v.note, "Catatan penyerahan", 2000) }
+    return { type: "handover", matchId: v.matchId, officerId: v.officerId, recipient: text(v.recipient, "Nama penerima", 150, true), location: text(v.location, "Lokasi penyerahan", 200, true), note: text(v.note, "Catatan penyerahan", 2000), ownershipEvidence: text(v.ownershipEvidence, "Hasil pemeriksaan kepemilikan", 1000, true), submissionKey: v.submissionKey }
   }
   throw new ReportError("Aksi tidak valid.")
 }

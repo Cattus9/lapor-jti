@@ -2,32 +2,27 @@
 
 import { useId, useState, type ComponentProps } from "react"
 import Image from "next/image"
-import { CalendarDays, Check, MapPin, Paperclip, ScrollText, UserRound, Wrench } from "lucide-react"
+import { CalendarDays, MapPin, Paperclip, ScrollText, UserRound, Wrench } from "lucide-react"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { ReportAttachmentsEmptyState } from "@/components/reports/report-attachments-empty-state"
+import { ReportOpeningTracker } from "@/components/reports/report-opening"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { Stepper } from "@/components/ui/stepper"
 import { Textarea } from "@/components/ui/textarea"
 import type { TechnicianCommand } from "../domain/technician"
 import type { TechnicianDetail, TechnicianFacilityReport } from "../types"
 import { TechnicianReportTimingCells } from "./technician-report-timing-cells"
 import { cn } from "cn"
 
-const lifecycle = ["Baru", "Diverifikasi", "Diproses", "Selesai"] as const
-const actions = {
-  Baru: { label: "Verifikasi laporan", status: "diverifikasi", copy: "Pastikan detail kerusakan dan lokasi dapat ditindaklanjuti." },
-  Diverifikasi: { label: "Mulai penanganan", status: "diproses", copy: "Tandai laporan setelah pekerjaan perbaikan mulai dilakukan." },
-  Diproses: { label: "Selesaikan perbaikan", status: "selesai", copy: "Catat tindakan yang sudah dilakukan dan kondisi akhir fasilitas." },
-} as const
-
 function ReportStepper({ status }: { status: TechnicianFacilityReport["status"] }) {
-  if (status === "Ditolak") return <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">Laporan ditolak. Alasan penolakan tersimpan pada riwayat status.</p>
-  const current = lifecycle.indexOf(status)
-  return <section aria-label="Progres penanganan"><div className="flex items-center justify-between"><p className="text-sm font-semibold">Progres penanganan</p><span className="text-xs text-muted-foreground">Tahap {current + 1} dari 4</span></div><ol className="mt-5 flex items-start">{lifecycle.map((step, index) => <li key={step} className="flex min-w-0 flex-1 items-start" aria-current={index === current ? "step" : undefined}><div className="flex min-w-0 flex-1 flex-col items-center gap-2"><span className={cn("flex size-7 items-center justify-center rounded-full border text-xs", index <= current ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground", index === current && "ring-3 ring-primary/15")}>{index < current ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span><span className="text-center text-xs text-muted-foreground">{step}</span></div>{index < 3 ? <span className={cn("mt-3.5 h-px flex-1", index < current ? "bg-primary" : "bg-border")} aria-hidden="true" /> : null}</li>)}</ol></section>
+  if (status === "Ditolak") return <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">Laporan ditolak. Alasan tersimpan pada riwayat.</p>
+  const first = status === "Diverifikasi" || status === "Diproses" ? status : "Baru"
+  return <section aria-label="Progres penanganan"><div className="flex items-center justify-between"><p className="text-sm font-semibold">Progres penanganan</p><span className="text-xs text-muted-foreground">Tahap {status === "Selesai" ? 2 : 1} dari 2</span></div><Stepper className="mt-5" variant="circles" steps={[{ value: first, label: first }, { value: "Selesai", label: "Selesai" }]} value={status} aria-label="Progres penanganan" /></section>
 }
 
 export function TechnicianReportDetailDialog({ report: initialReport, open, onOpenChange, finalFocus, onCommand, pending, error, onRetry }: {
@@ -40,9 +35,9 @@ export function TechnicianReportDetailDialog({ report: initialReport, open, onOp
   const [decision, setDecision] = useState<"selesai" | "ditolak" | null>(null)
   const [note, setNote] = useState("")
   const noteId = useId()
-  const action = report.status in actions ? actions[report.status as keyof typeof actions] : undefined
+  const canComplete = ["Baru", "Diverifikasi", "Diproses"].includes(report.status)
   const ready = Boolean(detail.data) && !detail.loading && !detail.error && !pending
-  const validDecision = decision === "selesai" ? report.status === "Diproses" : report.status === "Baru"
+  const validDecision = canComplete
 
   async function confirm() {
     if (!decision || !ready || !validDecision || !note.trim()) return
@@ -50,16 +45,16 @@ export function TechnicianReportDetailDialog({ report: initialReport, open, onOp
   }
   function choose(value: "selesai" | "ditolak") { setNote(""); setDecision(value) }
 
-  return <OperationalReportDialog open={open} onOpenChange={(value) => { if (!pending) onOpenChange(value) }} finalFocus={finalFocus} icon={Wrench} category="Laporan fasilitas" submittedAt={report.submittedAt} status={report.status} title={report.title} updatedAt={report.updatedAt}>
+  const actionPanel = <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">{canComplete ? "Tindak lanjut" : report.status === "Selesai" ? "Laporan selesai" : "Laporan ditolak"}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{canComplete ? "Setelah fasilitas diperbaiki, catat pekerjaan dan kondisi akhirnya." : report.status === "Selesai" ? "Catatan pekerjaan tersimpan pada riwayat." : "Alasan penolakan tersimpan pada riwayat."}</p></div>
+      {canComplete ? <div className="flex flex-wrap gap-2"><Button type="button" disabled={!ready} onClick={() => choose("selesai")}>Selesaikan perbaikan</Button><Button type="button" variant="outline" disabled={!ready} onClick={() => choose("ditolak")}>Tolak laporan</Button></div> : null}</div>
+    {detail.loading ? <p role="status" className="mt-3 text-xs text-muted-foreground">Memuat status terbaru…</p> : null}
+    {detail.error ? <div className="mt-3 space-y-2"><FieldError>{detail.error}</FieldError><Button type="button" variant="outline" size="sm" onClick={onRetry}>Coba lagi</Button></div> : null}
+    {error ? <FieldError className="mt-3">{error}</FieldError> : null}
+  </div>
+  return <OperationalReportDialog open={open} onOpenChange={(value) => { if (!pending) onOpenChange(value) }} finalFocus={finalFocus} icon={Wrench} category="Laporan fasilitas" submittedAt={report.submittedAt} status={report.status} title={report.title} updatedAt={report.updatedAt} action={actionPanel}>
+    <ReportOpeningTracker reportId={open && detail.data && !detail.data.report.firstOpenedAt ? detail.data.report.id : undefined} onMarked={onRetry} />
     <ReportStepper status={report.status} />
-    <section className="rounded-xl border border-border/60 bg-muted/50 p-4" aria-label="Aksi penanganan">
-      <p className="text-sm font-medium">{action ? "Aksi penanganan" : report.status === "Selesai" ? "Laporan selesai" : "Laporan ditolak"}</p>
-      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{action?.copy ?? (report.status === "Selesai" ? "Tiket telah ditutup. Catatan pekerjaan dan riwayat tetap dapat dilihat kembali." : "Tidak ada tindakan lanjutan pada tiket ini.")}</p>
-      {action ? <div className="mt-4 flex flex-wrap gap-2"><Button type="button" disabled={!ready} onClick={() => action.status === "selesai" ? choose("selesai") : void onCommand({ ticket: report.ticket, status: action.status, note: "" })}>{pending ? "Menyimpan…" : action.label}</Button>{report.status === "Baru" ? <Button type="button" variant="outline" disabled={!ready} onClick={() => choose("ditolak")}>Tolak laporan</Button> : null}</div> : null}
-      {detail.loading ? <p role="status" className="mt-3 text-xs text-muted-foreground">Memuat status terbaru…</p> : null}
-      {detail.error ? <div className="mt-3 space-y-2"><FieldError>{detail.error}</FieldError><Button type="button" variant="outline" size="sm" onClick={onRetry}>Coba lagi</Button></div> : null}
-      {error ? <FieldError className="mt-3">{error}</FieldError> : null}
-    </section>
     {!detail.data ? <div className="space-y-3" aria-label="Memuat detail"><Skeleton className="h-32 w-full" /><Skeleton className="h-24 w-full" /></div> : <>
       <section className="border-t border-border/60 pt-6"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><ScrollText className="size-4" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold">Detail laporan</h3><p className="mt-0.5 text-xs text-muted-foreground">Informasi yang dikirimkan oleh pelapor.</p></div></div>
         <dl className="mt-4 grid overflow-hidden rounded-xl border border-border/60 sm:grid-cols-2">{[
@@ -78,7 +73,7 @@ export function TechnicianReportDetailDialog({ report: initialReport, open, onOp
         <Field className="mt-4">
           <FieldLabel htmlFor={noteId}>{decision === "selesai" ? "Catatan pekerjaan" : "Alasan penolakan"}</FieldLabel>
           <Textarea id={noteId} value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} disabled={pending} />
-          <FieldDescription>{decision === "selesai" ? "Jelaskan tindakan yang dilakukan dan kondisi akhir fasilitas." : "Jelaskan mengapa laporan tidak dapat diverifikasi."} Maksimal 2.000 karakter.</FieldDescription>
+          <FieldDescription>{decision === "selesai" ? "Jelaskan tindakan yang dilakukan dan kondisi akhir fasilitas." : "Jelaskan mengapa laporan tidak dapat ditindaklanjuti, misalnya duplikat atau di luar cakupan."} Maksimal 2.000 karakter.</FieldDescription>
           {!validDecision ? <FieldError>Status telah berubah. Tutup konfirmasi untuk melihat status terbaru.</FieldError> : error ? <FieldError>{error}</FieldError> : null}
         </Field>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

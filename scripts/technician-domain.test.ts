@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { parseTechnicianCommand, parseTechnicianFilter, requireTechnician, technicianExpectedStatus } from "../src/features/facilities/domain/technician"
+import { parseTechnicianCommand, parseTechnicianFilter, requireTechnician, technicianCanTransition } from "../src/features/facilities/domain/technician"
 import { TechnicianService } from "../src/features/facilities/application/technician-service"
 import type { TechnicianRepository } from "../src/features/facilities/application/ports"
 import type { AttachmentStorage } from "../src/features/reports/application/ports"
@@ -16,15 +16,18 @@ test("Teknisi authorization uses the database role, independently of login provi
 test("Completion and rejection require bounded, nonempty notes; spoofed identity is ignored", () => {
   assert.deepEqual(parseTechnicianCommand({ ...command, note: ` ${command.note} `, actorId: "spoof", actorName: "spoof" }), command)
   for (const status of ["selesai", "ditolak"]) for (const note of [undefined, null, " ", {}, "x".repeat(2001), "bad\u0000note"]) assert.throws(() => parseTechnicianCommand({ ...command, status, note }), ReportError)
-  for (const status of ["diverifikasi", "diproses"]) assert.equal(parseTechnicianCommand({ ticket: command.ticket, status }).note, "")
+  for (const status of ["diverifikasi", "diproses"]) assert.throws(() => parseTechnicianCommand({ ticket: command.ticket, status }), ReportError)
 })
 test("Invalid status coercion, foreign lifecycle steps and malformed tickets are rejected", () => {
   for (const status of ["baru", "barang_teridentifikasi", "diserahkan", ["selesai"], {}, true, null]) assert.throws(() => parseTechnicianCommand({ ...command, status }), ReportError)
   for (const ticket of ["bad", "LJ-2026-", "LJ-2026-000000000000000", null]) assert.throws(() => parseTechnicianCommand({ ...command, ticket }), ReportError)
 })
-test("Shared facility lifecycle is sequential and terminal states cannot reopen", () => {
-  for (const [from, to] of [["baru", "diverifikasi"], ["diverifikasi", "diproses"], ["diproses", "selesai"], ["baru", "ditolak"]] as const) { assertTransition("fasilitas", from, to); assert.equal(technicianExpectedStatus(to), from) }
-  for (const [from, to] of [["baru", "diproses"], ["baru", "selesai"], ["diproses", "ditolak"], ["selesai", "diproses"], ["ditolak", "diverifikasi"]] as const) assert.throws(() => assertTransition("fasilitas", from, to), ReportError)
+test("Facility reports finish directly and old active records can still finish without rewriting history", () => {
+  for (const from of ["baru", "diverifikasi", "diproses"] as const) { assertTransition("fasilitas", from, "selesai"); assert.equal(technicianCanTransition(from, "selesai"), true) }
+  for (const from of ["baru", "diverifikasi", "diproses"] as const) { assertTransition("fasilitas", from, "ditolak"); assert.equal(technicianCanTransition(from, "ditolak"), true) }
+  for (const [from, to] of [["baru", "diverifikasi"], ["baru", "diproses"], ["selesai", "selesai"], ["ditolak", "selesai"]] as const) assert.throws(() => assertTransition("fasilitas", from, to), ReportError)
+  assert.equal(technicianCanTransition("baru", "ditolak"), true)
+  assert.equal(technicianCanTransition("selesai", "ditolak"), false)
 })
 test("Filters validate sort, scope, calendar ranges and bounded literal search", () => {
   assert.deepEqual(parseTechnicianFilter(), { status: "semua", sort: "terbaru", period: "semua", from: "", to: "", query: "", locationId: undefined, activeOnly: false, classifiedOnly: false, cursor: undefined })

@@ -6,6 +6,7 @@ import { KpiCard } from "@/components/dashboard/kpi-card"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
+import { UnopenedReportBadge } from "@/components/reports/report-opening"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -102,7 +103,7 @@ export function ManajemenDashboard({ user, data: managementOverview }: { user: C
                     <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
                       <span className="text-xs text-muted-foreground">{report.updatedAt}</span>
                       <Badge tone={report.category === "Layanan" ? "violet" : "warning"} variant="outline">{report.category}</Badge>
-                      <StatusBadge status={report.status} />
+                      <UnopenedReportBadge unseen={report.unopened} /><StatusBadge status={report.status} />
                       <Button nativeButton={false} render={<Link href={`/manajemen/laporan?ticket=${encodeURIComponent(report.ticket)}`} />} variant="outline" size="sm" className="bg-accent text-accent-foreground">Detail<ArrowRight /></Button>
                     </div>
                   </article>

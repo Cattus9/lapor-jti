@@ -27,6 +27,8 @@ export async function POST(request: Request) {
       const description = String(formData.get("description") ?? "")
       const characteristics = String(formData.get("characteristics") ?? "") || description.slice(0, 2000)
       const photoUrl = String(formData.get("photoUrl") ?? "")
+      const submissionKey = String(formData.get("submissionKey") ?? "")
+      const draftRevision = String(formData.get("draftRevision") ?? "")
       const photoFile = formData.get("photo")
 
       let uploadFile: AttachmentUpload | undefined
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
 
       return getSatpamService().createLossReport(
         actor,
-        { ownerName, ownerContact, title, itemName, location, incidentDate, incidentTime, characteristics, description, photoUrl },
+        { ownerName, ownerContact, title, itemName, location, incidentDate, incidentTime, characteristics, description, photoUrl, submissionKey, draftRevision },
         uploadFile
       )
     }

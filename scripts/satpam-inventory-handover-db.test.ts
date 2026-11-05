@@ -8,6 +8,7 @@ import { createDatabaseClient } from "../src/db/client"
 import { getDatabaseUrl } from "../src/db/environment"
 import { users, securityOfficers, satpamInventory, reports, reportHandovers, notifications } from "../src/db/schema"
 import { DrizzleSatpamRepository } from "../src/features/lost-found/infrastructure/drizzle-satpam-repository"
+import { matchingCandidates } from "../src/features/lost-found/domain/matching-candidates"
 import type { ReportActor } from "../src/features/reports/domain/report"
 
 const local = process.env.NODE_ENV === "development"
@@ -49,10 +50,24 @@ test("Inventory receipts, linked returns, retry guards, private photos, unified 
       assert.equal(projection?.report.recordedBy, "Pencatat fixture")
       // Model a real reporter so the notification assertion checks the correct recipient.
       await tx.update(reports).set({ reporterId: ownerId }).where(eq(reports.id, loss.id))
+      await tx.update(reports).set({ title: `Temuan unik ${actorId}`, locationText: `Lokasi unik ${actorId}` }).where(eq(reports.id, found.id))
+      const sourceBeforeReceipt = (await repo.detail(found.ticket!))!.report
+      const originalCandidate = matchingCandidates([sourceBeforeReceipt], [])[0]
       const receipt = await repo.createInventory(actor, { itemName: "Payung fixture", sourceFoundTicket: found.ticket, submissionKey: randomUUID() })
       await assert.rejects(repo.createInventory(actor, { itemName: "Duplikat", sourceFoundTicket: found.ticket }), /sudah tercatat/)
       const candidates = await repo.list({ kind: "temuan", status: "semua", matching: true, query: "Payung fixture", period: "semua", sort: "terbaru" })
       assert.ok(!candidates.items.some(r => r.id === found.id), "A physically received finding is not a second independent matching candidate")
+      const inventoryCandidates = await repo.listInventory({ query: `Temuan unik ${actorId}`, status: "tersimpan" })
+      assert.equal(inventoryCandidates.total, 1, "Original report title remains searchable after receipt")
+      assert.equal(inventoryCandidates.items[0].id, receipt.id)
+      const locationSearch = await repo.listInventory({ query: `Lokasi unik ${actorId}`, status: "tersimpan" })
+      assert.equal(locationSearch.total, 1, "Original location stays searchable even when receipt fields differ")
+      const unified = matchingCandidates([sourceBeforeReceipt], inventoryCandidates.items)
+      assert.equal(unified.length, 1)
+      assert.equal(unified[0].id, originalCandidate.id)
+      assert.equal(unified[0].title, originalCandidate.title)
+      assert.equal(unified[0].sortDate, originalCandidate.sortDate)
+      assert.equal(unified[0].custody, "di-pos")
       const completion = { id: receipt.id, submissionKey: randomUUID(), officerId, recipient: "Pemilik payung", ownershipEvidence: "Ciri khusus terkonfirmasi", lossTicket: loss.ticket }
       await repo.handoverInventory(actor, completion)
       const states = await tx.select().from(reports).where(inArray(reports.id, [found.id, loss.id]))

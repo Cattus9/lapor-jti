@@ -5,6 +5,7 @@ import Image from "next/image"
 import { CalendarDays, Check, Clock3, MapPin, MessageSquareText, Paperclip, ScrollText, UserRound, UserRoundCog } from "lucide-react"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { ReportAttachmentsEmptyState } from "@/components/reports/report-attachments-empty-state"
+import { ReportOpeningTracker } from "@/components/reports/report-opening"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Textarea } from "@/components/ui/textarea"
-import { lifecycleByCategory, statusLabels } from "../../reports/domain/report"
+import { reportLifecycleForStatus, statusLabels } from "../../reports/domain/report"
 import type { ManagementCommand } from "../domain/management"
 import type { ManagementDetail, ManagementReport, MonitoringReportCategory, MonitoringReportStatus } from "../types"
 import { cn } from "cn"
@@ -23,7 +24,7 @@ export function ManagementCategoryBadge({ category }: { category: MonitoringRepo
 
 function ReportStepper({ report }: { report: ManagementReport }) {
   if (report.statusKey === "ditolak") return <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">Laporan ditolak. Alasan penolakan tersimpan pada riwayat status.</p>
-  const stages = lifecycleByCategory[report.categoryKey], current = stages.indexOf(report.statusKey)
+  const stages = reportLifecycleForStatus(report.categoryKey, report.statusKey), current = stages.indexOf(report.statusKey)
   return <section aria-label="Progres penanganan"><div className="flex items-center justify-between"><p className="text-sm font-semibold">Progres penanganan</p><span className="text-xs text-muted-foreground">Tahap {current + 1} dari {stages.length}</span></div><div className="overflow-x-auto pb-1"><ol className="mt-5 flex min-w-72 items-start">{stages.map((step, index) => <li key={step} className="flex min-w-0 flex-1 items-start" aria-current={index === current ? "step" : undefined}><div className="flex min-w-0 flex-1 flex-col items-center gap-2"><span className={cn("flex size-7 items-center justify-center rounded-full border text-xs", index <= current ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground", index === current && "ring-3 ring-primary/15")}>{index < current ? <Check className="size-3.5" aria-hidden="true" /> : index + 1}</span><span className="text-center text-xs text-muted-foreground">{statusLabels[step]}</span></div>{index < stages.length - 1 ? <span className={cn("mt-3.5 h-px flex-1", index < current ? "bg-primary" : "bg-border")} aria-hidden="true" /> : null}</li>)}</ol></div></section>
 }
 
@@ -45,6 +46,7 @@ export function ManagementReportDetailDialog({ ticket, initialReport, open, onOp
   }
   function choose(value: "selesai" | "ditolak") { setNote(""); setDecision(value) }
   return <OperationalReportDialog open={open} onOpenChange={(value) => { if (!pending) { if (!value) { setDecision(null); setNote("") }; onOpenChange(value) } }} finalFocus={finalFocus} icon={MessageSquareText} category={report?.category ?? "Laporan"} submittedAt={report?.submittedAt} status={report?.status ?? "Memuat"} title={report?.title ?? "Detail laporan"} updatedAt={report?.updatedAt ?? "..."}>
+    <ReportOpeningTracker reportId={!readOnly && open && detail.data && !detail.data.report.firstOpenedAt ? detail.data.report.id : undefined} onMarked={onRetry} />
     {report ? <ReportStepper report={report} /> : null}
     <section className="rounded-xl border border-border/60 bg-muted/50 p-4" aria-label="Aksi penanganan">
       <p className="text-sm font-medium">{readOnly ? "Monitoring laporan" : report?.statusKey === "selesai" ? "Laporan selesai" : report?.statusKey === "ditolak" ? "Laporan ditolak" : "Aksi penanganan"}</p>

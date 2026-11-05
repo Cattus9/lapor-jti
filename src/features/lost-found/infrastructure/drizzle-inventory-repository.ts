@@ -1,11 +1,11 @@
 import "server-only"
 import { createHash } from "node:crypto"
-import { and, asc, desc, eq, ilike, inArray, lt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, exists, ilike, inArray, lt, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { getDb } from "@/db"
-import { users, reports, reportAttachments, reportLostFoundDetails, reportStatusHistory, notifications, satpamInventory, securityOfficers, reportHandovers, lostFoundMatches } from "@/db/schema"
+import { users, reports, reportAttachments, reportLostFoundDetails, reportStatusHistory, notifications, satpamInventory, securityOfficers, reportHandovers, lostFoundMatches, operationalAudit } from "@/db/schema"
 import { isUuid, ReportError, type ReportActor } from "../../reports/domain/report"
-import { assertInventoryReportCompletable, validateCreateInventory, validateHandoverInventory, type InventoryFilter, type InventoryItem } from "../domain/inventory"
+import { assertInventoryReportCompletable, validateCreateInventory, validateHandoverInventory, validateInventoryCorrection, type InventoryFilter, type InventoryItem } from "../domain/inventory"
 import type { SatpamPage } from "../types"
 
 type Database = ReturnType<typeof getDb>
@@ -18,7 +18,7 @@ const escaped = (v: string) => `%${v.replace(/[\\%_]/g, "\\$&")}%`
 export class DrizzleInventoryRepository {
   constructor(private readonly db: Database = getDb()) {}
   private query() {
-    return this.db.select({ item: satpamInventory, handover: reportHandovers, sourceTicket: source.ticketNumber, sourceTitle: source.title, lossTicket: loss.ticketNumber,
+    return this.db.select({ item: satpamInventory, handover: reportHandovers, sourceTicket: source.ticketNumber, sourceTitle: source.title, sourceSubmittedAt: source.submittedAt, lossTicket: loss.ticketNumber,
       sourcePhotoId: sql<string | null>`(select ${reportAttachments.id} from ${reportAttachments} where ${reportAttachments.reportId} = ${satpamInventory.sourceFoundReportId} and ${reportAttachments.mimeType} like 'image/%' order by ${reportAttachments.createdAt}, ${reportAttachments.id} limit 1)` })
       .from(satpamInventory).leftJoin(reportHandovers, eq(reportHandovers.inventoryId, satpamInventory.id))
       .leftJoin(source, eq(source.id, satpamInventory.sourceFoundReportId)).leftJoin(loss, eq(loss.id, reportHandovers.lossReportId))
@@ -33,14 +33,17 @@ export class DrizzleInventoryRepository {
       hasStoredPhoto: Boolean(r.photoStorageKey || row.sourcePhotoId), handoverRecipient: r.handoverRecipient ?? undefined,
       handoverNote: r.handoverNote ?? undefined, handedOverAt: r.handedOverAt ? dateLabel(r.handedOverAt) : undefined,
       handoverOfficer: h?.officerName, handoverActor: h?.actorName, ownershipEvidence: h?.ownershipEvidence,
+      sourceFoundSubmittedAt: row.sourceSubmittedAt ? dateLabel(row.sourceSubmittedAt) : undefined, matchingDateIso: (row.sourceSubmittedAt ?? r.createdAt).toISOString(),
       legacyHandover: h?.legacy, sourceFoundTicket: row.sourceTicket ?? undefined, sourceFoundTitle: row.sourceTitle ?? undefined,
       linkedLossTicket: row.lossTicket ?? undefined, registeredByName: r.registeredByName,
-      createdAt: dateLabel(r.createdAt), updatedAt: dateLabel(r.updatedAt),
+      createdAt: dateLabel(r.createdAt), updatedAt: dateLabel(r.updatedAt), version: r.updatedAt.toISOString(),
     }
   }
   async detail(id: string) {
     const [row] = await this.query().where(eq(satpamInventory.id, id)).limit(1)
-    return row ? this.view(row) : null
+    if (!row) return null
+    const changes = await this.db.select().from(operationalAudit).where(and(eq(operationalAudit.entity, "satpam_inventory"), eq(operationalAudit.entityId, id))).orderBy(desc(operationalAudit.createdAt)).limit(50)
+    return { ...this.view(row), corrections: changes.map(change => ({ actor: change.actorName, at: dateLabel(change.createdAt), reason: String((change.after as { reason?: string } | null)?.reason ?? "Koreksi informasi barang") })) }
   }
   async list(filter: InventoryFilter): Promise<SatpamPage<InventoryItem>> {
     let after: { date: Date; id: string } | undefined
@@ -50,7 +53,11 @@ export class DrizzleInventoryRepository {
       after = { date: new Date(date), id }
     }
     const criteria = and(filter.status && filter.status !== "semua" ? eq(satpamInventory.status, filter.status) : undefined,
-      filter.query ? or(...[satpamInventory.itemName, satpamInventory.description, satpamInventory.founderName, satpamInventory.storageLocation, satpamInventory.foundLocation, satpamInventory.handoverRecipient].map((column) => ilike(column, escaped(filter.query!)))) : undefined)
+      filter.query ? or(...[satpamInventory.itemName, satpamInventory.description, satpamInventory.founderName, satpamInventory.storageLocation, satpamInventory.foundLocation, satpamInventory.handoverRecipient].map((column) => ilike(column, escaped(filter.query!))),
+        exists(this.db.select({ id: reports.id }).from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).where(and(
+          eq(reports.id, satpamInventory.sourceFoundReportId), eq(reports.handlerRole, "satpam"), eq(reports.category, "kehilangan-temuan"),
+          or(...[reports.title, reports.description, reports.locationText, reportLostFoundDetails.itemDetails].map(column => ilike(column, escaped(filter.query!))))
+        )))) : undefined)
     return this.db.transaction(async tx => {
       const repo = new DrizzleInventoryRepository(tx as unknown as Database)
       const rows = await repo.query().where(and(criteria, after ? or(lt(satpamInventory.createdAt, after.date), and(eq(satpamInventory.createdAt, after.date), lt(satpamInventory.id, after.id))) : undefined))
@@ -59,6 +66,47 @@ export class DrizzleInventoryRepository {
       const page = rows.slice(0, 20), last = page.at(-1)?.item
       return { items: page.map(row => repo.view(row)), total: total.count, nextCursor: rows.length > 20 && last ? Buffer.from(`${last.createdAt.toISOString()}|${last.id}`).toString("base64url") : null }
     }, { isolationLevel: "repeatable read", accessMode: "read only" })
+  }
+  private async receiveSource(tx: Parameters<Parameters<Database["transaction"]>[0]>[0], actor: ReportActor, actorName: string, ticket: string) {
+
+        const [report] = await tx.select({ report: reports, kind: reportLostFoundDetails.kind }).from(reports)
+          .innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id))
+          .where(and(eq(reports.ticketNumber, ticket), eq(reports.handlerRole, "satpam"), eq(reports.category, "kehilangan-temuan"))).for("update", { of: reports })
+        if (!report || report.kind !== "temuan") throw new ReportError("Laporan temuan tidak ditemukan.", 404)
+        const [occupied] = await tx.select({ id: satpamInventory.id }).from(satpamInventory).where(eq(satpamInventory.sourceFoundReportId, report.report.id))
+        if (occupied) throw new ReportError("Laporan ini sudah tercatat di Inventaris. Buka barang yang sudah ada.", 409)
+        const [pair] = await tx.select({ id: lostFoundMatches.id }).from(lostFoundMatches).where(eq(lostFoundMatches.foundReportId, report.report.id))
+        if (pair || !["baru", "diproses"].includes(report.report.status)) throw new ReportError("Laporan sudah ditangani melalui jalur lain.", 409)
+        const sourceId = report.report.id
+        await tx.update(reports).set({ status: "diproses", updatedAt: new Date() }).where(eq(reports.id, sourceId))
+        await tx.insert(reportStatusHistory).values({ reportId: sourceId, actorId: actor.id, actorName: actorName, fromStatus: report.report.status, toStatus: "diproses", note: "Barang fisik diterima dan dicatat di Inventaris Pos Satpam." })
+        await tx.insert(notifications).values({ recipientId: report.report.reporterId, reportId: sourceId, kind: "status", title: "Barang diterima di pos", description: "Satpam telah menerima barang secara fisik dan mencatatnya di Inventaris." })
+      return sourceId
+  }
+  async correct(actor: ReportActor, id: string, raw: unknown) {
+    if (!isUuid(id)) throw new ReportError("Barang tidak ditemukan.", 404)
+    const input = validateInventoryCorrection(raw)
+    return this.db.transaction(async tx => {
+      const [account] = await tx.select({ name: users.name }).from(users).where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true))).for("share")
+      if (!account) throw new ReportError("Akun tidak memiliki akses Satpam.", 403)
+      // Report locks precede the inventory lock, as in physical receipt and handover.
+      const [seed] = await tx.select().from(satpamInventory).where(eq(satpamInventory.id, id))
+      if (!seed) throw new ReportError("Barang tidak ditemukan.", 404)
+      let sourceId = seed.sourceFoundReportId
+      if (input.sourceFoundTicket) {
+        if (sourceId) {
+          const [sourceReport] = await tx.select({ ticket: reports.ticketNumber }).from(reports).where(eq(reports.id, sourceId))
+          if (sourceReport?.ticket !== input.sourceFoundTicket) throw new ReportError("Laporan asal yang sudah terhubung tidak dapat diganti.", 409)
+        } else sourceId = await this.receiveSource(tx, actor, account.name, input.sourceFoundTicket)
+      }
+      const [before] = await tx.select().from(satpamInventory).where(eq(satpamInventory.id, id)).for("update")
+      if (before.status !== "tersimpan" || before.updatedAt.toISOString() !== input.version) throw new ReportError("Barang sudah berubah atau telah diserahkan. Muat ulang data.", 409)
+      const fields = { itemName: input.itemName, description: input.description ?? "", founderName: input.founderName ?? null, foundLocation: input.foundLocation ?? null, storageLocation: input.storageLocation, sourceFoundReportId: sourceId }
+      await tx.update(satpamInventory).set({ ...fields, updatedAt: sql`greatest(clock_timestamp(), ${satpamInventory.updatedAt} + interval '1 millisecond')` }).where(eq(satpamInventory.id, id))
+      const previous = { itemName: before.itemName, description: before.description, founderName: before.founderName, foundLocation: before.foundLocation, storageLocation: before.storageLocation, sourceFoundReportId: before.sourceFoundReportId }
+      await tx.insert(operationalAudit).values({ actorId: actor.id, actorName: account.name, entity: "satpam_inventory", entityId: id, action: "correct", before: previous, after: { ...fields, reason: input.reason } })
+      return (await new DrizzleInventoryRepository(tx as unknown as Database).detail(id))!
+    })
   }
   async create(actor: ReportActor, raw: unknown, photo?: InventoryPhoto) {
     const input = validateCreateInventory(raw)
@@ -75,21 +123,7 @@ export class DrizzleInventoryRepository {
           return (await repo.detail(existing.id))!
         }
       }
-      let sourceId: string | undefined
-      if (input.sourceFoundTicket) {
-        const [report] = await tx.select({ report: reports, kind: reportLostFoundDetails.kind }).from(reports)
-          .innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id))
-          .where(and(eq(reports.ticketNumber, input.sourceFoundTicket), eq(reports.handlerRole, "satpam"), eq(reports.category, "kehilangan-temuan"))).for("update", { of: reports })
-        if (!report || report.kind !== "temuan") throw new ReportError("Laporan temuan tidak ditemukan.", 404)
-        const [occupied] = await tx.select({ id: satpamInventory.id }).from(satpamInventory).where(eq(satpamInventory.sourceFoundReportId, report.report.id))
-        if (occupied) throw new ReportError("Laporan ini sudah tercatat di Inventaris. Buka barang yang sudah ada.", 409)
-        const [pair] = await tx.select({ id: lostFoundMatches.id }).from(lostFoundMatches).where(eq(lostFoundMatches.foundReportId, report.report.id))
-        if (pair || !["baru", "diproses"].includes(report.report.status)) throw new ReportError("Laporan sudah ditangani melalui jalur lain.", 409)
-        sourceId = report.report.id
-        await tx.update(reports).set({ status: "diproses", updatedAt: new Date() }).where(eq(reports.id, sourceId))
-        await tx.insert(reportStatusHistory).values({ reportId: sourceId, actorId: actor.id, actorName: account.name, fromStatus: report.report.status, toStatus: "diproses", note: "Barang fisik diterima dan dicatat di Inventaris Pos Satpam." })
-        await tx.insert(notifications).values({ recipientId: report.report.reporterId, reportId: sourceId, kind: "status", title: "Barang diterima di pos", description: "Satpam telah menerima barang secara fisik dan mencatatnya di Inventaris." })
-      }
+      const sourceId = input.sourceFoundTicket ? await this.receiveSource(tx, actor, account.name, input.sourceFoundTicket) : undefined
       const [created] = await tx.insert(satpamInventory).values({ itemName: input.itemName, description: input.description, founderName: input.founderName,
         foundLocation: input.foundLocation, sourceFoundReportId: sourceId, submissionKey: input.submissionKey, submissionFingerprint: fingerprint,
         photoStorageKey: photo?.storageKey, photoMimeType: photo?.mimeType, photoName: photo?.name, registeredBy: actor.id, registeredByName: account.name }).returning()
@@ -126,6 +160,7 @@ export class DrizzleInventoryRepository {
         if (pair) throw new ReportError("Laporan sudah mempunyai pasangan. Gunakan penyerahan pasangan tersebut.", 409)
       }
       const [item] = await tx.select().from(satpamInventory).where(eq(satpamInventory.id, input.id)).for("update")
+      if (item.sourceFoundReportId !== seed.sourceFoundReportId) throw new ReportError("Laporan asal barang berubah. Muat ulang sebelum menyerahkan.", 409)
       if (item.status !== "tersimpan") throw new ReportError("Barang sudah diserahkan. Muat ulang data.", 409)
       const [officer] = await tx.select().from(securityOfficers).where(and(eq(securityOfficers.id, input.officerId), eq(securityOfficers.isActive, true))).for("share")
       if (!officer) throw new ReportError("Petugas tidak tersedia atau sudah nonaktif.", 409)

@@ -10,26 +10,27 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FieldError } from "@/components/ui/field"
-import { lifecycleByCategory, statusLabels as statusLabel } from "../domain/report"
+import { reportLifecycleForStatus, statusLabels as statusLabel } from "../domain/report"
 import { getReportLocationPresentation } from "../domain/report-location-presentation"
 import type { ReportListItem, ReportSummary } from "../types"
 import { reportCategoryPresentation } from "./report-category-badge"
 
 function getActiveStep(report: Pick<ReportSummary, "category" | "status">) {
-  return Math.max(0, lifecycleByCategory[report.category].indexOf(report.status))
+  return Math.max(0, reportLifecycleForStatus(report.category, report.status).indexOf(report.status))
 }
 
 function ReportStepper({ report }: { report: ReportSummary }) {
-  const steps = lifecycleByCategory[report.category].map((status) => ({ value: status, label: statusLabel[status] }))
+  const steps = reportLifecycleForStatus(report.category, report.status).map((status) => ({ value: status, label: statusLabel[status] }))
   return (
     <div className="overflow-x-auto rounded-md pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" tabIndex={0} aria-label={`Tahapan penanganan laporan ${report.title}`}>
-      <Stepper steps={steps} value={report.status} variant="circles" className="min-w-lg" aria-label="Progres laporan" />
+      <Stepper steps={steps} value={report.status} variant="circles" className="min-w-72" aria-label="Progres laporan" />
     </div>
   )
 }
 
 function getStepSummary(report: ReportSummary) {
-  const total = lifecycleByCategory[report.category].length
+  if (report.closureNote) return "Ditutup tanpa penyerahan"
+  const total = reportLifecycleForStatus(report.category, report.status).length
   return report.status === "ditolak" ? "Laporan ditolak" : `Tahap ${getActiveStep(report) + 1} dari ${total}`
 }
 
@@ -68,7 +69,7 @@ function ReportDetailContent({ report, submittedAt }: { report: ReportSummary; s
               {getStepSummary(report)}
             </Badge>
           </div>
-          {report.status !== "ditolak" ? <ReportStepper report={report} /> : <p className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">Laporan ditolak. Lihat catatan pengelola pada riwayat status.</p>}
+          {report.closureNote ? <p className="rounded-xl border border-border bg-background p-4 text-sm">{report.closureNote}</p> : report.status !== "ditolak" ? <ReportStepper report={report} /> : <p className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">Laporan ditolak. Lihat catatan pengelola pada riwayat status.</p>}
           <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
             <p className="text-sm font-medium text-foreground">Informasi status</p>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">

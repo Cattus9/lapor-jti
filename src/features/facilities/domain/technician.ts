@@ -16,15 +16,15 @@ function boundedText(value: unknown, label: string, max: number, required = fals
   if (typeof value !== "string" || value.length > max || value.includes("\u0000") || (required && !value.trim())) throw new ReportError(`${label} tidak valid.`)
   return value.trim()
 }
-export type TechnicianCommand = { ticket: string; status: Exclude<TechnicianStatus, "baru">; note: string }
+export type TechnicianCommand = { ticket: string; status: "selesai" | "ditolak"; note: string }
 export function parseTechnicianCommand(raw: unknown): TechnicianCommand {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new ReportError("Permintaan tidak valid.")
   const value = raw as Record<string, unknown>
-  if (typeof value.status !== "string" || !["diverifikasi", "diproses", "selesai", "ditolak"].includes(value.status)) throw new ReportError("Aksi status tidak valid.")
+  if (typeof value.status !== "string" || !["selesai", "ditolak"].includes(value.status)) throw new ReportError("Aksi status tidak valid.")
   return { ticket: requireTechnicianTicket(value.ticket), status: value.status as TechnicianCommand["status"], note: boundedText(value.note, "Catatan pekerjaan", 2000, value.status === "selesai" || value.status === "ditolak") }
 }
-export function technicianExpectedStatus(target: TechnicianCommand["status"]): TechnicianStatus {
-  return target === "diproses" ? "diverifikasi" : target === "selesai" ? "diproses" : "baru"
+export function technicianCanTransition(from: TechnicianStatus, target: TechnicianCommand["status"]): boolean {
+  return (target === "selesai" || target === "ditolak") && ["baru", "diverifikasi", "diproses"].includes(from)
 }
 export function parseTechnicianFilter(value: Record<string, unknown> = {}): TechnicianFilter {
   const status = value.status ?? "semua", sort = value.sort ?? "terbaru"

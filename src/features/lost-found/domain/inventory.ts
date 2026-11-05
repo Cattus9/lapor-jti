@@ -7,8 +7,11 @@ export type InventoryItem = {
   storageLocation: string; foundLocation?: string; photoUrl?: string; hasStoredPhoto?: boolean
   handoverRecipient?: string; handoverNote?: string; handedOverAt?: string
   handoverOfficer?: string; handoverActor?: string; ownershipEvidence?: string; legacyHandover?: boolean
+  sourceFoundSubmittedAt?: string; matchingDateIso?: string
   sourceFoundTicket?: string; sourceFoundTitle?: string; linkedLossTicket?: string
   registeredByName: string; createdAt: string; updatedAt: string
+  version?: string
+  corrections?: Array<{ actor: string; at: string; reason: string }>
 }
 export type InventoryFilter = { query?: string; status?: "semua" | InventoryStatus; cursor?: string }
 export function parseInventoryFilter(raw: Record<string, unknown>): InventoryFilter {
@@ -65,4 +68,10 @@ export function validateHandoverInventory(raw: unknown): HandoverInventoryInput 
     note: text(v, "note", "Catatan penyerahan", 2000) || undefined,
     lossTicket: v.lossTicket ? requireTicket(v.lossTicket) : undefined,
   }
+}
+
+export function validateInventoryCorrection(raw: unknown) {
+  const v = object(raw)
+  if (typeof v.version !== "string" || !Number.isFinite(Date.parse(v.version)) || new Date(v.version).toISOString() !== v.version) throw new ReportError("Versi barang tidak valid. Muat ulang data.")
+  return { ...validateCreateInventory(v), version: v.version, storageLocation: text(v, "storageLocation", "Lokasi simpan", 200, true), reason: text(v, "reason", "Alasan koreksi", 2000, true) }
 }
