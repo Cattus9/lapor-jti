@@ -4,7 +4,7 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { Archive, ArrowRight, CalendarDays, ClipboardCheck, FileText, Handshake, ImageIcon, Images, MapPin, Package, PackageSearch, Search, SlidersHorizontal, UserRound } from "lucide-react"
+import { Archive, ArrowRight, CalendarDays, ClipboardCheck, FileText, Handshake, ImageIcon, Images, Mail, MapPin, Package, PackageSearch, Phone, Search, SlidersHorizontal, UserRound } from "lucide-react"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageHeader } from "@/components/layout/page-header"
@@ -31,8 +31,9 @@ import type { CurrentUser } from "@/lib/auth/current-user"
 
 function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
   const sourceLabel = item.source === "inventaris" ? "Inventaris Pos Satpam" : "Pasangan laporan"
+  const contactInfo = [item.recipientEmail, item.recipientPhone].filter(Boolean).join(" · ")
   return <Dialog><DialogTrigger render={<Button variant="ghost" className="group relative h-auto w-full flex-col items-stretch gap-3 overflow-hidden rounded-xl border border-border bg-report-surface p-4 text-left whitespace-normal shadow-none transition-colors hover:border-primary/40 hover:bg-report-surface focus-visible:ring-ring md:p-5" />}>
-    <span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary"><PackageSearch aria-hidden="true" /></span><span className="min-w-0"><span className="block text-sm font-semibold text-foreground">{item.title}</span><span className="mt-1 block text-xs font-normal text-muted-foreground">Penerima: {item.recipient}</span></span></span><StatusBadge status={item.status} /></span>
+    <span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary"><PackageSearch aria-hidden="true" /></span><span className="min-w-0"><span className="block text-sm font-semibold text-foreground">{item.title}</span><span className="mt-1 block text-xs font-normal text-muted-foreground">Penerima: {item.recipient}{contactInfo ? ` (${contactInfo})` : ""}</span></span></span><StatusBadge status={item.status} /></span>
     <span className="line-clamp-2 text-sm font-normal text-muted-foreground">{item.itemDescription || "Tidak ada deskripsi tambahan."}</span>
     <span className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs font-normal text-muted-foreground"><span>{sourceLabel} · Diserahkan {item.handedOverAt} WIB</span><span className="inline-flex items-center gap-1 text-primary-action">Lihat detail<ArrowRight className="size-3.5" aria-hidden="true" /></span></span>
   </DialogTrigger><DialogContent>
@@ -41,14 +42,17 @@ function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
       <Stepper aria-label="Progres penyerahan" value={item.status === "Selesai" ? "selesai" : "diserahkan"} steps={[{ value: "diserahkan", label: "Diserahkan" }, { value: "selesai", label: "Selesai" }]} />
       <ReportDetailSection icon={Package} title="Detail barang" description="Informasi barang dan penyerahan yang tercatat."><ReportDetailTable rows={[
         { icon: Package, label: "Barang", value: item.itemCategory }, { icon: FileText, label: "Deskripsi", value: item.itemDescription },
-        { icon: UserRound, label: "Penerima", value: item.recipient }, { icon: MapPin, label: "Lokasi penyerahan", value: item.location },
+        { icon: UserRound, label: "Penerima", value: item.recipient },
+        ...(item.recipientEmail ? [{ icon: Mail, label: "Email penerima", value: item.recipientEmail }] : []),
+        ...(item.recipientPhone ? [{ icon: Phone, label: "No. HP penerima", value: item.recipientPhone }] : []),
+        { icon: MapPin, label: "Lokasi penyerahan", value: item.location },
         { icon: UserRound, label: "Petugas penyerah", value: item.handler }, { icon: UserRound, label: "Dicatat melalui akun", value: item.actor },
         ...(item.ownershipEvidence ? [{ icon: ClipboardCheck, label: "Pemeriksaan kepemilikan", value: item.ownershipEvidence }] : []),
         { icon: FileText, label: "Catatan", value: item.handoverNote },
         ...(item.lostSubmittedAt ? [{ icon: CalendarDays, label: "Kehilangan dikirim", value: `${item.lostSubmittedAt} WIB` }] : []),
         ...(item.foundSubmittedAt ? [{ icon: CalendarDays, label: "Temuan dikirim", value: `${item.foundSubmittedAt} WIB` }] : []),
       ]} />{item.legacy ? <Badge variant="outline" tone="neutral">Data lama; petugas penyerah tidak tercatat</Badge> : null}</ReportDetailSection>
-      <ReportDetailSection icon={Images} title="Foto barang" description="Lampiran privat dari inventaris atau laporan terkait."><div className="grid gap-3 sm:grid-cols-2">{item.lostTicket ? <EvidencePhoto label="Kehilangan" photoUrl={item.lostPhotoUrl} /> : null}<EvidencePhoto label={item.source === "inventaris" ? "Inventaris" : "Temuan"} photoUrl={item.foundPhotoUrl} /></div></ReportDetailSection>
+      <ReportDetailSection icon={Images} title="Foto barang" description="Lampiran privat dari inventaris atau laporan terkait."><div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">{item.lostTicket ? <EvidencePhoto label="Kehilangan" photoUrl={item.lostPhotoUrl} /> : null}<EvidencePhoto label={item.source === "inventaris" ? "Inventaris" : "Temuan"} photoUrl={item.foundPhotoUrl} />{item.handoverPhotoUrl ? <EvidencePhoto label="Penyerahan" photoUrl={item.handoverPhotoUrl} /> : null}</div></ReportDetailSection>
       <ReportDetailSection icon={ClipboardCheck} title="Riwayat penanganan" description="Waktu penerimaan dan penyelesaian yang tercatat."><ReportDetailTable rows={[
         ...(item.receivedAt ? [{ icon: CalendarDays, label: "Diterima di pos", value: `${item.receivedAt} WIB` }] : []),
         ...(item.matchedAt ? [{ icon: CalendarDays, label: "Dicocokkan", value: `${item.matchedAt} WIB` }] : []),

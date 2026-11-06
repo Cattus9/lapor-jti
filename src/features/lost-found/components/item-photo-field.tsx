@@ -27,8 +27,8 @@ export function useItemPhoto(initialFile?: File | null) {
   }, [file])
 
   function select(next: File) {
-    if (!["image/jpeg", "image/png"].includes(next.type)) {
-      setError("File harus berupa foto JPG atau PNG.")
+    if (!["image/jpeg", "image/png", "image/webp"].includes(next.type)) {
+      setError("File harus berupa foto JPG, PNG, atau WebP.")
       return
     }
     if (next.size === 0) {
@@ -59,20 +59,26 @@ export function ItemPhotoField({
   idPrefix,
   photo,
   disabled,
+  label = "Foto barang (opsional)",
+  description = "JPG atau PNG, maksimal 5 MB. Foto disimpan sebagai lampiran privat.",
+  compact = false,
 }: {
   idPrefix: string
   photo: ItemPhoto
   disabled?: boolean
+  label?: string
+  description?: string
+  compact?: boolean
 }) {
   return (
     <Field className="flex w-full flex-col space-y-2">
-      <FieldLabel>Foto barang (opsional)</FieldLabel>
+      <FieldLabel>{label}</FieldLabel>
 
       {photo.previewUrl ? (
-        <div className="relative h-56 w-full overflow-hidden rounded-xl border border-border bg-muted/60 p-2 shadow-2xs sm:h-64">
+        <div className={`relative ${compact ? "h-44 sm:h-48" : "h-56 sm:h-64"} w-full overflow-hidden rounded-xl border border-border bg-muted/60 p-2 shadow-2xs`}>
           <Image
             src={photo.previewUrl}
-            alt="Pratinjau foto barang"
+            alt={`Pratinjau ${label}`}
             fill
             className="object-contain"
             unoptimized
@@ -103,7 +109,7 @@ export function ItemPhotoField({
           </TabsList>
 
           <TabsContent value="upload" className="pt-1">
-            <FileDropzone id={`${idPrefix}-photo-file`} value={[]} onChange={files => { if (files[0]) photo.select(files[0]) }} accept="image/jpeg,image/png" maxFiles={1} maxSizeMb={5} disabled={disabled} description="JPG atau PNG, maksimal 5 MB. Foto disimpan sebagai lampiran privat." />
+            <FileDropzone id={`${idPrefix}-photo-file`} value={[]} onChange={files => { if (files[0]) photo.select(files[0]) }} accept="image/jpeg,image/png,image/webp" maxFiles={1} maxSizeMb={5} disabled={disabled} description={description} />
           </TabsContent>
 
           <TabsContent value="link" className="space-y-2 pt-1">

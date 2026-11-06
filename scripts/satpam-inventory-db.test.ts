@@ -65,12 +65,16 @@ test("satpam inventory persistence in PostgreSQL: insert, list, and handover", {
     const handedOver = await repo.handoverInventory(satpamActor, {
       id: created.id,
       recipient: "Riko Pemilik",
+      recipientEmail: "riko@example.com",
+      recipientPhone: "081234567890",
       officerId, submissionKey: randomUUID(), ownershipEvidence: "Menunjukkan ciri khusus dan bukti kepemilikan",
       note: "Menyerahkan bukti STNK motor",
     })
 
     assert.equal(handedOver.status, "diserahkan")
     assert.equal(handedOver.handoverRecipient, "Riko Pemilik")
+    assert.equal(handedOver.handoverRecipientEmail, "riko@example.com")
+    assert.equal(handedOver.handoverRecipientPhone, "081234567890")
     assert.equal(handedOver.handoverNote, "Menyerahkan bukti STNK motor")
     assert.ok(handedOver.handedOverAt)
 
@@ -78,6 +82,8 @@ test("satpam inventory persistence in PostgreSQL: insert, list, and handover", {
     const [updatedRow] = await db.select().from(satpamInventory).where(eq(satpamInventory.id, created.id))
     assert.equal(updatedRow.status, "diserahkan")
     assert.equal(updatedRow.handoverRecipient, "Riko Pemilik")
+    assert.equal(updatedRow.handoverRecipientEmail, "riko@example.com")
+    assert.equal(updatedRow.handoverRecipientPhone, "081234567890")
   } finally {
     // Cleanup fixture
     await db.delete(reportHandovers).where(eq(reportHandovers.actorId, actorId))

@@ -28,10 +28,12 @@ test("Inventory receipts, linked returns, retry guards, private photos, unified 
       assert.equal((await repo.createInventory(actor, input)).id, item.id)
       await assert.rejects(repo.createInventory(actor, { ...input, itemName: "Data berbeda" }), /data berbeda/)
       assert.equal((await repo.dashboard()).storedItems, before.storedItems + 1)
-      const handover = { id: item.id, submissionKey: randomUUID(), officerId, recipient: "Pemilik langsung", ownershipEvidence: "Menjelaskan ciri yang sesuai", note: "Di pos" }
+      const handover = { id: item.id, submissionKey: randomUUID(), officerId, recipient: "Pemilik langsung", recipientEmail: "pemilik@example.com", recipientPhone: "081234567890", ownershipEvidence: "Menjelaskan ciri yang sesuai", note: "Di pos" }
       const returned = await repo.handoverInventory(actor, handover)
       assert.equal(returned.handoverOfficer, "Penyerah fixture")
       assert.equal(returned.handoverActor, "Pencatat fixture")
+      assert.equal(returned.handoverRecipientEmail, "pemilik@example.com")
+      assert.equal(returned.handoverRecipientPhone, "081234567890")
       assert.equal(returned.linkedLossTicket, undefined)
       assert.equal((await repo.handoverInventory(actor, handover)).id, item.id)
       await assert.rejects(repo.handoverInventory(actor, { ...handover, recipient: "Orang berbeda" }), /data berbeda/)
@@ -40,6 +42,8 @@ test("Inventory receipts, linked returns, retry guards, private photos, unified 
       assert.equal(directHistory.total, 1); assert.equal(directHistory.items[0].source, "inventaris")
       assert.equal(directHistory.items[0].lostSubmittedAt, "")
       assert.equal(directHistory.items[0].status, "Selesai")
+      assert.equal(directHistory.items[0].recipientEmail, "pemilik@example.com")
+      assert.equal(directHistory.items[0].recipientPhone, "081234567890")
       assert.equal((await repo.dashboard()).storedItems, before.storedItems)
 
       const found = await repo.createFoundReport(actor, { itemName: "Payung fixture", description: "Payung hitam" })
@@ -68,7 +72,7 @@ test("Inventory receipts, linked returns, retry guards, private photos, unified 
       assert.equal(unified[0].title, originalCandidate.title)
       assert.equal(unified[0].sortDate, originalCandidate.sortDate)
       assert.equal(unified[0].custody, "di-pos")
-      const completion = { id: receipt.id, submissionKey: randomUUID(), officerId, recipient: "Pemilik payung", ownershipEvidence: "Ciri khusus terkonfirmasi", lossTicket: loss.ticket }
+      const completion = { id: receipt.id, submissionKey: randomUUID(), officerId, recipient: "Pemilik payung", recipientPhone: "089876543210", ownershipEvidence: "Ciri khusus terkonfirmasi", lossTicket: loss.ticket }
       await repo.handoverInventory(actor, completion)
       const states = await tx.select().from(reports).where(inArray(reports.id, [found.id, loss.id]))
       assert.ok(states.every(r => r.status === "selesai" && r.completedAt))
@@ -108,7 +112,7 @@ test("Concurrent inventory returns have one winner; identical concurrent retries
     await db.insert(securityOfficers).values({ id: officerId, name: "Concurrent officer" })
     for (const sameKey of [false, true]) {
       const item = await repo.createInventory(actor, { itemName: `Race ${actorId}` }); ids.push(item.id)
-      const input = { id: item.id, officerId, recipient: "Pemilik", ownershipEvidence: "Ciri cocok", submissionKey: randomUUID() }
+      const input = { id: item.id, officerId, recipient: "Pemilik", recipientPhone: "081234567890", ownershipEvidence: "Ciri cocok", submissionKey: randomUUID() }
       const results = await Promise.allSettled([repo.handoverInventory(actor, input), repo.handoverInventory(actor, { ...input, submissionKey: sameKey ? input.submissionKey : randomUUID(), recipient: sameKey ? input.recipient : "Penerima lain" })])
       assert.equal(results.filter(r => r.status === "fulfilled").length, sameKey ? 2 : 1)
       if (!sameKey) assert.equal((results.find(r => r.status === "rejected") as PromiseRejectedResult).reason.status, 409)

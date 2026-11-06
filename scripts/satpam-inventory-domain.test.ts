@@ -86,16 +86,25 @@ test("Inventory rejects external photo URLs and malformed runtime payloads", () 
   for (const raw of [null, [], 1, { itemName: 123 }]) assert.throws(() => validateCreateInventory(raw), /tidak valid/)
 })
 
-test("Inventory handover requires an officer, ownership evidence, a stable key and valid optional loss reference", () => {
-  const input = { id: randomUUID(), officerId: randomUUID(), submissionKey: randomUUID(), recipient: "  Siti  ", ownershipEvidence: "  Menjelaskan ciri khusus  ", note: "  Catatan  " }
+test("Inventory handover requires an officer, ownership evidence, contact (email/phone), a stable key and valid optional loss reference", () => {
+  const input = { id: randomUUID(), officerId: randomUUID(), submissionKey: randomUUID(), recipient: "  Siti  ", recipientEmail: "siti@example.com", recipientPhone: "081234567890", ownershipEvidence: "  Menjelaskan ciri khusus  ", note: "  Catatan  " }
   const result = validateHandoverInventory(input)
   assert.equal(result.recipient, "Siti"); assert.equal(result.ownershipEvidence, "Menjelaskan ciri khusus")
   assert.equal(result.note, "Catatan"); assert.equal(result.lossTicket, undefined)
+  assert.equal(result.recipientEmail, "siti@example.com")
+  assert.equal(result.recipientPhone, "081234567890")
+
+  // Valid with only email or only phone
+  assert.equal(validateHandoverInventory({ ...input, recipientPhone: undefined }).recipientEmail, "siti@example.com")
+  assert.equal(validateHandoverInventory({ ...input, recipientEmail: undefined }).recipientPhone, "081234567890")
+
   assert.throws(() => validateHandoverInventory({ ...input, officerId: "" }), /Pilih petugas/)
   assert.throws(() => validateHandoverInventory({ ...input, ownershipEvidence: "" }), /kepemilikan/)
   assert.throws(() => validateHandoverInventory({ ...input, submissionKey: "" }), /Kunci penyerahan/)
   assert.throws(() => validateHandoverInventory({ ...input, recipient: "x".repeat(151) }), /maksimal 150/)
   assert.throws(() => validateHandoverInventory({ ...input, lossTicket: "bad" }), /tiket tidak valid/)
+  assert.throws(() => validateHandoverInventory({ ...input, recipientEmail: undefined, recipientPhone: undefined }), /minimal salah satu kontak/i)
+  assert.throws(() => validateHandoverInventory({ ...input, recipientEmail: "invalid-email", recipientPhone: undefined }), /Format email/)
 })
 
 test("SatpamService inventory endpoints enforce satpam role authorization", async () => {

@@ -26,10 +26,23 @@ export class SatpamService {
     if (!detail) throw new ReportError("Laporan tidak ditemukan.", 404)
     return detail
   }
-  async execute(actor: ReportActor, raw: unknown) {
+  async execute(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
     requireSatpam(actor)
-    await this.repository.execute(actor, parseSatpamCommand(raw))
-    return { ok: true }
+    const command = parseSatpamCommand(raw)
+    let storedPhoto: { storageKey: string; mimeType: string; name: string; id: string; size: number } | undefined
+    if (file && command.type === "handover") {
+      validateUploads([file], 0)
+      if (!file.mimeType.startsWith("image/")) throw new ReportError("Lampiran penyerahan harus berupa foto.")
+      const [photo] = await this.storage.store([file])
+      storedPhoto = photo
+    }
+    try {
+      await this.repository.execute(actor, command, storedPhoto ? { storageKey: storedPhoto.storageKey, mimeType: storedPhoto.mimeType, name: storedPhoto.name } : undefined)
+      return { ok: true }
+    } catch (error) {
+      if (storedPhoto) await this.storage.remove([storedPhoto]).catch(() => {})
+      throw error
+    }
   }
   async download(actor: ReportActor, id: string, preview = false) {
     requireSatpam(actor)
@@ -72,10 +85,31 @@ export class SatpamService {
     }
   }
 
-  async handoverInventory(actor: ReportActor, raw: unknown) {
+  async handoverInventory(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
     requireSatpam(actor)
     const validated = validateHandoverInventory(raw)
-    return this.repository.handoverInventory(actor, validated)
+    let storedPhoto: { storageKey: string; mimeType: string; name: string; id: string; size: number } | undefined
+    if (file) {
+      validateUploads([file], 0)
+      if (!file.mimeType.startsWith("image/")) throw new ReportError("Lampiran penyerahan harus berupa foto.")
+      const [photo] = await this.storage.store([file])
+      storedPhoto = photo
+    }
+    try {
+      return await this.repository.handoverInventory(actor, validated, storedPhoto ? { storageKey: storedPhoto.storageKey, mimeType: storedPhoto.mimeType, name: storedPhoto.name } : undefined)
+    } catch (error) {
+      if (storedPhoto) await this.storage.remove([storedPhoto]).catch(() => {})
+      throw error
+    }
+  }
+
+  async downloadHandoverPhoto(actor: ReportActor, id: string, preview = false) {
+    requireSatpam(actor)
+    if (!isUuid(id)) throw new ReportError("Foto tidak ditemukan.", 404)
+    const photo = await this.repository.getHandoverPhoto(id)
+    if (!photo) throw new ReportError("Foto tidak ditemukan.", 404)
+    const result = await this.readPhoto({ ...photo, id, size: 0 }, preview)
+    return { photo: { ...photo, mimeType: result.mimeType }, bytes: result.bytes }
   }
 
   async downloadInventoryPhoto(actor: ReportActor, id: string, preview = false) {

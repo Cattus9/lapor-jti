@@ -9,7 +9,7 @@ import { satpamReportPeriods, satpamReportSorts } from "../src/features/lost-fou
 import { defaultReportFilters, reportDateBounds } from "../src/features/reports/domain/report-list-filters"
 
 const id = "00000000-0000-4000-8000-000000000001"
-const handover = { type: "handover", matchId: id, officerId: id, recipient: "Penerima", location: "Pos Satpam", note: "", ownershipEvidence: "Menjelaskan ciri khusus", submissionKey: id }
+const handover = { type: "handover", matchId: id, officerId: id, recipient: "Penerima", recipientEmail: "penerima@example.com", recipientPhone: "081234567890", location: "Pos Satpam", note: "", ownershipEvidence: "Menjelaskan ciri khusus", submissionKey: id }
 test("Exceptional closure and match cancellation require explicit reasons and the current active status", () => {
   const close = { type: "close", ticket: "LJ-2026-00001", expectedStatus: "baru", reason: "self_found", note: "Pemilik mengonfirmasi" }
   assert.deepEqual(parseSatpamCommand(close), close)
@@ -21,9 +21,25 @@ test("Only the authenticated Satpam role can operate; selected officer is not an
   requireSatpam({ id, role: "satpam" })
   for (const role of ["pelapor", "teknisi", "manajemen", "admin"]) assert.throws(() => requireSatpam({ id, role }), (e: unknown) => e instanceof ReportError && e.status === 403)
 })
-test("Handover requires an explicit officer, recipient and location", () => {
+test("Handover requires an explicit officer, recipient, location, and at least email or phone", () => {
   assert.deepEqual(parseSatpamCommand(handover), handover)
-  for (const patch of [{ officerId: undefined }, { officerId: "nama satpam" }, { matchId: "invalid" }, { recipient: " " }, { recipient: "x".repeat(151) }, { location: "" }, { note: "x".repeat(2001) }, { ownershipEvidence: " " }, { submissionKey: undefined }]) assert.throws(() => parseSatpamCommand({ ...handover, ...patch }), ReportError)
+  // Minimal salah satu kontak: email saja atau phone saja
+  assert.equal(parseSatpamCommand({ ...handover, recipientPhone: undefined }).type, "handover")
+  assert.equal(parseSatpamCommand({ ...handover, recipientEmail: undefined }).type, "handover")
+  for (const patch of [
+    { officerId: undefined },
+    { officerId: "nama satpam" },
+    { matchId: "invalid" },
+    { recipient: " " },
+    { recipient: "x".repeat(151) },
+    { location: "" },
+    { note: "x".repeat(2001) },
+    { ownershipEvidence: " " },
+    { submissionKey: undefined },
+    { recipientEmail: undefined, recipientPhone: undefined },
+    { recipientEmail: "bukan-email", recipientPhone: undefined },
+    { recipientEmail: "   ", recipientPhone: "   " },
+  ]) assert.throws(() => parseSatpamCommand({ ...handover, ...patch }), ReportError)
   assert.equal(parseSatpamCommand({ ...handover, officerName: "Impersonated", actorId: id }).type, "handover")
 })
 test("Direct status mutation cannot bypass matching or handover; rejection needs a reason", () => {

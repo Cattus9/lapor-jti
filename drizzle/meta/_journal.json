@@ -141,6 +141,13 @@
       "when": 1793416344522,
       "tag": "0019_satpam_draft_owner_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793961967964,
+      "tag": "0020_satpam_handover_contact_and_photo",
+      "breakpoints": true
     }
   ]
 }

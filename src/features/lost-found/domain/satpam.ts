@@ -17,7 +17,7 @@ function text(value: unknown, label: string, max: number, required = false) {
 export type SatpamCommand =
   | { type: "status"; ticket: string; status: "diproses" | "ditolak" | "selesai"; note: string }
   | { type: "match"; lossTicket: string; foundTicket: string }
-  | { type: "handover"; matchId: string; officerId: string; recipient: string; location: string; note: string; ownershipEvidence: string; submissionKey: string }
+  | { type: "handover"; matchId: string; officerId: string; recipient: string; recipientEmail?: string; recipientPhone?: string; location: string; note: string; ownershipEvidence: string; submissionKey: string }
   | { type: "cancel-match"; matchId: string; note: string }
   | { type: "close"; ticket: string; expectedStatus: "baru" | "diproses"; reason: "self_found" | "withdrawn" | "duplicate"; note: string }
 export function parseSatpamCommand(raw: unknown): SatpamCommand {
@@ -44,7 +44,23 @@ export function parseSatpamCommand(raw: unknown): SatpamCommand {
     if (!isUuid(v.submissionKey)) throw new ReportError("Kunci penyerahan tidak valid.")
     if (!isUuid(v.matchId)) throw new ReportError("Pasangan laporan tidak valid.")
     if (!isUuid(v.officerId)) throw new ReportError("Pilih petugas penanggung jawab penyerahan.")
-    return { type: "handover", matchId: v.matchId, officerId: v.officerId, recipient: text(v.recipient, "Nama penerima", 150, true), location: text(v.location, "Lokasi penyerahan", 200, true), note: text(v.note, "Catatan penyerahan", 2000), ownershipEvidence: text(v.ownershipEvidence, "Hasil pemeriksaan kepemilikan", 1000, true), submissionKey: v.submissionKey }
+    const recipient = text(v.recipient, "Nama penerima", 150, true)
+    const recipientEmail = text(v.recipientEmail, "Email penerima", 255) || undefined
+    const recipientPhone = text(v.recipientPhone, "Nomor HP penerima", 50) || undefined
+    if (!recipientEmail && !recipientPhone) throw new ReportError("Isi minimal salah satu kontak penerima: Email atau Nomor HP.")
+    if (recipientEmail && !/.+@.+\..+/.test(recipientEmail)) throw new ReportError("Format email penerima tidak valid.")
+    return {
+      type: "handover",
+      matchId: v.matchId,
+      officerId: v.officerId,
+      recipient,
+      recipientEmail,
+      recipientPhone,
+      location: text(v.location, "Lokasi penyerahan", 200, true),
+      note: text(v.note, "Catatan penyerahan", 2000),
+      ownershipEvidence: text(v.ownershipEvidence, "Hasil pemeriksaan kepemilikan", 1000, true),
+      submissionKey: v.submissionKey,
+    }
   }
   throw new ReportError("Aksi tidak valid.")
 }

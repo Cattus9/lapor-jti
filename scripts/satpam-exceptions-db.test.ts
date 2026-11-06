@@ -36,7 +36,7 @@ test("Satpam links receipts, audits corrections, cancels mistaken matches and cl
       const linked = await repo.correctInventory(actor, unlinked.id, { ...correction, version: unlinked.version, sourceFoundTicket: second.ticket })
       assert.equal(linked.sourceFoundTicket, second.ticket)
       const owner = await loss()
-      const returned = await repo.handoverInventory(actor, { id: item.id, officerId, recipient: "Pemilik", ownershipEvidence: "Menjelaskan ciri khusus", lossTicket: owner.ticket, submissionKey: randomUUID() })
+      const returned = await repo.handoverInventory(actor, { id: item.id, officerId, recipient: "Pemilik", recipientEmail: "pemilik@example.com", recipientPhone: "081234567890", ownershipEvidence: "Menjelaskan ciri khusus", lossTicket: owner.ticket, submissionKey: randomUUID() })
       assert.equal(returned.status, "diserahkan")
       await assert.rejects(repo.correctInventory(actor, item.id, { ...correction, version: returned.version }), /diserahkan/)
       await assert.rejects(execute({ type: "close", ticket: first.ticket, expectedStatus: "diproses", reason: "withdrawn", note: "Ditutup" }), /Inventaris|berubah/)
@@ -52,7 +52,7 @@ test("Satpam links receipts, audits corrections, cancels mistaken matches and cl
       assert.ok((await tx.select().from(reports).where(inArray(reports.id, [missing.id, discovery.id]))).every(row => row.status === "diproses"))
       await execute({ type: "match", lossTicket: missing.ticket, foundTicket: discovery.ticket })
       const [replacement] = await tx.select().from(lostFoundMatches).where(eq(lostFoundMatches.lossReportId, missing.id))
-      const handover = { type: "handover", matchId: replacement.id, officerId, recipient: "Pemilik", location: "Pos", note: "", ownershipEvidence: "Ciri khusus sesuai", submissionKey: randomUUID() }
+      const handover = { type: "handover", matchId: replacement.id, officerId, recipient: "Pemilik", recipientEmail: "pemilik@example.com", recipientPhone: "081234567890", location: "Pos", note: "", ownershipEvidence: "Ciri khusus sesuai", submissionKey: randomUUID() }
       await execute(handover)
       await execute(handover)
       await assert.rejects(execute({ ...handover, recipient: "Orang lain" }), /data berbeda/)

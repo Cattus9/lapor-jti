@@ -9,7 +9,7 @@ import { users, reports, reportLostFoundDetails, lostFoundMatches } from "../src
 import { DrizzleSatpamRepository } from "../src/features/lost-found/infrastructure/drizzle-satpam-repository"
 import type { ReportStatus } from "../src/features/reports/domain/report"
 
-test("Dashboard SQL prioritizes the five oldest active scoped reports, includes handover stages and counts pairs separately", { skip: process.env.NODE_ENV !== "development" ? "Local development PostgreSQL required" : false }, async () => {
+test("Dashboard SQL prioritizes unhandled reports (baru) first ordered newest first, followed by active reports, includes handover stages and counts pairs separately", { skip: process.env.NODE_ENV !== "development" ? "Local development PostgreSQL required" : false }, async () => {
   assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(new URL(getDatabaseUrl()).hostname))
   const { db, pool } = createDatabaseClient(), owner = randomUUID(), guard = randomUUID(), rollback = Symbol("dashboard-priority-rollback")
   try {
@@ -39,13 +39,20 @@ test("Dashboard SQL prioritizes the five oldest active scoped reports, includes 
         await tx.insert(reportLostFoundDetails).values([...active, ...ended, foreign].map((row, index) => ({ reportId: row.id!, kind: index % 2 ? "temuan" : "kehilangan", itemName: "Fixture", itemDetails: "" })))
         await tx.insert(lostFoundMatches).values({ lossReportId: active[6].id!, foundReportId: active[1].id!, matchedBy: guard })
         const result = await repository.dashboard()
-        const expected = [...active].sort((one, two) => (one.submittedAt as Date).getTime() - (two.submittedAt as Date).getTime() || one.id!.localeCompare(two.id!)).slice(0, 5)
+        const expected = [...active].sort((one, two) => {
+          const oneRank = one.status === "baru" ? 0 : 1
+          const twoRank = two.status === "baru" ? 0 : 1
+          if (oneRank !== twoRank) return oneRank - twoRank
+          return (two.submittedAt as Date).getTime() - (one.submittedAt as Date).getTime() || two.id!.localeCompare(one.id!)
+        }).slice(0, 5)
         assert.deepEqual(result.queue.map((row) => row.id), expected.map((row) => row.id))
-        assert.ok(result.queue.some((row) => row.status === "Diserahkan"))
+        assert.ok(result.queue.some((row) => row.status === "Baru"))
         assert.ok(result.queue.some((row) => row.status === "Barang teridentifikasi"))
         assert.equal(result.lostReports, baseline.lostReports + 4)
         assert.equal(result.foundReports, baseline.foundReports + 3)
         assert.equal(result.newFindings, baseline.newFindings + 1)
+        assert.equal(result.newLossReports, (baseline.newLossReports ?? 0) + 1)
+        assert.equal(result.unhandledReports, (baseline.unhandledReports ?? 0) + 2)
         assert.equal(result.readyForHandover, baseline.readyForHandover + 1, "A matched pair counts once, not twice")
         assert.deepEqual(Object.keys(result.queue[0]).sort(), ["id", "ticket", "kind", "title", "location", "status", "submittedAt", "firstOpenedAt", "firstOpenedTracking", "unopened"].sort())
         assert.equal(result.queue[0].unopened, true)

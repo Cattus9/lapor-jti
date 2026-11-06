@@ -36,7 +36,14 @@ export const reportHandovers = pgTable("report_handovers", {
   officerName: text("officer_name").notNull(), // Snapshot survives later officer renames/deactivation.
   actorId: uuid("actor_id").references(() => users.id, { onDelete: "restrict" }),
   actorName: text("actor_name").notNull(),
-  recipient: text("recipient").notNull(), location: text("location").notNull(), note: text("note").notNull(),
+  recipient: text("recipient").notNull(),
+  recipientEmail: text("recipient_email"),
+  recipientPhone: text("recipient_phone"),
+  photoUrl: text("photo_url"),
+  photoStorageKey: text("photo_storage_key"),
+  photoMimeType: text("photo_mime_type"),
+  photoName: text("photo_name"),
+  location: text("location").notNull(), note: text("note").notNull(),
   handedOverAt: timestamp("handed_over_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
 }, (t) => [
   index("handovers_date_idx").on(t.handedOverAt.desc(), t.id.desc()),
@@ -48,6 +55,9 @@ export const reportHandovers = pgTable("report_handovers", {
   check("handover_actor_check", sql`${t.legacy} or (${t.actorId} is not null and ${t.officerId} is not null)`),
   check("handover_inventory_evidence_check", sql`${t.inventoryId} is null or ${t.legacy} or (length(trim(${t.ownershipEvidence})) between 1 and 1000 and ${t.submissionKey} is not null and ${t.submissionFingerprint} is not null)`),
   check("handover_loss_source_check", sql`${t.lossReportId} is null or ${t.inventoryId} is not null`),
+  check("handover_recipient_email_check", sql`${t.recipientEmail} is null or length(trim(${t.recipientEmail})) between 3 and 255`),
+  check("handover_recipient_phone_check", sql`${t.recipientPhone} is null or length(trim(${t.recipientPhone})) between 3 and 50`),
+  check("handover_contact_check", sql`${t.legacy} or (${t.handedOverAt} < timestamp with time zone '2026-11-06 17:00:00+07') or (length(trim(coalesce(${t.recipientEmail}, ''))) > 0 or length(trim(coalesce(${t.recipientPhone}, ''))) > 0)`),
 ])
 
 export const satpamInventory = pgTable("satpam_inventory", {
@@ -66,6 +76,12 @@ export const satpamInventory = pgTable("satpam_inventory", {
   photoMimeType: text("photo_mime_type"),
   photoName: text("photo_name"),
   handoverRecipient: text("handover_recipient"),
+  handoverRecipientEmail: text("handover_recipient_email"),
+  handoverRecipientPhone: text("handover_recipient_phone"),
+  handoverPhotoUrl: text("handover_photo_url"),
+  handoverPhotoStorageKey: text("handover_photo_storage_key"),
+  handoverPhotoMimeType: text("handover_photo_mime_type"),
+  handoverPhotoName: text("handover_photo_name"),
   handoverNote: text("handover_note"),
   handedOverAt: timestamp("handed_over_at", { withTimezone: true, precision: 3 }),
   registeredBy: uuid("registered_by").notNull().references(() => users.id, { onDelete: "restrict" }),

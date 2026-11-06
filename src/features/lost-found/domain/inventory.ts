@@ -5,7 +5,7 @@ export type InventoryStatus = "tersimpan" | "diserahkan"
 export type InventoryItem = {
   id: string; itemName: string; description: string; founderName?: string; status: InventoryStatus
   storageLocation: string; foundLocation?: string; photoUrl?: string; hasStoredPhoto?: boolean
-  handoverRecipient?: string; handoverNote?: string; handedOverAt?: string
+  handoverRecipient?: string; handoverRecipientEmail?: string; handoverRecipientPhone?: string; handoverPhotoUrl?: string; handoverNote?: string; handedOverAt?: string
   handoverOfficer?: string; handoverActor?: string; ownershipEvidence?: string; legacyHandover?: boolean
   sourceFoundSubmittedAt?: string; matchingDateIso?: string
   sourceFoundTicket?: string; sourceFoundTitle?: string; linkedLossTicket?: string
@@ -27,7 +27,7 @@ export type CreateInventoryInput = {
   sourceFoundTicket?: string; submissionKey?: string
 }
 export type HandoverInventoryInput = {
-  id: string; recipient: string; note?: string; officerId: string; ownershipEvidence: string
+  id: string; recipient: string; recipientEmail?: string; recipientPhone?: string; note?: string; officerId: string; ownershipEvidence: string
   lossTicket?: string; submissionKey: string
 }
 export function assertInventoryReportCompletable(report: { category: string; handlerRole: string; status: string }) {
@@ -61,9 +61,16 @@ export function validateHandoverInventory(raw: unknown): HandoverInventoryInput 
   if (!isUuid(v.id)) throw new ReportError("ID barang tidak valid.")
   if (!isUuid(v.officerId)) throw new ReportError("Pilih petugas penanggung jawab penyerahan.")
   if (!isUuid(v.submissionKey)) throw new ReportError("Kunci penyerahan tidak valid. Muat ulang form.")
+  const recipient = text(v, "recipient", "Nama penerima", 150, true)
+  const recipientEmail = text(v, "recipientEmail", "Email penerima", 255) || undefined
+  const recipientPhone = text(v, "recipientPhone", "Nomor HP penerima", 50) || undefined
+  if (!recipientEmail && !recipientPhone) throw new ReportError("Isi minimal salah satu kontak penerima: Email atau Nomor HP.")
+  if (recipientEmail && !/.+@.+\..+/.test(recipientEmail)) throw new ReportError("Format email penerima tidak valid.")
   return {
     id: v.id, officerId: v.officerId, submissionKey: v.submissionKey,
-    recipient: text(v, "recipient", "Nama penerima", 150, true),
+    recipient,
+    recipientEmail,
+    recipientPhone,
     ownershipEvidence: text(v, "ownershipEvidence", "Hasil pemeriksaan kepemilikan", 1000, true),
     note: text(v, "note", "Catatan penyerahan", 2000) || undefined,
     lossTicket: v.lossTicket ? requireTicket(v.lossTicket) : undefined,

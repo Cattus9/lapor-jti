@@ -21,10 +21,12 @@ import {
   Handshake,
   ImageIcon,
   Inbox,
+  Mail,
   MapPin,
   PackagePlus,
   PackageSearch,
   Paperclip,
+  Phone,
   RotateCcw,
   Search,
   SearchCheck,
@@ -34,6 +36,7 @@ import {
 import { ReportDetailSection, ReportDetailTable } from "@/components/reports/report-detail-section"
 import { SatpamExceptionAction } from "./satpam-exception-action"
 import { RegisterInventoryDialog, InventoryDetailDialog } from "./satpam-inventory-workspace"
+import { ItemPhotoField, useItemPhoto } from "./item-photo-field"
 import type { InventoryItem } from "../domain/inventory"
 import { inventoryCandidateId, matchingCandidates, type CandidateCustody, type MatchingCandidate } from "../domain/matching-candidates"
 
@@ -390,18 +393,34 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
   officers: SecurityOfficer[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (recipient: string, note: string, officerId: string, location: string, ownershipEvidence: string, submissionKey: string) => Promise<boolean>
+  onConfirm: (
+    recipient: string,
+    recipientEmail: string,
+    recipientPhone: string,
+    note: string,
+    officerId: string,
+    location: string,
+    ownershipEvidence: string,
+    submissionKey: string,
+    photo?: File | null
+  ) => Promise<boolean>
 }) {
-  const [recipient, setRecipient] = useState("")
+  const [recipient, setRecipient] = useState(pair?.reporter ?? "")
+  const [recipientEmail, setRecipientEmail] = useState(pair?.reporterEmail ?? "")
+  const [recipientPhone, setRecipientPhone] = useState(pair?.reporterContact ?? "")
   const [note, setNote] = useState("")
   const [officerId, setOfficerId] = useState("")
   const [location, setLocation] = useState("Pos Satpam Gedung JTI")
   const [evidence, setEvidence] = useState("")
+  const handoverPhoto = useItemPhoto()
   const command = useRef<{ fingerprint: string; key: string } | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+
   if (!pair) return null
   const validOfficer = officers.some((officer) => officer.id === officerId)
+  const hasContact = Boolean(recipientEmail.trim() || recipientPhone.trim())
+
   return <Dialog open={open} onOpenChange={(value) => { if (!pending) onOpenChange(value) }}>
     <DialogContent>
       <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16">
@@ -410,16 +429,55 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
       </div>
       <form className="space-y-5 p-5 md:p-6" aria-busy={pending} onSubmit={async (event) => {
         event.preventDefault()
-        if (pending || !validOfficer || !recipient.trim() || !location.trim() || !evidence.trim()) return
+        const trimmedRecipient = recipient.trim()
+        const trimmedEmail = recipientEmail.trim()
+        const trimmedPhone = recipientPhone.trim()
+        const trimmedLocation = location.trim()
+        const trimmedEvidence = evidence.trim()
+        const trimmedNote = note.trim()
+        const photo = handoverPhoto.file
+
+        if (pending || !validOfficer || !trimmedRecipient || !trimmedLocation || !trimmedEvidence) return
+
+        if (!trimmedEmail && !trimmedPhone) {
+          setError("Minimal salah satu antara email atau nomor HP penerima wajib diisi.")
+          return
+        }
+        if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          setError("Format email penerima tidak valid.")
+          return
+        }
+        if (handoverPhoto.error) {
+          setError(handoverPhoto.error)
+          return
+        }
+
         setPending(true); setError("")
         try {
-          const fingerprint = JSON.stringify([recipient.trim(), note.trim(), officerId, location.trim(), evidence.trim()])
+          const fingerprint = JSON.stringify([trimmedRecipient, trimmedEmail, trimmedPhone, trimmedNote, officerId, trimmedLocation, trimmedEvidence, photo?.name, photo?.size])
           if (!command.current || command.current.fingerprint !== fingerprint) command.current = { fingerprint, key: crypto.randomUUID() }
-          if (await onConfirm(recipient.trim(), note.trim(), officerId, location.trim(), evidence.trim(), command.current.key)) onOpenChange(false)
+          if (await onConfirm(trimmedRecipient, trimmedEmail, trimmedPhone, trimmedNote, officerId, trimmedLocation, trimmedEvidence, command.current.key, photo)) onOpenChange(false)
           else setError("Penyerahan belum berhasil. Periksa pesan kesalahan dan coba kembali.")
         } finally { setPending(false) }
       }}>
-        <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-sm"><p className="font-medium">{pair.title}</p><p className="mt-1 text-xs text-muted-foreground">Kehilangan dikirim {pair.lossSubmittedAt} WIB</p><p className="mt-1 text-xs text-muted-foreground">Temuan dikirim {pair.foundSubmittedAt} WIB</p></div>
+        <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-sm">
+          <p className="font-medium">{pair.title}</p>
+          <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+            <div>
+              <span className="font-medium text-foreground">Pemilik (Pelapor):</span> {pair.reporter}
+              {pair.reporterEmail ? <span className="block text-muted-foreground">{pair.reporterEmail}</span> : null}
+              {pair.reporterContact ? <span className="block text-muted-foreground">{pair.reporterContact}</span> : null}
+            </div>
+            <div>
+              <span className="font-medium text-foreground">Penemu:</span> {pair.foundReporter || "Pihak kampus / pos"}
+              {pair.foundReporterEmail ? <span className="block text-muted-foreground">{pair.foundReporterEmail}</span> : null}
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+            <span>Kehilangan: {pair.lossSubmittedAt} WIB</span>
+            <span>Temuan: {pair.foundSubmittedAt} WIB</span>
+          </div>
+        </div>
         <Field>
           <FieldLabel htmlFor="handover-officer">Petugas penanggung jawab</FieldLabel>
           <Select value={officerId || null} onValueChange={(value) => setOfficerId(value ?? "")} items={officers.map((officer) => ({ value: officer.id, label: officer.name }))} disabled={pending || !officers.length} required>
@@ -429,13 +487,50 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
           <FieldDescription id="handover-officer-description">{officers.length ? "Pilih petugas yang bertanggung jawab atas penyerahan ini." : "Belum ada petugas aktif. Hubungi pengelola untuk menyiapkan daftar petugas."}</FieldDescription>
         </Field>
         <Field><FieldLabel htmlFor="handover-recipient">Nama penerima</FieldLabel><Input id="handover-recipient" value={recipient} onChange={(event) => setRecipient(event.target.value)} className="h-9 bg-background" maxLength={150} required disabled={pending} placeholder="Nama penerima barang" /></Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="handover-recipient-email">Email penerima</FieldLabel>
+            <Input
+              id="handover-recipient-email"
+              type="email"
+              value={recipientEmail}
+              onChange={(event) => setRecipientEmail(event.target.value)}
+              className="h-9 bg-background"
+              maxLength={150}
+              disabled={pending}
+              placeholder="nama@example.com"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="handover-recipient-phone">Nomor HP penerima</FieldLabel>
+            <Input
+              id="handover-recipient-phone"
+              type="tel"
+              value={recipientPhone}
+              onChange={(event) => setRecipientPhone(event.target.value)}
+              className="h-9 bg-background"
+              maxLength={30}
+              disabled={pending}
+              placeholder="081234567890"
+            />
+          </Field>
+        </div>
+        <FieldDescription>Minimal salah satu (email atau nomor HP) harus diisi sebagai kontak verifikasi penyerahan.</FieldDescription>
+        <ItemPhotoField
+          idPrefix="satpam-handover"
+          label="Foto dokumentasi penyerahan (opsional)"
+          description="Format JPG, PNG, atau WebP (maks. 5 MB) sebagai arsip dokumentasi serah terima fisik."
+          photo={handoverPhoto}
+          disabled={pending}
+          compact
+        />
         <Field><FieldLabel htmlFor="handover-location">Lokasi penyerahan</FieldLabel><Input id="handover-location" value={location} onChange={(event) => setLocation(event.target.value)} className="h-9 bg-background" maxLength={200} required disabled={pending} /></Field>
         <Field><FieldLabel htmlFor="handover-evidence">Hasil pemeriksaan kepemilikan</FieldLabel><Textarea id="handover-evidence" value={evidence} onChange={event => setEvidence(event.target.value)} maxLength={1000} required disabled={pending} className="bg-background/70" placeholder="Contoh: Pemilik menjelaskan ciri khusus barang." /><FieldDescription>Catat hasil pemeriksaan sebelum mengonfirmasi penyerahan.</FieldDescription></Field>
         <Field><FieldLabel htmlFor="handover-note">Catatan penyerahan (opsional)</FieldLabel><Textarea id="handover-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} disabled={pending} placeholder="Contoh: Identitas penerima telah diperiksa oleh petugas." /></Field>
         {error ? <FieldError>{error}</FieldError> : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button type="submit" disabled={pending || !validOfficer || !recipient.trim() || !location.trim() || !evidence.trim()}><Handshake />{pending ? "Menyimpan..." : "Konfirmasi penyerahan"}</Button>
+          <Button type="submit" disabled={pending || !validOfficer || !recipient.trim() || !location.trim() || !evidence.trim() || !hasContact}><Handshake />{pending ? "Menyimpan..." : "Konfirmasi penyerahan"}</Button>
         </div>
       </form>
     </DialogContent>
@@ -465,7 +560,51 @@ function MatchingConfirmationDialog({
 }
 
 function MatchPreviewCard({ label, report }: { label: string; report: SatpamLostFoundReport }) {
-  return <section className="rounded-xl border border-border/60 bg-background/60 p-4"><div className="flex items-start gap-3"><ReportPhotoThumbnail report={report} size="large" /><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold text-foreground">{report.title}</p><p className="mt-1 text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</p><div className="mt-2"><StatusBadge status={report.status} /></div></div></div><dl className="mt-4 space-y-3 text-xs"><div><dt className="text-muted-foreground">Deskripsi barang</dt><dd className="mt-1 leading-relaxed whitespace-pre-wrap text-foreground">{report.description || report.characteristics}</dd></div><div className="grid gap-2 sm:grid-cols-2"><div><dt className="text-muted-foreground">Lokasi</dt><dd className="mt-1 text-foreground">{report.location}</dd></div><div><dt className="text-muted-foreground">Waktu</dt><dd className="mt-1 text-foreground">{report.eventDate}, {report.eventTime}</dd></div></div></dl></section>
+  const isLoss = label.toLowerCase().includes("kehilangan")
+  return <section className="rounded-xl border border-border/60 bg-background/60 p-4">
+    <div className="flex items-start gap-3">
+      <ReportPhotoThumbnail report={report} size="large" />
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">{report.title}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</p>
+        <div className="mt-2"><StatusBadge status={report.status} /></div>
+      </div>
+    </div>
+    <dl className="mt-4 space-y-3 text-xs">
+      <div>
+        <dt className="text-muted-foreground">Deskripsi barang</dt>
+        <dd className="mt-1 leading-relaxed whitespace-pre-wrap text-foreground">{report.description || report.characteristics}</dd>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <dt className="text-muted-foreground">Lokasi</dt>
+          <dd className="mt-1 text-foreground">{report.location}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Waktu</dt>
+          <dd className="mt-1 text-foreground">{report.eventDate}, {report.eventTime}</dd>
+        </div>
+      </div>
+      <div className="border-t border-border/60 pt-3">
+        <dt className="font-medium text-foreground">{isLoss ? "Kontak Penerima (Pemilik)" : "Kontak Penemu"}</dt>
+        <dd className="mt-1.5 space-y-1 text-foreground">
+          <p className="flex items-center gap-1.5 font-medium">
+            <UserRound className="size-3.5 text-muted-foreground" aria-hidden="true" />
+            <span>{report.reporter || "-"}</span>
+          </p>
+          <p className="flex items-center gap-1.5 text-muted-foreground">
+            <Mail className="size-3.5 shrink-0" aria-hidden="true" />
+            <span>{report.reporterEmail || "Email tidak terdaftar"}</span>
+          </p>
+          <p className="flex items-center gap-1.5 text-muted-foreground">
+            <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+            <span>{report.reporterContact || "Nomor HP tidak terdaftar"}</span>
+          </p>
+        </dd>
+      </div>
+    </dl>
+  </section>
 }
 
 export function MatchingCandidateCard({ candidate, selected, disabled, onSelect, detail }: {
@@ -785,7 +924,18 @@ function MatchingWorkspace({
 function HandoverWorkspace({ officers, onConfirmHandover, onRefresh }: {
   officers: SecurityOfficer[]
   onRefresh: () => void
-  onConfirmHandover: (pair: MatchedPair, recipient: string, note: string, officerId: string, location: string, ownershipEvidence: string, submissionKey: string) => Promise<boolean>
+  onConfirmHandover: (
+    pair: MatchedPair,
+    recipient: string,
+    recipientEmail: string,
+    recipientPhone: string,
+    note: string,
+    officerId: string,
+    location: string,
+    ownershipEvidence: string,
+    submissionKey: string,
+    photo?: File | null
+  ) => Promise<boolean>
 }) {
   const page = useSatpamPage<MatchedPair>("/api/satpam/pending")
   const pendingPairs = page.items
@@ -808,7 +958,11 @@ function HandoverWorkspace({ officers, onConfirmHandover, onRefresh }: {
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary shadow-2xs"><Handshake className="size-5" aria-hidden="true" /></span>
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-foreground md:text-base">{pair.title}</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">Pelapor kehilangan: {pair.reporter}</p>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><UserRound className="size-3.5" aria-hidden="true" />Penerima: {pair.reporter}</span>
+                      {pair.reporterEmail ? <span className="flex items-center gap-1"><Mail className="size-3.5" aria-hidden="true" />{pair.reporterEmail}</span> : null}
+                      {pair.reporterContact ? <span className="flex items-center gap-1"><Phone className="size-3.5" aria-hidden="true" />{pair.reporterContact}</span> : null}
+                    </div>
                   </div>
                 </div>
                 <SharedStatusBadge status="Menunggu penyerahan" />
@@ -827,7 +981,16 @@ function HandoverWorkspace({ officers, onConfirmHandover, onRefresh }: {
           <p className="mt-1 text-xs text-muted-foreground">Pasangan yang dicatat akan muncul di sini.</p>
         </div>
       ) : null}
-      <HandoverDialog key={selectedPair?.id ?? "closed"} officers={officers} pair={selectedPair} open={Boolean(selectedPair)} onOpenChange={(open) => { if (!open) setSelectedPair(null) }} onConfirm={async (recipient, note, officerId, location, evidence, key) => selectedPair ? onConfirmHandover(selectedPair, recipient, note, officerId, location, evidence, key) : false} />
+      <HandoverDialog
+        key={selectedPair?.id ?? "closed"}
+        officers={officers}
+        pair={selectedPair}
+        open={Boolean(selectedPair)}
+        onOpenChange={(open) => { if (!open) setSelectedPair(null) }}
+        onConfirm={async (recipient, recipientEmail, recipientPhone, note, officerId, location, evidence, key, photo) =>
+          selectedPair ? onConfirmHandover(selectedPair, recipient, recipientEmail, recipientPhone, note, officerId, location, evidence, key, photo) : false
+        }
+      />
     </div>
   )
 }
@@ -861,11 +1024,19 @@ function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { us
       ?? workspace.current?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')
       ?? workspace.current ?? true
   }
-  async function execute(command: unknown) {
+  async function execute(command: unknown, photo?: File | null) {
     if (busy.current) return false
     busy.current = true; setError("")
     try {
-      const response = await fetch("/api/satpam/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) })
+      let response: Response
+      if (photo && photo.size > 0) {
+        const formData = new FormData()
+        formData.append("command", JSON.stringify(command))
+        formData.append("photo", photo)
+        response = await fetch("/api/satpam/reports", { method: "POST", body: formData })
+      } else {
+        response = await fetch("/api/satpam/reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) })
+      }
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || "Aksi belum berhasil disimpan.")
       setRevision((value) => value + 1)
@@ -880,7 +1051,29 @@ function SatpamLostFoundContent({ user, data, ticket, openDetail = false }: { us
     return execute({ type: "status", ticket, status: canonical, note })
   }
   const recordMatch = (lossTicket: string, foundTicket: string) => execute({ type: "match", lossTicket, foundTicket })
-  const confirmHandover = (pair: MatchedPair, recipient: string, note: string, officerId: string, location: string, ownershipEvidence: string, submissionKey: string) => execute({ type: "handover", matchId: pair.id, recipient, note, officerId, location, ownershipEvidence, submissionKey })
+  const confirmHandover = (
+    pair: MatchedPair,
+    recipient: string,
+    recipientEmail: string,
+    recipientPhone: string,
+    note: string,
+    officerId: string,
+    location: string,
+    ownershipEvidence: string,
+    submissionKey: string,
+    photo?: File | null
+  ) => execute({
+    type: "handover",
+    matchId: pair.id,
+    recipient,
+    recipientEmail: recipientEmail.trim() || undefined,
+    recipientPhone: recipientPhone.trim() || undefined,
+    note,
+    officerId,
+    location,
+    ownershipEvidence,
+    submissionKey,
+  }, photo)
   return <SatpamRefreshContext.Provider value={revision}><ReportDetailContext.Provider value={openReport}><div ref={workspace} tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-1 flex-col"><ContentShell>
     <PageHeader title="Kehilangan & Temuan" description={`Kelola laporan, pencocokan, dan penyerahan barang, ${user.name}.`} />
     {error ? <FieldError>{error}<Button type="button" variant="link" size="sm" onClick={() => { setRevision((value) => value + 1); router.refresh() }}>Muat ulang data</Button></FieldError> : null}

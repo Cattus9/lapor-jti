@@ -31,6 +31,9 @@ export class DrizzleInventoryRepository {
       // Legacy external links remain in the DB for audit, but are never fetched by the UI.
       photoUrl: r.photoStorageKey || row.sourcePhotoId ? `/api/satpam/inventory/${r.id}/photo?preview=1` : undefined,
       hasStoredPhoto: Boolean(r.photoStorageKey || row.sourcePhotoId), handoverRecipient: r.handoverRecipient ?? undefined,
+      handoverRecipientEmail: r.handoverRecipientEmail ?? h?.recipientEmail ?? undefined,
+      handoverRecipientPhone: r.handoverRecipientPhone ?? h?.recipientPhone ?? undefined,
+      handoverPhotoUrl: (h?.photoStorageKey || r.handoverPhotoStorageKey) && h?.id ? `/api/satpam/handovers/${h.id}/photo?preview=1` : undefined,
       handoverNote: r.handoverNote ?? undefined, handedOverAt: r.handedOverAt ? dateLabel(r.handedOverAt) : undefined,
       handoverOfficer: h?.officerName, handoverActor: h?.actorName, ownershipEvidence: h?.ownershipEvidence,
       sourceFoundSubmittedAt: row.sourceSubmittedAt ? dateLabel(row.sourceSubmittedAt) : undefined, matchingDateIso: (row.sourceSubmittedAt ?? r.createdAt).toISOString(),
@@ -130,7 +133,7 @@ export class DrizzleInventoryRepository {
       return (await repo.detail(created.id))!
     })
   }
-  async handover(actor: ReportActor, raw: unknown) {
+  async handover(actor: ReportActor, raw: unknown, photo?: InventoryPhoto) {
     const input = validateHandoverInventory(raw)
     const fingerprint = hash({ actor: actor.id, ...input })
     return this.db.transaction(async tx => {
@@ -167,8 +170,12 @@ export class DrizzleInventoryRepository {
       const now = new Date()
       await tx.insert(reportHandovers).values({ inventoryId: item.id, lossReportId: lossReport?.report.id, submissionKey: input.submissionKey,
         submissionFingerprint: fingerprint, ownershipEvidence: input.ownershipEvidence, officerId: officer.id, officerName: officer.name,
-        actorId: actor.id, actorName: account.name, recipient: input.recipient, location: item.storageLocation, note: input.note ?? "", handedOverAt: now })
-      const [updated] = await tx.update(satpamInventory).set({ status: "diserahkan", handoverRecipient: input.recipient, handoverNote: input.note, handedOverAt: now, updatedAt: now })
+        actorId: actor.id, actorName: account.name, recipient: input.recipient, recipientEmail: input.recipientEmail ?? null, recipientPhone: input.recipientPhone ?? null,
+        photoStorageKey: photo?.storageKey ?? null, photoMimeType: photo?.mimeType ?? null, photoName: photo?.name ?? null,
+        location: item.storageLocation, note: input.note ?? "", handedOverAt: now })
+      const [updated] = await tx.update(satpamInventory).set({ status: "diserahkan", handoverRecipient: input.recipient, handoverRecipientEmail: input.recipientEmail ?? null, handoverRecipientPhone: input.recipientPhone ?? null,
+        handoverPhotoStorageKey: photo?.storageKey ?? null, handoverPhotoMimeType: photo?.mimeType ?? null, handoverPhotoName: photo?.name ?? null,
+        handoverNote: input.note, handedOverAt: now, updatedAt: now })
         .where(and(eq(satpamInventory.id, item.id), eq(satpamInventory.status, "tersimpan"))).returning({ id: satpamInventory.id })
       if (!updated) throw new ReportError("Barang telah diproses petugas lain.", 409)
       for (const { report } of linked) {
