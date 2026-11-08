@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button"
 import { ReportActivityPanel } from "@/features/reports/components/report-activity-panel"
 import type { CurrentUser } from "@/lib/auth/current-user"
 import type { DashboardData } from "../application/ports"
+import { FoundNoticeList } from "@/features/found-notices/components/found-notice-list"
+import type { FoundNoticePage } from "@/features/found-notices/domain/found-notice"
 
 
 
-export function PelaporDashboard({ user, data }: { user: CurrentUser; data: DashboardData }) {
+export function PelaporDashboard({ user, data, foundNotices }: { user: CurrentUser; data: DashboardData; foundNotices: FoundNoticePage }) {
   const activeReports = data.active
   const completedReports = data.completed
   return (
@@ -25,7 +27,10 @@ export function PelaporDashboard({ user, data }: { user: CurrentUser; data: Dash
           <KpiCard label="Total laporan" value={data.total} icon={ClipboardCheck} detail="Semua kategori" detailValue="Riwayat" href="/pelapor/laporan-saya" />
           <KpiCard label="Laporan selesai" value={completedReports} icon={FileCheck2} iconTone="green" detail="Terselesaikan" detailValue={`${completedReports} tiket`} detailTone="green" href="/pelapor/laporan-saya" />
         </div>
-        <ReportActivityPanel reports={data.recent} />
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <FoundNoticeList initialPage={foundNotices} preview />
+          <ReportActivityPanel reports={data.recent} />
+        </div>
       </ContentShell>
     </DashboardLayout>
   )

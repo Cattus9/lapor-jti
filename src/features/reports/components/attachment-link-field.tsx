@@ -56,7 +56,7 @@ export function AttachmentLinkField({ id, disabled, remaining, onAdd }: { id: st
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Input id={id} type="url" inputMode="url" value={value} disabled={disabled || loading} onChange={(event) => { setValue(event.target.value); setFetched(null) }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (fetched) attach(); else void loadFromLink() } }} placeholder="https://contoh.com/foto.jpg" aria-label="Tautan foto" aria-invalid={Boolean(error)} className="h-11 bg-background/70" />
+        <Input id={id} type="url" inputMode="url" value={value} disabled={disabled || loading} onChange={(event) => { setValue(event.target.value); setFetched(null) }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (fetched) attach(); else void loadFromLink() } }} placeholder="https://contoh.com/foto.jpg" aria-label="Tautan foto" aria-invalid={Boolean(error)} className="h-11 bg-field-surface dark:bg-field-surface" />
         {fetched ? (
           <div className="flex shrink-0 gap-2">
             <Button type="button" variant="ghost" className="h-11" onClick={() => setFetched(null)}><X aria-hidden="true" />Batal</Button>

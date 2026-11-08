@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm"
-import { pgTable, uuid, text, boolean, timestamp, index, check, integer } from "drizzle-orm/pg-core"
+import { pgTable, uuid, text, boolean, timestamp, index, uniqueIndex, check, integer } from "drizzle-orm/pg-core"
 import { users } from "./schema"
 import { reports } from "./reports-schema"
 
@@ -94,6 +94,22 @@ export const satpamInventory = pgTable("satpam_inventory", {
   check("satpam_inventory_name_check", sql`length(trim(${t.itemName})) between 1 and 200`),
   check("satpam_inventory_status_check", sql`${t.status} in ('tersimpan', 'diserahkan')`),
   check("satpam_inventory_found_location_check", sql`${t.foundLocation} is null or length(trim(${t.foundLocation})) between 1 and 200`),
+])
+
+// One shared finding, one receipt per reader. Linked inventory keeps the report identity.
+// Receipts are disposable presentation state; operational records remain authoritative.
+export const foundNoticeReads = pgTable("found_notice_reads", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reportId: uuid("report_id").references(() => reports.id, { onDelete: "cascade" }),
+  inventoryId: uuid("inventory_id").references(() => satpamInventory.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
+}, (t) => [
+  check("found_notice_read_source_check", sql`(${t.reportId} is not null)::integer + (${t.inventoryId} is not null)::integer = 1`),
+  uniqueIndex("found_notice_read_user_report_unique").on(t.userId, t.reportId).where(sql`${t.reportId} is not null`),
+  uniqueIndex("found_notice_read_user_inventory_unique").on(t.userId, t.inventoryId).where(sql`${t.inventoryId} is not null`),
+  index("found_notice_read_report_idx").on(t.reportId).where(sql`${t.reportId} is not null`),
+  index("found_notice_read_inventory_idx").on(t.inventoryId).where(sql`${t.inventoryId} is not null`),
 ])
 
 // Kehilangan reports recorded directly by Satpam at the post (separate from Pelapor submissions).

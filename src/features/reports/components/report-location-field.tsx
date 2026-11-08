@@ -16,7 +16,7 @@ export function ReportLocationField({ category, service, value, disabled, onValu
   return (
     <Field>
       <FieldLabel htmlFor="location">{presentation.label}{!presentation.required ? <span className="font-normal text-muted-foreground">(opsional)</span> : null}</FieldLabel>
-      <Input id="location" name="location" value={value} onChange={(event) => onValueChange(event.target.value)} disabled={disabled} className="h-11 bg-background/70" placeholder={presentation.placeholder} aria-describedby="location-description" required={presentation.required} />
+      <Input id="location" name="location" value={value} onChange={(event) => onValueChange(event.target.value)} disabled={disabled} className="h-11 bg-field-surface dark:bg-field-surface" placeholder={presentation.placeholder} aria-describedby="location-description" required={presentation.required} />
       <FieldDescription id="location-description">{presentation.description}</FieldDescription>
     </Field>
   )

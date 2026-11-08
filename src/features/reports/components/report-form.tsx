@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import type { DraftView, PublicAttachment } from "../application/ports"
-import type { ReportCategory, ReportPayload } from "../domain/report"
+import type { ReportPayload } from "../domain/report"
+import { getReportFormCategory, payloadForFormCategory, reportFormCategoryLabels, servicesForFormCategory, type ReportFormCategory } from "../domain/report-form-category"
 import { getIncidentTimeMode, parsePayload } from "../domain/report"
 import { createReportSubmissionSnapshot, reportSubmissionBody, type ReportSubmissionSnapshot } from "./report-submission-state"
 import { ReportSubmissionPreview } from "./report-submission-preview"
@@ -26,6 +27,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock3,
+  Computer,
   FileText,
   Headphones,
   ImagePlus,
@@ -56,20 +58,21 @@ import { AttachmentLinkField } from "./attachment-link-field"
 import { FilePreviewList } from "@/components/ui/file-preview-list"
 import { ReportCategoryDrafts, hasDraftContent, type CategoryDraft } from "./report-category-drafts"
 
-const categories: Array<{ value: ReportCategory; label: string; icon: typeof FileText; hint: string; tone: BadgeTone }> = [
-  { value: "kehilangan-temuan", label: "Kehilangan & Temuan", icon: PackageSearch, hint: "Barang hilang atau barang yang ditemukan", tone: "info" },
-  { value: "fasilitas", label: "Kerusakan Fasilitas", icon: Wrench, hint: "Objek rusak atau tidak berfungsi, bukan kebersihan area", tone: "success" },
-  { value: "layanan", label: "Laporan Layanan", icon: Headphones, hint: "Administrasi, kebersihan, keamanan, dan layanan JTI", tone: "violet" },
-  { value: "lainnya", label: "Laporan Lainnya", icon: FileText, hint: "Laporan umum di luar kategori utama", tone: "warning" },
+const categories: Array<{ value: ReportFormCategory; label: string; icon: typeof FileText; hint: string; tone: BadgeTone }> = [
+  { value: "kehilangan-temuan", label: reportFormCategoryLabels["kehilangan-temuan"], icon: PackageSearch, hint: "Barang hilang atau barang yang ditemukan", tone: "info" },
+  { value: "fasilitas", label: reportFormCategoryLabels.fasilitas, icon: Wrench, hint: "Objek rusak atau tidak berfungsi, bukan kebersihan area", tone: "success" },
+  { value: "layanan", label: reportFormCategoryLabels.layanan, icon: Headphones, hint: "Administrasi, kebersihan, dan keamanan", tone: "violet" },
+  { value: "tefa", label: reportFormCategoryLabels.tefa, icon: Computer, hint: "E-Learning, evaluasi pembelajaran, ruang baca, dan surat", tone: "info" },
+  { value: "lainnya", label: reportFormCategoryLabels.lainnya, icon: FileText, hint: "Laporan umum di luar pilihan di atas", tone: "warning" },
 ]
 
 function SelectField({ id, label, placeholder, value, onValueChange, options, description }: { id: string; label: string; placeholder: string; value: string; onValueChange: (value: string) => void; options: string[]; description?: string }) {
   return (
     <Field>
-      <FieldLabel>{label}</FieldLabel>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       {description ? <FieldDescription>{description}</FieldDescription> : null}
       <Select value={value} items={[...new Set([...options, ...(value ? [value] : [])])].map((name) => ({ value: name, label: name }))} onValueChange={(nextValue) => onValueChange(nextValue ?? "")}>
-        <SelectTrigger id={id} aria-label={label} className="!h-11 w-full bg-background/70"><SelectValue placeholder={placeholder} /></SelectTrigger>
+        <SelectTrigger id={id} aria-label={label} className="!h-11 w-full bg-field-surface dark:bg-field-surface"><SelectValue placeholder={placeholder} /></SelectTrigger>
         <SelectContent>{options.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
       </Select>
     </Field>
@@ -96,7 +99,7 @@ function TimeUnitSpinner({ label, value, maximum, onValueChange }: { label: stri
     <section className="grid justify-items-center gap-2" aria-label={`Pilih ${label.toLowerCase()}`}>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-foreground" onClick={() => step(1)} aria-label={`Tambah ${label.toLowerCase()}`}><ChevronUp /></Button>
-      <Input value={value} onChange={(event) => onValueChange(event.target.value.replace(/\D/g, "").slice(0, 2))} onBlur={() => onValueChange(normalizeTimePart(value, maximum))} inputMode="numeric" maxLength={2} aria-label={label} className="h-12 w-18 rounded-lg bg-background text-center text-lg font-semibold tabular-nums" placeholder="00" />
+      <Input value={value} onChange={(event) => onValueChange(event.target.value.replace(/\D/g, "").slice(0, 2))} onBlur={() => onValueChange(normalizeTimePart(value, maximum))} inputMode="numeric" maxLength={2} aria-label={label} className="h-12 w-18 rounded-lg bg-field-surface dark:bg-field-surface text-center text-lg font-semibold tabular-nums" placeholder="00" />
       <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-foreground" onClick={() => step(-1)} aria-label={`Kurangi ${label.toLowerCase()}`}><ChevronDown /></Button>
     </section>
   )
@@ -134,12 +137,12 @@ function TimePickerField({ value, onValueChange }: { value: string; onValueChang
         onChange={(event) => onValueChange(event.target.value)}
         step="60"
         aria-label="Waktu kejadian"
-        className="h-11 bg-background/70 tabular-nums sm:hidden"
+        className="h-11 bg-field-surface dark:bg-field-surface tabular-nums sm:hidden"
       />
       <FieldDescription className="sm:hidden">Gunakan pemilih waktu perangkat untuk memilih jam dan menit.</FieldDescription>
       <div className="hidden sm:block">
         <Popover open={open} onOpenChange={handleOpenChange}>
-          <PopoverTrigger render={<Button id="incident-time-desktop" type="button" variant="outline" aria-label="Waktu kejadian" className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}>
+          <PopoverTrigger render={<Button id="incident-time-desktop" type="button" variant="outline" aria-label="Waktu kejadian" className="h-11 w-full justify-start bg-field-surface dark:bg-field-surface text-left font-normal" />}>
             <Clock3 className="size-4 text-muted-foreground" aria-hidden="true" />
             {value || <span className="text-muted-foreground/70">Pilih waktu</span>}
           </PopoverTrigger>
@@ -173,9 +176,9 @@ function CategoryCard({ value, selected, onSelect, draft, disabled, onRetry }: {
     return () => clearTimeout(timeout)
   }, [draft?.notice])
   return (
-    <div className="min-w-0">
+    <div className={cn("min-w-0", value.value === "lainnya" && "sm:col-span-2")}>
     <Tooltip open={Boolean(draft && hasDraftContent(draft) && draft.notice && draft.notice !== notice)}>
-    <TooltipTrigger render={<Button type="button" variant="outline" disabled={disabled} onClick={onSelect} aria-pressed={selected} className={cn("group flex h-auto w-full min-h-24 whitespace-normal items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none", selected ? "border-primary bg-primary/5 shadow-none" : "border-border bg-background/60 hover:border-primary/50 hover:bg-muted/40")} />}>
+    <TooltipTrigger render={<Button type="button" variant="outline" disabled={disabled} onClick={onSelect} aria-pressed={selected} className={cn("group flex h-auto w-full whitespace-normal items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none", value.value === "lainnya" ? "min-h-20" : "min-h-24", selected ? "border-primary bg-primary/5 shadow-none" : "border-border bg-background/60 hover:border-primary/50 hover:bg-muted/40")} />}>
       <Badge variant="outline" tone={value.tone} className="mt-0.5 size-9 rounded-lg p-0"><span><Icon className="size-4" aria-hidden="true" /></span></Badge>
       <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2 text-sm font-semibold text-foreground">{value.label}{selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{value.hint}</span>
         {draft?.status === "saving" ? <Badge variant="outline" className="mt-2">{hasDraftContent(draft) ? "Menyimpan…" : "Mengosongkan…"}</Badge> : draft?.status === "error" ? <Badge tone="warning" variant="outline" className="mt-2">Belum tersimpan</Badge> : draft?.savedKey && hasDraftContent(draft) ? <Badge tone="info" variant="outline" className="mt-2">Draft</Badge> : null}
@@ -189,14 +192,14 @@ function CategoryCard({ value, selected, onSelect, draft, disabled, onRetry }: {
   )
 }
 
-function ReportGuidance({ category, service, handlerRole }: { category: string; service: string; handlerRole?: "manajemen" | "tefa" }) {
-  const selectedCategory = categories.find((item) => item.value === category)
+function ReportGuidance({ category, formCategory, service, handlerRole }: { category: string; formCategory: ReportFormCategory | ""; service: string; handlerRole?: "manajemen" | "tefa" }) {
+  const selectedCategory = categories.find((item) => item.value === formCategory)
   const locationPresentation = getReportLocationPresentation(category, service)
-  const locationGuidance = !locationPresentation.visible ? "Jelaskan kendala pada deskripsi" : locationPresentation.required ? "Sebutkan lokasi yang jelas" : "Tambahkan lokasi atau kanal jika membantu"
+  const locationGuidance = formCategory === "tefa" && !service ? "Pilih layanan JTI yang mengalami kendala" : !locationPresentation.visible ? "Jelaskan kendala pada deskripsi" : locationPresentation.required ? "Sebutkan lokasi yang jelas" : "Tambahkan lokasi atau kanal jika membantu"
   const guidance = [[MapPin, locationGuidance], [Clock3, "Atur waktu khusus bila kejadian lebih awal"], [ImagePlus, "Tambahkan foto bila membantu"]] as const
   return (
     <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-      <Card className="rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardHeader className="gap-3 p-5 pb-4"><div className="flex size-10 items-center justify-center rounded-xl border border-border bg-background shadow-2xs"><ShieldCheck className="size-5 text-primary" aria-hidden="true" /></div><div className="space-y-1"><CardTitle className="text-base">Sebelum mengirim</CardTitle><CardDescription>Lengkapi detail agar laporan lebih cepat ditangani.</CardDescription></div></CardHeader><CardContent className="space-y-4 p-5 pt-0"><div className="space-y-3 border-t border-border/60 pt-4">{guidance.map(([Icon, text]) => <div key={text} className="flex items-start gap-2.5 text-sm text-muted-foreground"><Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{text}</span></div>)}</div>{selectedCategory ? <div className="rounded-lg bg-muted/60 p-3 text-sm"><p className="font-medium text-foreground">Pengelola otomatis</p><p className="mt-1 text-muted-foreground">Laporan <span className="font-medium text-foreground">{selectedCategory.label}</span> akan diteruskan ke {category === "kehilangan-temuan" ? "Satpam" : category === "fasilitas" ? "Teknisi" : category === "layanan" ? handlerRole === "tefa" ? "TEFA" : handlerRole === "manajemen" ? "Manajemen Jurusan" : "pengelola layanan terpilih" : "Manajemen Jurusan"}.</p></div> : <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">Pilih kategori untuk melihat pengelola laporan.</div>}</CardContent></div></Card>
+      <Card className="rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardHeader className="gap-3 p-5 pb-4"><div className="flex size-10 items-center justify-center rounded-xl border border-border bg-background shadow-2xs"><ShieldCheck className="size-5 text-primary" aria-hidden="true" /></div><div className="space-y-1"><CardTitle className="text-base">Sebelum mengirim</CardTitle><CardDescription>Lengkapi detail agar laporan lebih cepat ditangani.</CardDescription></div></CardHeader><CardContent className="space-y-4 p-5 pt-0"><div className="space-y-3 border-t border-border/60 pt-4">{guidance.map(([Icon, text]) => <div key={text} className="flex items-start gap-2.5 text-sm text-muted-foreground"><Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{text}</span></div>)}</div>{selectedCategory ? <div className="rounded-lg bg-muted/60 p-3 text-sm"><p className="font-medium text-foreground">Pengelola otomatis</p><p className="mt-1 text-muted-foreground">Laporan <span className="font-medium text-foreground">{selectedCategory.label}</span> akan diteruskan ke {category === "kehilangan-temuan" ? "Satpam" : category === "fasilitas" ? "Teknisi" : category === "layanan" ? formCategory === "tefa" || handlerRole === "tefa" ? "TEFA" : handlerRole === "manajemen" ? "Manajemen Jurusan" : "pengelola layanan terpilih" : "Manajemen Jurusan"}.</p></div> : <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">Pilih kategori untuk melihat pengelola laporan.</div>}</CardContent></div></Card>
       <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-sm shadow-2xs"><Building2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><p className="leading-relaxed text-muted-foreground">Laporan yang dikirim dapat dipantau melalui menu Laporan Saya.</p></div>
     </aside>
   )
@@ -205,11 +208,10 @@ function ReportGuidance({ category, service, handlerRole }: { category: string; 
 export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft?: DraftView; categoryDrafts?: DraftView[] }) {
   const [drafts] = useState(() => new ReportCategoryDrafts(categoryDrafts, initialDraft))
   useSyncExternalStore(drafts.subscribe, drafts.getVersion, drafts.getVersion)
-  const activeCategory = useRef(initialDraft?.payload.category ?? "")
+  const activeCategory = useRef<ReportFormCategory | "">(initialDraft ? getReportFormCategory(initialDraft.payload) : "")
   const [catalogRevision, setCatalogRevision] = useState(0)
   const catalogResource = useOperationalResource<OperationalCatalog>(`/api/pelapor/catalog?revision=${catalogRevision}`)
   const catalog = catalogResource.data
-  const services = catalog?.services.map((row) => row.name) ?? []
   const { notify } = useActivityNotifications()
   const { submissionSucceeded } = useReportSubmissionFeedback()
   const formRef = useRef<HTMLFormElement>(null)
@@ -225,6 +227,8 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
   const [preview, setPreview] = useState<(ReportSubmissionSnapshot & { uploadUrls: string[] }) | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [category, setCategory] = useState(initialDraft?.payload.category ?? "")
+  const [formCategory, setFormCategory] = useState<ReportFormCategory | "">(initialDraft ? getReportFormCategory(initialDraft.payload) : "")
+  const services = servicesForFormCategory(catalog?.services ?? [], formCategory).map(row => row.name)
   const [reportType, setReportType] = useState(initialDraft?.payload.reportType ?? "")
   const [location, setLocation] = useState(initialDraft?.payload.location ?? "")
   const [facilityAreaId, setFacilityAreaId] = useState(initialDraft?.payload.facilityAreaId ?? "")
@@ -238,7 +242,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
   const [incidentDate, setIncidentDate] = useState<Date | undefined>(() => initialDraft?.payload.incidentDate ? new Date(initialDraft.payload.incidentDate + "T00:00:00") : undefined)
   const [incidentTime, setIncidentTime] = useState(initialDraft?.payload.incidentTime ?? "")
   const [datePickerOpen, setDatePickerOpen] = useState(false)
-  const currentDraft = category ? drafts.get(category as ReportCategory) : undefined
+  const currentDraft = formCategory ? drafts.get(formCategory) : undefined
   const pending = submitting || currentDraft?.status === "saving"
   const today = new Date(`${getTodayInWib()}T00:00:00`)
   const incidentDateError = useCustomTime && incidentDate && formatCalendarDate(incidentDate) > getTodayInWib() ? "Tanggal kejadian tidak boleh melebihi hari ini (WIB)." : ""
@@ -248,7 +252,8 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
 
   function showDraft(draft: CategoryDraft) {
     const payload = draft.payload
-    activeCategory.current = payload.category
+    activeCategory.current = getReportFormCategory(payload)
+    setFormCategory(getReportFormCategory(payload))
     setCategory(payload.category); setDraftId(draft.id); setRevision(draft.revision)
     setSourceDraft({ id: draft.id, revision: draft.revision, payload, attachments: draft.retained, updatedAt: "" })
     setReportType(payload.reportType); setLocation(payload.location); setFacilityAreaId(payload.facilityAreaId ?? ""); setOtherLocation(payload.otherLocation)
@@ -262,9 +267,9 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
   }
   function captureDraft() {
     if (!category || !formRef.current) return
-    return drafts.capture(category as ReportCategory, currentPayload(), retained, attachments)
+    return drafts.capture(formCategory as ReportFormCategory, currentPayload(), retained, attachments)
   }
-  async function persistDraft(target: ReportCategory) {
+  async function persistDraft(target: ReportFormCategory) {
     const result = await drafts.save(target, async (draft) => {
       const snapshot = { payload: parsePayload(draft.payload, false), retained: draft.retained, files: draft.files }
       const response = await fetch("/api/pelapor/drafts", { method: "POST", body: reportSubmissionBody(snapshot, draft.id, draft.revision) })
@@ -276,22 +281,22 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
     // The user can already be in another category. Never replace that form.
     if (activeCategory.current === target) showDraft(result)
   }
-  function changeCategory(next: ReportCategory) {
-    if (next === category || busy.current || preview) return
+  function changeCategory(next: ReportFormCategory) {
+    if (next === formCategory || busy.current || preview) return
     const previous = captureDraft()
     showDraft(drafts.ensure(next))
-    if (previous) void persistDraft(previous.payload.category)
+    if (previous) void persistDraft(getReportFormCategory(previous.payload))
   }
   function currentPayload(): ReportPayload {
     const fields = new FormData(formRef.current!)
     const text = (name: string) => String(fields.get(name) ?? "")
     const date = useCustomTime && incidentDate ? formatCalendarDate(incidentDate) : ""
-    return { category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location: category === "layanan" && getReportServicePolicy(service).locationMode === "hidden" ? "" : location, facilityAreaId, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program: getReportServicePolicy(service).requiresProgram ? program : "", otherCategory: text("other-category") }
+    return payloadForFormCategory({ category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location: category === "layanan" && getReportServicePolicy(service).locationMode === "hidden" ? "" : location, facilityAreaId, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program: getReportServicePolicy(service).requiresProgram ? program : "", otherCategory: text("other-category") }, formCategory as ReportFormCategory)
   }
   async function save(submit: boolean, confirmed?: ReportSubmissionSnapshot) {
     // Only the preview's explicit confirmation can initiate a report submission.
     if (!formRef.current || busy.current || (submit && (!confirmed || confirmed !== preview))) return
-    if (!submit) { captureDraft(); await persistDraft(category as ReportCategory); return }
+    if (!submit) { captureDraft(); await persistDraft(formCategory as ReportFormCategory); return }
     busy.current = true; setSubmitting(true); setError("")
     try {
       const snapshot = confirmed ?? { payload: parsePayload(currentPayload(), false), retained, files: attachments }
@@ -306,8 +311,8 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
         const sourceRect = submitButtonRef.current?.getBoundingClientRect()
         const source = sourceRect && sourceRect.width > 0 ? sourceRect : undefined
         // Reset only after confirmed success. Failed/ambiguous requests retain the same id for safe retries.
-        drafts.remove(category as ReportCategory)
-        showDraft(drafts.ensure(category as ReportCategory)); setPreviewOpen(false)
+        drafts.remove(formCategory as ReportFormCategory)
+        showDraft(drafts.ensure(formCategory as ReportFormCategory)); setPreviewOpen(false)
         // A submitted draft cannot be resumed; keep refresh from requesting its old URL.
         const url = new URL(window.location.href)
         url.searchParams.delete("draft")
@@ -365,19 +370,20 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
       <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-(--report-form-desktop-columns)">
       <Card className="min-w-0 gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground"><FileText className="size-4 text-primary" aria-hidden="true" />Formulir laporan</div><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardContent className="p-5 md:p-6">
         <form ref={formRef} tabIndex={-1} className="space-y-7" onSubmit={handleSubmit} aria-busy={pending}>
-          <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih kategori untuk mengisi laporan. Isian disimpan sebagai draft saat Anda berganti kategori.</FieldDescription><TooltipProvider><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={category === item.value} disabled={submitting || Boolean(preview)} draft={drafts.get(item.value)} onSelect={() => changeCategory(item.value)} onRetry={() => { if (category === item.value) captureDraft(); void persistDraft(item.value) }} />)}</div></TooltipProvider></Field>
+          <Field><FieldLabel>Kategori laporan</FieldLabel><FieldDescription>Pilih kategori untuk mengisi laporan. Isian disimpan sebagai draft saat Anda berganti kategori.</FieldDescription><TooltipProvider><div className="grid gap-3 sm:grid-cols-2">{categories.map((item) => <CategoryCard key={item.value} value={item} selected={formCategory === item.value} disabled={submitting || Boolean(preview)} draft={drafts.get(item.value)} onSelect={() => changeCategory(item.value)} onRetry={() => { if (formCategory === item.value) captureDraft(); void persistDraft(item.value) }} />)}</div></TooltipProvider></Field>
           <fieldset disabled={pending || previewOpen} className="space-y-7">
             {category ? <div key={draftId} className="space-y-7">
               <div className="space-y-5 border-t border-border/60 pt-6"><FieldGroup>
                 {category === "kehilangan-temuan" ? <SelectField id="report-type" label="Jenis laporan" placeholder="Pilih jenis laporan" value={reportType} onValueChange={setReportType} options={["Kehilangan", "Temuan"]} /> : null}
-                <Field><FieldLabel htmlFor="title" className="font-semibold text-foreground">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-background/70" placeholder={titlePlaceholder} required /></Field>
-                {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-background/70" placeholder="Contoh: Dompet kulit warna hitam" required /></Field></> : null}
+                <Field><FieldLabel htmlFor="title" className="font-semibold text-foreground">Judul laporan</FieldLabel><Input id="title" name="title" defaultValue={sourceDraft?.payload.title} className="h-11 bg-field-surface dark:bg-field-surface" placeholder={titlePlaceholder} required /></Field>
+                {category === "kehilangan-temuan" ? <><Field><FieldLabel htmlFor="item-name">Nama barang</FieldLabel><Input id="item-name" name="item-name" defaultValue={sourceDraft?.payload.itemName} className="h-11 bg-field-surface dark:bg-field-surface" placeholder="Contoh: Dompet kulit warna hitam" required /></Field></> : null}
                 {category === "fasilitas" && catalog ? <FacilityMappingFields key={draftId} disabled={pending || previewOpen} catalog={catalog} selectedAreaId={facilityAreaId} onAreaChange={setFacilityAreaId} location={location} onLocationChange={setLocation} otherLocation={otherLocation} onOtherLocationChange={setOtherLocation} facilities={selectedFacilities} onFacilitiesChange={setSelectedFacilities} otherFacility={otherFacility} onOtherFacilityChange={setOtherFacility} /> : null}
                 {category === "fasilitas" || category === "layanan" ? catalogResource.loading ? <p role="status" className="text-sm text-muted-foreground">Memuat katalog operasional...</p> : catalogResource.error ? <div className="space-y-2"><FieldError>{catalogResource.error}</FieldError><Button type="button" variant="outline" onClick={() => setCatalogRevision((value) => value + 1)}>Coba lagi</Button></div> : null : null}
-                {category === "layanan" ? <ServiceReportFields services={services} service={service} program={program} disabled={pending || previewOpen} onServiceChange={(next) => { if (getReportServicePolicy(next).locationMode === "hidden") setLocation(""); setService(next) }} onProgramChange={setProgram} /> : null}
-                {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak lagi tersedia. Pilih layanan yang aktif atau gunakan kategori Laporan Lainnya.</FieldError> : null}
-                {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-background/70" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
-                {category !== "fasilitas" ? <ReportLocationField category={category} service={service} value={location} onValueChange={setLocation} disabled={pending || previewOpen} /> : null}
+                {category === "layanan" ? <ServiceReportFields audience={formCategory === "tefa" ? "tefa" : "operasional"} services={services} service={service} program={program} disabled={pending || previewOpen} onServiceChange={(next) => { if (getReportServicePolicy(next).locationMode === "hidden") setLocation(""); setService(next) }} onProgramChange={setProgram} /> : null}
+                {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak tersedia pada kategori ini. Pilih layanan aktif dari daftar.</FieldError> : null}
+                {category === "layanan" && catalog && !services.length ? <FieldDescription>Belum ada layanan aktif untuk kategori ini. Hubungi pengelola katalog.</FieldDescription> : null}
+                {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-field-surface dark:bg-field-surface" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
+                {category !== "fasilitas" && (formCategory !== "tefa" || Boolean(service)) ? <ReportLocationField category={category} service={service} value={location} onValueChange={setLocation} disabled={pending || previewOpen} /> : null}
                 <Field>
                   <div className="flex items-center gap-3">
                     <FieldLabel htmlFor="custom-incident-time">Gunakan tanggal &amp; waktu tertentu</FieldLabel>
@@ -397,7 +403,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
                     <Field data-invalid={Boolean(incidentDateError)}>
                       <FieldLabel htmlFor="incident-date">Tanggal kejadian</FieldLabel>
                       <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                        <PopoverTrigger render={<Button id="incident-date" type="button" variant="outline" aria-label="Tanggal kejadian" aria-invalid={Boolean(incidentDateError)} aria-describedby={incidentDateError ? "incident-date-description incident-date-error" : "incident-date-description"} className="h-11 w-full justify-start bg-background/70 text-left font-normal" />}>
+                        <PopoverTrigger render={<Button id="incident-date" type="button" variant="outline" aria-label="Tanggal kejadian" aria-invalid={Boolean(incidentDateError)} aria-describedby={incidentDateError ? "incident-date-description incident-date-error" : "incident-date-description"} className="h-11 w-full justify-start bg-field-surface dark:bg-field-surface text-left font-normal" />}>
                           <CalendarDays className="size-4 text-muted-foreground" />{incidentDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(incidentDate) : <span className="text-muted-foreground/70">Pilih tanggal</span>}
                         </PopoverTrigger>
                         <PopoverContent align="start">
@@ -417,6 +423,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
                   <FieldLabel htmlFor="description">{descriptionPresentation.label}</FieldLabel>
                   <Textarea
                     id="description"
+                    className="bg-field-surface dark:bg-field-surface"
                     name="description"
                     defaultValue={getReportDraftDescription(sourceDraft?.payload)}
                     placeholder={descriptionPresentation.placeholder}
@@ -460,7 +467,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
           {error && !previewOpen ? <FieldError>{error}</FieldError> : null}
         </form>
       </CardContent></div></Card>
-      <ReportGuidance category={category} service={service} handlerRole={catalog?.services.find((row) => row.name === service)?.handlerRole} />
+      <ReportGuidance category={category} formCategory={formCategory} service={service} handlerRole={catalog?.services.find((row) => row.name === service)?.handlerRole} />
       </div>
       <Dialog open={previewOpen} onOpenChange={(open, details) => { if (busy.current) { details.cancel(); return }; setPreviewOpen(open) }} onOpenChangeComplete={(open) => { if (!open) { releasePreview(); setPreview(null) } }} disablePointerDismissal={pending}>
         {preview ? <ReportSubmissionPreview snapshot={preview} uploadUrls={preview.uploadUrls} pending={pending} error={error} finalFocus={() => submitButtonRef.current ?? formRef.current} onClose={() => { if (!busy.current) setPreviewOpen(false) }} onConfirm={() => { void save(true, preview) }} /> : null}

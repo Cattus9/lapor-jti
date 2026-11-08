@@ -41,6 +41,8 @@ export type ReportPayload = {
   facilities: string[]; otherFacility: string; service: string; program: string; otherCategory: string
   incidentTimeMode?: "automatic" | "custom"
   facilityAreaId?: string
+  // Form/draft grouping only. The service catalog remains authoritative for routing.
+  serviceAudience?: "operasional" | "tefa"
 }
 export const emptyReportPayload: ReportPayload = {
   category: "lainnya", title: "", description: "", incidentDate: "", incidentTime: "", location: "", otherLocation: "",
@@ -58,8 +60,10 @@ export function parsePayload(raw: unknown, submitted: boolean, now = new Date())
   const value = raw as Record<string, unknown>
   if (!reportCategories.includes(value.category as ReportCategory)) throw new ReportError("Pilih kategori laporan yang valid.")
   const payload = { ...emptyReportPayload, category: value.category as ReportCategory }
+  if (value.serviceAudience !== undefined && value.serviceAudience !== "operasional" && value.serviceAudience !== "tefa") throw new ReportError("Pilihan kelompok layanan tidak valid.")
+  if (payload.category === "layanan" && value.serviceAudience !== undefined) payload.serviceAudience = value.serviceAudience
   for (const key of Object.keys(emptyReportPayload) as (keyof ReportPayload)[]) {
-    if (key === "category" || key === "facilities" || key === "incidentTimeMode") continue
+    if (key === "category" || key === "facilities" || key === "incidentTimeMode" || key === "serviceAudience") continue
     const item = value[key] ?? ""
     const limit = key === "description" || key === "itemDetails" ? 5000 : key === "title" ? 200 : 300
     if (typeof item !== "string" || item.length > limit || /\u0000/.test(item)) throw new ReportError(`Isian ${key} tidak valid atau terlalu panjang.`)

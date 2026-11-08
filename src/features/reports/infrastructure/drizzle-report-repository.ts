@@ -83,6 +83,7 @@ export class DrizzleReportRepository implements ReportRepository {
       if (submit && payload.category === "layanan" && payload.service) {
         ;[service] = await tx.select().from(services).where(and(eq(services.name, payload.service), eq(services.isActive, true))).limit(1)
         if (!service) throw new ReportError("Layanan tidak tersedia.")
+        if (payload.serviceAudience && service.handlerRole !== (payload.serviceAudience === "tefa" ? "tefa" : "manajemen")) throw new ReportError("Layanan tidak sesuai dengan pilihan kategori. Pilih kembali layanan yang tersedia.")
       }
       if (removed.length) await tx.delete(reportAttachments).where(inArray(reportAttachments.id, removed.map((file) => file.id)))
       const now = new Date()
@@ -199,17 +200,23 @@ export class DrizzleReportRepository implements ReportRepository {
   }
   async categoryDrafts(ownerId: string) {
     const category = sql<string>`${reportDrafts.payload}->>'category'`
-    const rows = await this.db.selectDistinctOn([category]).from(reportDrafts)
+    const slot = sql<string>`case when ${category} = 'layanan' and coalesce(${reportDrafts.payload}->>'serviceAudience', case when ${services.handlerRole} = 'tefa' then 'tefa' else 'operasional' end) = 'tefa' then 'tefa' else ${category} end`
+    const rows = await this.db.selectDistinctOn([slot], { draft: reportDrafts, slot }).from(reportDrafts)
+      .leftJoin(services, and(eq(category, "layanan"), eq(services.name, sql<string>`${reportDrafts.payload}->>'service'`)))
       .where(and(eq(reportDrafts.reporterId, ownerId), isNull(reportDrafts.submittedReportId), eq(reportDrafts.schemaVersion, 1), inArray(category, [...reportCategories])))
-      .orderBy(category, desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(reportCategories.length)
+      .orderBy(slot, desc(reportDrafts.updatedAt), desc(reportDrafts.id)).limit(reportCategories.length + 1)
     const files = rows.length ? await this.db.select().from(reportAttachments)
-      .where(and(eq(reportAttachments.ownerId, ownerId), inArray(reportAttachments.draftId, rows.map((row) => row.id))))
+      .where(and(eq(reportAttachments.ownerId, ownerId), inArray(reportAttachments.draftId, rows.map((row) => row.draft.id))))
       .orderBy(reportAttachments.createdAt, reportAttachments.id) : []
-    return rows.map((row) => draftView(row, files.filter((file) => file.draftId === row.id)))
+    return rows.map(({ draft, slot }) => draftView({ ...draft, payload: draft.payload.category === "layanan" ? { ...draft.payload, serviceAudience: slot === "tefa" ? "tefa" : "operasional" } : draft.payload }, files.filter((file) => file.draftId === draft.id)))
   }
   async draft(ownerId: string, id: string) {
     const [row] = await this.db.select().from(reportDrafts).where(and(eq(reportDrafts.id, id), eq(reportDrafts.reporterId, ownerId), eq(reportDrafts.schemaVersion, 1), isNull(reportDrafts.submittedReportId))).limit(1)
     if (!row) return null
+    if (row.payload.category === "layanan" && !row.payload.serviceAudience) {
+      const [service] = await this.db.select({ handlerRole: services.handlerRole }).from(services).where(eq(services.name, row.payload.service)).limit(1)
+      row.payload = { ...row.payload, serviceAudience: service?.handlerRole === "tefa" ? "tefa" : "operasional" }
+    }
     const files = await this.db.select().from(reportAttachments).where(and(eq(reportAttachments.draftId, row.id), eq(reportAttachments.ownerId, ownerId)))
     return draftView(row, files)
   }

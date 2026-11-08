@@ -37,11 +37,14 @@ Aturan penerapan:
 - Hindari card/wrapper yang tidak memberi hierarki atau fungsi. Untuk pola yang ditentukan proyek—terutama KPI dan detail laporan—ikuti komposisi berlapis di AGENTS.md secara tepat. Jangan mengganti standar role tertentu dengan markup lokal yang hanya tampak serupa.
 - Field helper text wajib memakai `FieldDescription`; jangan membuat versi helper text sendiri.
 - Form Buat Laporan Pelapor memakai satu halaman dengan pemilih kategori selalu terlihat dan modal pemeriksaan sebelum kirim. Pergantian kategori menyimpan draft terpisah hanya bila ada isian/lampiran; notifikasi sukses hanya sesudah server mengonfirmasi. Pertahankan pemulihan draft per kategori, guard owner/revision, lampiran privat, serta isian lokal saat gagal. Jangan mengembalikan wizard tiga langkah tanpa arahan pemilik proyek. Detail workflow dan tes ada di OPERATIONS.md.
+- Kartu Layanan Operasional dan Layanan JTI (TEFA) memakai slot draft terpisah melalui property JSON opsional serviceAudience, sementara kategori backend keduanya tetap layanan. Saring pilihan dari metadata handler katalog, pertahankan pemulihan draft lama dan validasi kecocokan layanan di server; jangan menjadikan pilihan kartu sebagai sumber otorisasi/routing. Detail dan tes ada pada bagian kartu layanan TEFA di OPERATIONS.md.
 - Gunakan Lucide yang tersedia dan semantik; pastikan nama ikon ada di paket terpasang.
 - Baca dan gunakan skill frontend proyek di `.agents/skills/design-taste-frontend/SKILL.md` untuk setiap iterasi/pengembangan frontend, bersama aturan AGENTS.md. Jika arahan generik skill bertentangan dengan sistem Shadcn, token, atau kebutuhan eksplisit proyek, pertahankan standar proyek dan ambil hanya arahan skill yang relevan.
 - Visual dan interaksi diverifikasi manual oleh pengguna. Jangan menjalankan Preview Mode, browser automation, atau Playwright untuk validasi; tetap lakukan pemeriksaan statis.
 
 ## Backend dan arsitektur data
+
+- Informasi barang temuan bersama untuk Pelapor memakai proyeksi terbatas dari laporan Temuan/Inventaris, terpisah dari detail operasional privat. Laporan Temuan langsung terlihat sejak dikirim dengan label yang membedakan laporan mahasiswa dan barang yang benar-benar tersimpan di pos. Pertahankan deduplikasi lewat relasi asal, tanda baca per akun, guard Pelapor aktif, batas SQL dan perlindungan identitas/kontak/foto. Migration 0021, kontrak API dan tes dijelaskan pada bagian Pelapor 8 November 2026 di OPERATIONS.md.
 
 - Satpam: penerimaan barang dapat menautkan laporan Temuan yang sudah ada; pilihan asal harus ikut draft. Penyerahan pasangan memerlukan pemeriksaan kepemilikan dan kunci idempotensi, lalu menyelesaikan kedua laporan dalam satu transaksi. Koreksi Inventaris hanya sebelum penyerahan dengan versi dan alasan; penutupan khusus dan pembatalan kecocokan harus memiliki audit, history, serta validasi relasi/status di server. Jangan membuat catatan pengambilan saat pemilik menemukan sendiri barangnya. Batas fitur, race handling, deployment, dan QA terbaru ada pada bagian Satpam 6 November 2026 di OPERATIONS.md.
 
@@ -147,6 +150,10 @@ Alur startup:
 3. Service `migrate` menunggu database sehat lalu menjalankan migration dengan kredensial migration.
 4. Service `app` baru berjalan setelah migration berhasil, dengan kredensial aplikasi dan Better Auth runtime config.
 5. Watch mode menyinkronkan perubahan `src`/`public`; perubahan dependency dan konfigurasi tertentu memicu rebuild. Jika file di luar daftar watch berubah, evaluasi apakah rebuild/restart diperlukan.
+
+Compose Watch adalah proses di laptop yang harus tetap berjalan. Menekan Start/Restart pada container di Docker Desktop hanya menjalankan container dan tidak mengaktifkan Watch. Container development tanpa bind mount source tetap membaca salinan source terakhir sampai Watch menyinkronkannya kembali. Karena itu gunakan `npm run docker:dev` saat memulai sesi development, lalu biarkan terminalnya aktif.
+
+Jika container development sudah berjalan dan hanya Watch yang berhenti, aktifkan kembali tanpa build/start service dengan `docker compose -f compose.yaml -f compose.dev.yaml watch --no-up app`. Konfigurasi `initial_sync: true` menyamakan source saat Watch dimulai. Untuk diagnosis, periksa proses Watch dan bandingkan file workspace dengan file di `/app/src`; jangan langsung menghapus cache, memaksa recreate, atau menghapus volume. Perubahan schema tetap membutuhkan migration; sinkronisasi source bukan pengganti migration.
 
 Perintah bantu:
 

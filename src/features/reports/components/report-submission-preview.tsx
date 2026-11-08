@@ -46,7 +46,7 @@ export function ReportSubmissionPreview({ snapshot, uploadUrls, pending, error, 
   const count = snapshot.retained.length + snapshot.files.length
   return <DialogContent className="max-w-3xl space-y-5 p-5 md:p-6" initialFocus={backButton} finalFocus={finalFocus} showCloseButton={!pending}>
       <div>
-        <div className="flex flex-wrap items-center gap-2"><ReportCategoryBadge category={snapshot.payload.category} /><Badge variant="outline">Belum dikirim</Badge></div>
+        <div className="flex flex-wrap items-center gap-2"><ReportCategoryBadge category={snapshot.payload.category} serviceAudience={snapshot.payload.serviceAudience} /><Badge variant="outline">Belum dikirim</Badge></div>
         <DialogTitle className="mt-3 flex items-center gap-2 pr-8 text-xl"><ClipboardCheck className="size-5 shrink-0 text-primary" aria-hidden="true" />Periksa laporan Anda</DialogTitle>
         <DialogDescription className="mt-2 pr-8">Pastikan informasi dan lampiran sudah sesuai. Laporan baru dikirim setelah Anda menekan Konfirmasi kirim.</DialogDescription>
       </div>
