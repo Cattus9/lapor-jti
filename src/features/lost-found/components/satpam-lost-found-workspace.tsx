@@ -359,10 +359,59 @@ function ReportList({ kind }: { kind: SatpamReportKind }) {
 
 function ReportRow({ report }: { report: SatpamLostFoundReport }) {
   const isFound = report.kind === "temuan"
+  const isDone = report.status === "Selesai"
+  const isInProgress = ["Diproses", "Barang teridentifikasi", "Diserahkan"].includes(report.status)
+
+  const lifecycleSteps = [
+    { value: "baru", label: "Baru" },
+    { value: "diproses", label: "Diproses" },
+    { value: "barang_teridentifikasi", label: "Pencocokan" },
+    { value: "diserahkan", label: "Diserahkan" },
+    { value: "selesai", label: "Selesai" },
+  ] as const
+
+  const currentStep =
+    report.status === "Baru"
+      ? "baru"
+      : report.status === "Diproses"
+      ? "diproses"
+      : report.status === "Barang teridentifikasi"
+      ? "barang_teridentifikasi"
+      : report.status === "Diserahkan"
+      ? "diserahkan"
+      : "selesai"
 
   return (
-    <Card role="article" className="gap-0 border border-border bg-background/60 p-4 shadow-none ring-0 transition-colors hover:border-primary/40 md:p-5">
-      <div className="flex gap-3 sm:gap-4">
+    <Card
+      role="article"
+      className="group relative gap-0 overflow-hidden border border-border bg-background/60 p-4 shadow-none ring-0 transition-colors hover:border-primary/40 md:p-5"
+    >
+      {/* Blurry corner half-circle glow with fading gradient */}
+      {isDone ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-emerald-500/20 blur-2xl transition-opacity dark:bg-emerald-500/25"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-emerald-500/15 via-emerald-500/5 to-transparent transition-opacity"
+          />
+        </>
+      ) : isInProgress ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-blue-500/20 blur-2xl transition-opacity dark:bg-blue-500/25"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-blue-500/15 via-blue-500/5 to-transparent transition-opacity"
+          />
+        </>
+      ) : null}
+
+      <div className="relative z-10 flex gap-3 sm:gap-4">
         <ReportPhotoThumbnail key={report.photoUrl ?? "empty"} report={report} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -370,12 +419,55 @@ function ReportRow({ report }: { report: SatpamLostFoundReport }) {
               <h3 className="text-sm font-semibold text-foreground md:text-base">{report.title}</h3>
               <p className="mt-1 text-xs text-muted-foreground">{report.reporter} · Dikirim {report.submittedAt} WIB</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2"><UnopenedReportBadge unseen={report.unopened} /><StatusBadge status={report.status} /></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <UnopenedReportBadge unseen={report.unopened} />
+              {isDone ? (
+                <span className="relative size-6 shrink-0 drop-shadow-xs">
+                  <Image
+                    src="/assets/DoneStatusIc.png"
+                    alt="Selesai"
+                    fill
+                    sizes="24px"
+                    className="object-contain"
+                    unoptimized
+                  />
+                </span>
+              ) : null}
+              <StatusBadge status={report.status} />
+            </div>
           </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"><span className="flex min-w-0 items-center gap-1.5"><MapPin className="size-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{report.location}</span></span><span className="flex items-center gap-1.5"><CalendarDays className="size-3.5 shrink-0" aria-hidden="true" />{report.eventDate}</span><span className="flex items-center gap-1.5"><Paperclip className="size-3.5 shrink-0" aria-hidden="true" />{report.attachments} lampiran</span></div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+            <span className="flex min-w-0 items-center gap-1.5"><MapPin className="size-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{report.location}</span></span>
+            <span className="flex items-center gap-1.5"><CalendarDays className="size-3.5 shrink-0" aria-hidden="true" />{report.eventDate}</span>
+            <span className="flex items-center gap-1.5"><Paperclip className="size-3.5 shrink-0" aria-hidden="true" />{report.attachments} lampiran</span>
+          </div>
         </div>
       </div>
-      <div className="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap items-center gap-2"><span className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />Diperbarui {report.updatedAt}</span><Badge variant="outline" tone={isFound ? "cyan" : "violet"}>{isFound ? "Temuan" : "Kehilangan"}</Badge></div><ReportDetailTrigger report={report} /></div>
+
+      {/* Stepper Progres Laporan */}
+      {report.status !== "Ditolak" ? (
+        <div className="relative z-10 mt-3.5 space-y-1">
+          <Stepper
+            aria-label="Progres laporan"
+            value={currentStep}
+            steps={lifecycleSteps}
+            className="w-full"
+          />
+        </div>
+      ) : null}
+
+      <div className="relative z-10 mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+            Diperbarui {report.updatedAt}
+          </span>
+          <Badge variant="outline" tone={isFound ? "cyan" : "violet"}>
+            {isFound ? "Temuan" : "Kehilangan"}
+          </Badge>
+        </div>
+        <ReportDetailTrigger report={report} />
+      </div>
     </Card>
   )
 }

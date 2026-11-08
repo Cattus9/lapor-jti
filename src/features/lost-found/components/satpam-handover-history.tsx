@@ -28,15 +28,124 @@ import { useSatpamPage, useDebouncedSatpamQuery } from "./use-satpam-data"
 import { SatpamPageFeedback } from "./satpam-page-feedback"
 import { getTodayInWib } from "../../reports/domain/report-date"
 import type { CurrentUser } from "@/lib/auth/current-user"
+import { cn } from "cn"
 
 function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
   const sourceLabel = item.source === "inventaris" ? "Inventaris Pos Satpam" : "Pasangan laporan"
   const contactInfo = [item.recipientEmail, item.recipientPhone].filter(Boolean).join(" · ")
-  return <Dialog><DialogTrigger render={<Button variant="ghost" className="group relative h-auto w-full flex-col items-stretch gap-3 overflow-hidden rounded-xl border border-border bg-report-surface p-4 text-left whitespace-normal shadow-none transition-colors hover:border-primary/40 hover:bg-report-surface focus-visible:ring-ring md:p-5" />}>
-    <span className="flex items-start justify-between gap-3"><span className="flex min-w-0 items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary"><PackageSearch aria-hidden="true" /></span><span className="min-w-0"><span className="block text-sm font-semibold text-foreground">{item.title}</span><span className="mt-1 block text-xs font-normal text-muted-foreground">Penerima: {item.recipient}{contactInfo ? ` (${contactInfo})` : ""}</span></span></span><StatusBadge status={item.status} /></span>
-    <span className="line-clamp-2 text-sm font-normal text-muted-foreground">{item.itemDescription || "Tidak ada deskripsi tambahan."}</span>
-    <span className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs font-normal text-muted-foreground"><span>{sourceLabel} · Diserahkan {item.handedOverAt} WIB</span><span className="inline-flex items-center gap-1 text-primary-action">Lihat detail<ArrowRight className="size-3.5" aria-hidden="true" /></span></span>
-  </DialogTrigger><DialogContent>
+  const isDone = item.status === "Selesai"
+  const isInProgress = item.status === "Diserahkan"
+
+  const handoverSteps = [
+    { value: "diterima", label: item.source === "inventaris" ? "Di Pos" : "Dicocokkan" },
+    { value: "diserahkan", label: "Diserahkan" },
+    { value: "selesai", label: "Selesai" },
+  ] as const
+
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            className="group relative h-auto w-full flex-col items-stretch gap-3 overflow-hidden rounded-xl border border-border bg-report-surface p-4 text-left whitespace-normal shadow-none transition-colors hover:border-primary/40 hover:bg-report-surface focus-visible:ring-ring md:p-5"
+          />
+        }
+      >
+        {/* Blurry corner half-circle glow with fading gradient */}
+        {isDone ? (
+          <>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-emerald-500/20 blur-2xl transition-opacity dark:bg-emerald-500/25"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-emerald-500/15 via-emerald-500/5 to-transparent transition-opacity"
+            />
+          </>
+        ) : isInProgress ? (
+          <>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-blue-500/20 blur-2xl transition-opacity dark:bg-blue-500/25"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-blue-500/15 via-blue-500/5 to-transparent transition-opacity"
+            />
+          </>
+        ) : null}
+
+        {/* Header row */}
+        <span className="relative z-10 flex items-start justify-between gap-3">
+          <span className="flex min-w-0 items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary">
+              <PackageSearch aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-foreground">{item.title}</span>
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                Penerima: {item.recipient}
+                {contactInfo ? ` (${contactInfo})` : ""}
+              </span>
+            </span>
+          </span>
+
+          <span className="flex items-center gap-2 shrink-0">
+            {isDone ? (
+              <span className="relative size-6 shrink-0 drop-shadow-xs">
+                <Image
+                  src="/assets/DoneStatusIc.png"
+                  alt="Selesai"
+                  fill
+                  sizes="24px"
+                  className="object-contain"
+                  unoptimized
+                />
+              </span>
+            ) : null}
+            <StatusBadge status={item.status} />
+          </span>
+        </span>
+
+        {/* Description */}
+        <span className="relative z-10 line-clamp-2 text-sm font-normal text-muted-foreground">
+          {item.itemDescription || "Tidak ada deskripsi tambahan."}
+        </span>
+
+        {/* Stepper Progres Penyerahan */}
+        <div className="relative z-10 mt-1 w-full space-y-1.5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+            <span>Tahapan penyerahan</span>
+            <span
+              className={cn(
+                "font-semibold",
+                isDone ? "text-emerald-600 dark:text-emerald-400" : "text-blue-600 dark:text-blue-400"
+              )}
+            >
+              {item.status}
+            </span>
+          </div>
+          <Stepper
+            aria-label="Progres tahapan penyerahan"
+            value={isDone ? "selesai" : "diserahkan"}
+            steps={handoverSteps}
+            className="w-full"
+          />
+        </div>
+
+        {/* Footer */}
+        <span className="relative z-10 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs font-normal text-muted-foreground">
+          <span>
+            {sourceLabel} · Diserahkan {item.handedOverAt} WIB
+          </span>
+          <span className="inline-flex items-center gap-1 text-primary-action">
+            Lihat detail
+            <ArrowRight className="size-3.5" aria-hidden="true" />
+          </span>
+        </span>
+      </DialogTrigger><DialogContent>
     <div className="border-b border-border/60 p-5 pr-14 md:p-6 md:pr-16"><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-primary"><Archive className="size-4" aria-hidden="true" /></span><span>{sourceLabel}</span><span>{item.handedOverAt} WIB</span><StatusBadge status={item.status} /></div><DialogTitle className="mt-4 text-xl">{item.title}</DialogTitle><DialogDescription className="mt-2">Catatan penyerahan barang dan petugas yang bertanggung jawab.</DialogDescription></div>
     <div className="space-y-6 p-5 md:p-6">
       <Stepper aria-label="Progres penyerahan" value={item.status === "Selesai" ? "selesai" : "diserahkan"} steps={[{ value: "diserahkan", label: "Diserahkan" }, { value: "selesai", label: "Selesai" }]} />
@@ -60,6 +169,7 @@ function HistoryDetailDialog({ item }: { item: SatpamHandoverHistoryItem }) {
       ]} /></ReportDetailSection>
     </div>
   </DialogContent></Dialog>
+  )
 }
 function EvidencePhoto({ label, photoUrl }: { label: string; photoUrl?: string }) {
   const [failed, setFailed] = useState(false)
