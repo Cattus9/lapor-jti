@@ -3,7 +3,7 @@ import { getReportServicePolicy } from "./service-policy"
 export function getReportLocationPresentation(category: string, service = "") {
   if (category !== "layanan") return {
     visible: true,
-    required: true,
+    required: category !== "lainnya",
     label: "Lokasi kejadian",
     placeholder: "Contoh: Gedung JTI, Ruang 3.4",
     description: "Sebutkan area, gedung, atau ruangan tempat kejadian berlangsung.",

@@ -1,4 +1,4 @@
-import type { ReportPayload } from "./report"
+import { getIncidentTimeMode, type ReportPayload } from "./report"
 import { getReportServicePolicy } from "./service-policy"
 
 export function getReportServiceHint(service: string) {
@@ -10,6 +10,10 @@ export function getReportServiceHint(service: string) {
 }
 
 export function getReportDescriptionPresentation(category: string, service: string) {
+  if (category === "lainnya") return {
+    label: "Deskripsi laporan",
+    placeholder: "Jelaskan masalah atau usulan Anda. Sertakan lokasi atau waktu kejadian jika relevan.",
+  }
   if (category === "layanan" && service === "Kebersihan") return {
     label: "Kondisi yang perlu dibersihkan",
     placeholder: "Contoh: Sampah menumpuk di dekat tangga dan belum dibersihkan.",
@@ -35,10 +39,19 @@ export function getReportServiceTitlePlaceholder(service: string) {
   return service ? `Contoh: Kendala saat menggunakan ${service}` : "Contoh: Kendala pada layanan yang dipilih"
 }
 
-// Preserve useful text from drafts written before a service's location field was removed.
+// Preserve context from drafts written before their fields were removed.
 // Only draft presentation uses this fallback; submitted historical rows are never rewritten.
 export function getReportDraftDescription(payload?: ReportPayload) {
   if (!payload) return undefined
+  if (payload.category === "lainnya") {
+    const time = getIncidentTimeMode(payload) === "custom"
+      ? [payload.incidentDate, payload.incidentTime].filter(Boolean).join(" ")
+      : ""
+    return [
+      payload.description,
+      time && `Waktu kejadian (WIB): ${time}`,
+    ].filter(Boolean).join("\n\n")
+  }
   return [
     payload.description,
     payload.category === "kehilangan-temuan" ? payload.itemDetails : "",

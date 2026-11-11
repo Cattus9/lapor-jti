@@ -111,7 +111,7 @@ export class DrizzleReportRepository implements ReportRepository {
         if (!service) throw new ReportError("Layanan tidak tersedia.")
         await tx.insert(reportServiceDetails).values({ reportId: report.id, serviceId: service.id, serviceName: service.name, program: payload.program })
       }
-      if (payload.category === "lainnya") await tx.insert(reportOtherDetails).values({ reportId: report.id, categoryText: payload.otherCategory })
+      if (payload.category === "lainnya" && payload.otherCategory) await tx.insert(reportOtherDetails).values({ reportId: report.id, categoryText: payload.otherCategory })
       if (kept.length) await tx.update(reportAttachments).set({ reportId: report.id, draftId: null }).where(inArray(reportAttachments.id, kept.map((file) => file.id)))
       if (files.length) await tx.insert(reportAttachments).values(files.map((file) => ({ ...file, ownerId: actor.id, reportId: report.id })))
       await tx.insert(reportStatusHistory).values({ reportId: report.id, actorId: actor.id, actorName: user.name, toStatus: "baru", note: "Laporan dikirim oleh Pelapor.", createdAt: now })

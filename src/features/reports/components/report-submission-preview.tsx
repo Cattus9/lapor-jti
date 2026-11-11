@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react"
 import Image from "next/image"
-import { AlignLeft, ArrowLeft, CalendarDays, ClipboardCheck, Clock3, Eye, FileText, GraduationCap, Headphones, MapPin, PackageSearch, Paperclip, Send, Tags, Wrench, type LucideIcon } from "lucide-react"
+import { AlignLeft, ArrowLeft, CalendarDays, ClipboardCheck, Clock3, Eye, FileText, GraduationCap, Headphones, MapPin, PackageSearch, Paperclip, Send, Wrench, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FieldError } from "@/components/ui/field"
@@ -15,7 +15,7 @@ const rowIcons: Record<string, LucideIcon> = {
   "Judul laporan": FileText, "Tanggal kejadian": CalendarDays, "Waktu kejadian": Clock3,
   "Lokasi kejadian": MapPin, "Jenis laporan": PackageSearch, "Nama barang": PackageSearch,
   "Objek fasilitas": Wrench, "Jenis layanan": Headphones,
-  "Unit / program studi": GraduationCap, "Kategori umum": Tags, "Deskripsi laporan": AlignLeft,
+  "Unit / program studi": GraduationCap, "Deskripsi laporan": AlignLeft,
 }
 
 function PreviewAttachment({ file, upload, url }: { file: Pick<PublicAttachment, "name" | "mimeType" | "size"> & { id?: string }; upload?: File; url?: string }) {

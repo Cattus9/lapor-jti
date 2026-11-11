@@ -1,9 +1,9 @@
 import "server-only"
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
 import { unionAll } from "drizzle-orm/pg-core"
 import { getDb } from "@/db"
 import { foundNoticeReads, satpamInventory } from "@/db/lost-found-schema"
-import { reportLostFoundDetails, reports } from "@/db/reports-schema"
+import { reportAttachments, reportLostFoundDetails, reports } from "@/db/reports-schema"
 import { users } from "@/db/schema"
 import { ReportError } from "@/features/reports/domain/report"
 import type { FoundNoticeQuery, FoundNoticeRepository } from "../application/found-notice-service"
@@ -18,6 +18,7 @@ export class DrizzleFoundNoticeRepository implements FoundNoticeRepository {
     const reported = this.db.select({
       source: sql<FoundNoticeSource>`'report'`.as("source"), id: reports.id,
       itemName: reportLostFoundDetails.itemName,
+      description: reports.description,
       foundLocation: sql<string>`${reports.locationText}`.as("found_location"),
       storageLocation: sql<string | null>`${satpamInventory.storageLocation}`.as("storage_location"),
       publishedAt: sql<Date>`${reports.submittedAt}`.mapWith(reports.submittedAt).as("published_at"),
@@ -26,16 +27,19 @@ export class DrizzleFoundNoticeRepository implements FoundNoticeRepository {
         when ${satpamInventory.status} = 'tersimpan' then 'stored'
         when ${reports.status} in ('selesai', 'diserahkan') then 'closed'
         else 'reported' end`.as("state"),
+      hasPhoto: sql<boolean>`((${satpamInventory.photoStorageKey} is not null and ${satpamInventory.photoMimeType} in ('image/jpeg', 'image/png', 'image/webp')) or exists (select 1 from ${reportAttachments} where ${reportAttachments.reportId} = ${reports.id} and ${reportAttachments.mimeType} in ('image/jpeg', 'image/png')))`.as("has_photo"),
     }).from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id))
       .leftJoin(satpamInventory, eq(satpamInventory.sourceFoundReportId, reports.id))
       .where(and(eq(reports.category, "kehilangan-temuan"), eq(reports.handlerRole, "satpam"), eq(reportLostFoundDetails.kind, "temuan"), sql`${reports.status} <> 'ditolak'`))
     const received = this.db.select({
       source: sql<FoundNoticeSource>`'inventory'`.as("source"), id: satpamInventory.id,
       itemName: satpamInventory.itemName,
+      description: satpamInventory.description,
       foundLocation: sql<string>`coalesce(${satpamInventory.foundLocation}, 'Lokasi temuan belum dicatat')`.as("found_location"),
       storageLocation: sql<string | null>`${satpamInventory.storageLocation}`.as("storage_location"),
       publishedAt: sql<Date>`${satpamInventory.createdAt}`.mapWith(satpamInventory.createdAt).as("published_at"),
       state: sql<FoundNoticeState>`case when ${satpamInventory.status} = 'tersimpan' then 'stored' else 'returned' end`.as("state"),
+      hasPhoto: sql<boolean>`(${satpamInventory.photoStorageKey} is not null and ${satpamInventory.photoMimeType} in ('image/jpeg', 'image/png', 'image/webp'))`.as("has_photo"),
     }).from(satpamInventory).where(isNull(satpamInventory.sourceFoundReportId))
     return this.db.$with("found_notice_feed").as(unionAll(reported, received))
   }
@@ -52,7 +56,7 @@ export class DrizzleFoundNoticeRepository implements FoundNoticeRepository {
     const active = query.activeOnly ? sql`${feed.state} in ('reported', 'stored')` : undefined
     const before = after ? or(lt(feed.publishedAt, after.publishedAt), and(eq(feed.publishedAt, after.publishedAt), lt(feed.id, after.id)), and(eq(feed.publishedAt, after.publishedAt), eq(feed.id, after.id), lt(feed.source, after.source))) : undefined
     const [rows, [count]] = await Promise.all([
-      this.db.with(feed).select({ source: feed.source, id: feed.id, itemName: feed.itemName, foundLocation: feed.foundLocation, storageLocation: feed.storageLocation, publishedAt: feed.publishedAt, state: feed.state, readAt: foundNoticeReads.readAt })
+      this.db.with(feed).select({ source: feed.source, id: feed.id, itemName: feed.itemName, foundLocation: feed.foundLocation, storageLocation: feed.storageLocation, publishedAt: feed.publishedAt, state: feed.state, hasPhoto: feed.hasPhoto, readAt: foundNoticeReads.readAt })
         .from(feed).leftJoin(foundNoticeReads, this.receipt(userId, feed)).where(and(active, before))
         .orderBy(desc(feed.publishedAt), desc(feed.id), desc(feed.source)).limit(limit + 1),
       this.db.with(feed).select({ total: sql<number>`count(*)::integer`, unread: sql<number>`count(*) filter (where ${foundNoticeReads.id} is null)::integer` })
@@ -65,9 +69,20 @@ export class DrizzleFoundNoticeRepository implements FoundNoticeRepository {
 
   async detail(userId: string, ref: FoundNoticeRef) {
     const feed = this.feed()
-    const [row] = await this.db.with(feed).select({ source: feed.source, id: feed.id, itemName: feed.itemName, foundLocation: feed.foundLocation, storageLocation: feed.storageLocation, publishedAt: feed.publishedAt, state: feed.state, readAt: foundNoticeReads.readAt })
+    const [row] = await this.db.with(feed).select({ source: feed.source, id: feed.id, itemName: feed.itemName, description: feed.description, foundLocation: feed.foundLocation, storageLocation: feed.storageLocation, publishedAt: feed.publishedAt, state: feed.state, hasPhoto: feed.hasPhoto, readAt: foundNoticeReads.readAt })
       .from(feed).leftJoin(foundNoticeReads, this.receipt(userId, feed)).where(and(eq(feed.source, ref.source), eq(feed.id, ref.id))).limit(1)
-    return row ? presentFoundNotice(row) : null
+    return row ? { ...presentFoundNotice(row), description: row.description } : null
+  }
+
+  async photo(userId: string, ref: FoundNoticeRef) {
+    // Resolve visibility for every request, including cached previews.
+    if (!await this.detail(userId, ref)) return null
+    const inventoryFilter = ref.source === "report" ? eq(satpamInventory.sourceFoundReportId, ref.id) : and(eq(satpamInventory.id, ref.id), isNull(satpamInventory.sourceFoundReportId))
+    const [item] = await this.db.select({ storageKey: satpamInventory.photoStorageKey, mimeType: satpamInventory.photoMimeType, name: satpamInventory.photoName }).from(satpamInventory).where(inventoryFilter).limit(1)
+    if (item?.storageKey && item.mimeType && ["image/jpeg", "image/png", "image/webp"].includes(item.mimeType)) return { id: ref.id, storageKey: item.storageKey, mimeType: item.mimeType, name: item.name || "foto-temuan", size: 0 }
+    if (ref.source !== "report") return null
+    const [attachment] = await this.db.select().from(reportAttachments).where(and(eq(reportAttachments.reportId, ref.id), inArray(reportAttachments.mimeType, ["image/jpeg", "image/png"]))).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)).limit(1)
+    return attachment ?? null
   }
 
   async markRead(userId: string, ref: FoundNoticeRef) {

@@ -169,25 +169,69 @@ function TimePickerField({ value, onValueChange }: { value: string; onValueChang
 
 function CategoryCard({ value, selected, onSelect, draft, disabled, onRetry }: { value: (typeof categories)[number]; selected: boolean; onSelect: () => void; draft?: CategoryDraft; disabled: boolean; onRetry: () => void }) {
   const Icon = value.icon
+  const compact = value.value === "lainnya"
   const [notice, setNotice] = useState(0)
   useEffect(() => {
     if (!draft?.notice) return
     const timeout = setTimeout(() => setNotice(draft.notice), 3000)
     return () => clearTimeout(timeout)
   }, [draft?.notice])
+
+  const draftBadgeClass = compact ? undefined : "mt-2"
+  const draftBadge = draft?.status === "saving"
+    ? <Badge variant="outline" className={draftBadgeClass}>{hasDraftContent(draft) ? "Menyimpan…" : "Mengosongkan…"}</Badge>
+    : draft?.status === "error"
+      ? <Badge tone="warning" variant="outline" className={draftBadgeClass}>Belum tersimpan</Badge>
+      : draft?.savedKey && hasDraftContent(draft)
+        ? <Badge tone="info" variant="outline" className={draftBadgeClass}>Draft</Badge>
+        : null
+  const selectionIcon = selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null
+
   return (
-    <div className={cn("min-w-0", value.value === "lainnya" && "sm:col-span-2")}>
-    <Tooltip open={Boolean(draft && hasDraftContent(draft) && draft.notice && draft.notice !== notice)}>
-    <TooltipTrigger render={<Button type="button" variant="outline" disabled={disabled} onClick={onSelect} aria-pressed={selected} className={cn("group flex h-auto w-full whitespace-normal items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none", value.value === "lainnya" ? "min-h-20" : "min-h-24", selected ? "border-primary bg-primary/5 shadow-none" : "border-border bg-background/60 hover:border-primary/50 hover:bg-muted/40")} />}>
-      <Badge variant="outline" tone={value.tone} className="mt-0.5 size-9 rounded-lg p-0"><span><Icon className="size-4" aria-hidden="true" /></span></Badge>
-      <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2 text-sm font-semibold text-foreground">{value.label}{selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{value.hint}</span>
-        {draft?.status === "saving" ? <Badge variant="outline" className="mt-2">{hasDraftContent(draft) ? "Menyimpan…" : "Mengosongkan…"}</Badge> : draft?.status === "error" ? <Badge tone="warning" variant="outline" className="mt-2">Belum tersimpan</Badge> : draft?.savedKey && hasDraftContent(draft) ? <Badge tone="info" variant="outline" className="mt-2">Draft</Badge> : null}
-      </span>
-    </TooltipTrigger>
-    <TooltipContent side="top" className="motion-reduce:animate-none"><CheckCircle2 className="size-3.5" aria-hidden="true" />Tersimpan sebagai draft</TooltipContent>
-    </Tooltip>
-    <span className="sr-only" role="status">{draft?.status === "saving" ? `Menyimpan draft ${value.label}` : draft?.status === "error" ? `${value.label}: ${draft.error}` : draft?.notice ? `${value.label}: tersimpan sebagai draft` : ""}</span>
-    {draft?.status === "error" ? <Button type="button" variant="link" size="sm" disabled={disabled} onClick={onRetry}>Coba simpan lagi</Button> : null}
+    <div className={cn("min-w-0", compact && "flex flex-wrap items-center gap-x-2 gap-y-1 sm:col-span-2")}>
+      {compact ? <FieldDescription>Jika belum ada kategori yang sesuai, pilih</FieldDescription> : null}
+      <Tooltip open={Boolean(draft && hasDraftContent(draft) && draft.notice && draft.notice !== notice)}>
+        <TooltipTrigger render={
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            onClick={onSelect}
+            aria-pressed={selected}
+            aria-description={compact ? value.hint : undefined}
+            className={cn(
+              "group flex h-auto whitespace-normal border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+              compact ? "min-h-8 w-fit max-w-full gap-1.5 rounded-lg px-3 py-1" : "min-h-24 w-full items-start gap-3 rounded-xl p-3",
+              selected ? "border-primary bg-primary/5 shadow-none" : "border-border bg-background/60 hover:border-primary/50 hover:bg-muted/40",
+            )}
+          />
+        }>
+          {compact ? (
+            <>
+              <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              <span className="min-w-0">{value.label}</span>
+              {draftBadge}
+              {selectionIcon}
+            </>
+          ) : (
+            <>
+              <Badge variant="outline" tone={value.tone} className="mt-0.5 size-9 rounded-lg p-0"><span><Icon className="size-4" aria-hidden="true" /></span></Badge>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2 text-sm font-semibold text-foreground">{value.label}{selectionIcon}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{value.hint}</span>
+                {draftBadge}
+              </span>
+            </>
+          )}
+        </TooltipTrigger>
+        <TooltipContent side="top" className="motion-reduce:animate-none"><CheckCircle2 className="size-3.5" aria-hidden="true" />Tersimpan sebagai draft</TooltipContent>
+      </Tooltip>
+      <span className="sr-only" role="status">{draft?.status === "saving" ? `Menyimpan draft ${value.label}` : draft?.status === "error" ? `${value.label}: ${draft.error}` : draft?.notice ? `${value.label}: tersimpan sebagai draft` : ""}</span>
+      {draft?.status === "error" ? (
+        <div className={compact ? "basis-full" : undefined}>
+          <Button type="button" variant="link" size="sm" disabled={disabled} onClick={onRetry}>Coba simpan lagi</Button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -196,7 +240,9 @@ function ReportGuidance({ category, formCategory, service, handlerRole }: { cate
   const selectedCategory = categories.find((item) => item.value === formCategory)
   const locationPresentation = getReportLocationPresentation(category, service)
   const locationGuidance = formCategory === "tefa" && !service ? "Pilih layanan JTI yang mengalami kendala" : !locationPresentation.visible ? "Jelaskan kendala pada deskripsi" : locationPresentation.required ? "Sebutkan lokasi yang jelas" : "Tambahkan lokasi atau kanal jika membantu"
-  const guidance = [[MapPin, locationGuidance], [Clock3, "Atur waktu khusus bila kejadian lebih awal"], [ImagePlus, "Tambahkan foto bila membantu"]] as const
+  const guidance = category === "lainnya"
+    ? [[Clock3, "Waktu pengiriman dicatat otomatis"], [ImagePlus, "Tambahkan foto bila membantu"]] as const
+    : [[MapPin, locationGuidance], [Clock3, "Atur waktu khusus bila kejadian lebih awal"], [ImagePlus, "Tambahkan foto bila membantu"]] as const
   return (
     <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
       <Card className="rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs"><div className="rounded-xl border border-border/60 bg-card text-card-foreground shadow-2xs"><CardHeader className="gap-3 p-5 pb-4"><div className="flex size-10 items-center justify-center rounded-xl border border-border bg-background shadow-2xs"><ShieldCheck className="size-5 text-primary" aria-hidden="true" /></div><div className="space-y-1"><CardTitle className="text-base">Sebelum mengirim</CardTitle><CardDescription>Lengkapi detail agar laporan lebih cepat ditangani.</CardDescription></div></CardHeader><CardContent className="space-y-4 p-5 pt-0"><div className="space-y-3 border-t border-border/60 pt-4">{guidance.map(([Icon, text]) => <div key={text} className="flex items-start gap-2.5 text-sm text-muted-foreground"><Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{text}</span></div>)}</div>{selectedCategory ? <div className="rounded-lg bg-muted/60 p-3 text-sm"><p className="font-medium text-foreground">Pengelola otomatis</p><p className="mt-1 text-muted-foreground">Laporan <span className="font-medium text-foreground">{selectedCategory.label}</span> akan diteruskan ke {category === "kehilangan-temuan" ? "Satpam" : category === "fasilitas" ? "Teknisi" : category === "layanan" ? formCategory === "tefa" || handlerRole === "tefa" ? "TEFA" : handlerRole === "manajemen" ? "Manajemen Jurusan" : "pengelola layanan terpilih" : "Manajemen Jurusan"}.</p></div> : <div className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">Pilih kategori untuk melihat pengelola laporan.</div>}</CardContent></div></Card>
@@ -231,6 +277,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
   const services = servicesForFormCategory(catalog?.services ?? [], formCategory).map(row => row.name)
   const [reportType, setReportType] = useState(initialDraft?.payload.reportType ?? "")
   const [location, setLocation] = useState(initialDraft?.payload.location ?? "")
+  const [otherCategory, setOtherCategory] = useState(initialDraft?.payload.otherCategory ?? "")
   const [facilityAreaId, setFacilityAreaId] = useState(initialDraft?.payload.facilityAreaId ?? "")
   const [otherLocation, setOtherLocation] = useState(initialDraft?.payload.otherLocation ?? "")
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>(initialDraft?.payload.facilities ?? [])
@@ -238,7 +285,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
   const [service, setService] = useState(initialDraft?.payload.service ?? "")
   const [program, setProgram] = useState(() => getReportServicePolicy(initialDraft?.payload.service ?? "").requiresProgram ? initialDraft?.payload.program ?? "" : "")
   const [attachments, setAttachments] = useState<File[]>([])
-  const [useCustomTime, setUseCustomTime] = useState(() => Boolean(initialDraft && getIncidentTimeMode(initialDraft.payload) === "custom"))
+  const [useCustomTime, setUseCustomTime] = useState(() => Boolean(initialDraft && initialDraft.payload.category !== "lainnya" && getIncidentTimeMode(initialDraft.payload) === "custom"))
   const [incidentDate, setIncidentDate] = useState<Date | undefined>(() => initialDraft?.payload.incidentDate ? new Date(initialDraft.payload.incidentDate + "T00:00:00") : undefined)
   const [incidentTime, setIncidentTime] = useState(initialDraft?.payload.incidentTime ?? "")
   const [datePickerOpen, setDatePickerOpen] = useState(false)
@@ -256,9 +303,9 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
     setFormCategory(getReportFormCategory(payload))
     setCategory(payload.category); setDraftId(draft.id); setRevision(draft.revision)
     setSourceDraft({ id: draft.id, revision: draft.revision, payload, attachments: draft.retained, updatedAt: "" })
-    setReportType(payload.reportType); setLocation(payload.location); setFacilityAreaId(payload.facilityAreaId ?? ""); setOtherLocation(payload.otherLocation)
+    setReportType(payload.reportType); setLocation(payload.location); setOtherCategory(payload.otherCategory); setFacilityAreaId(payload.facilityAreaId ?? ""); setOtherLocation(payload.otherLocation)
     setSelectedFacilities([...payload.facilities]); setOtherFacility(payload.otherFacility); setService(payload.service); setProgram(payload.program)
-    setAttachments([...draft.files]); setRetained([...draft.retained]); setUseCustomTime(getIncidentTimeMode(payload) === "custom")
+    setAttachments([...draft.files]); setRetained([...draft.retained]); setUseCustomTime(payload.category !== "lainnya" && getIncidentTimeMode(payload) === "custom")
     setIncidentDate(payload.incidentDate ? new Date(`${payload.incidentDate}T00:00:00`) : undefined); setIncidentTime(payload.incidentTime)
     setDatePickerOpen(false); setError(draft.error)
     const url = new URL(window.location.href)
@@ -291,7 +338,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
     const fields = new FormData(formRef.current!)
     const text = (name: string) => String(fields.get(name) ?? "")
     const date = useCustomTime && incidentDate ? formatCalendarDate(incidentDate) : ""
-    return payloadForFormCategory({ category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location: category === "layanan" && getReportServicePolicy(service).locationMode === "hidden" ? "" : location, facilityAreaId, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program: getReportServicePolicy(service).requiresProgram ? program : "", otherCategory: text("other-category") }, formCategory as ReportFormCategory)
+    return payloadForFormCategory({ category: category as ReportPayload["category"], title: text("title"), description: text("description"), incidentDate: date, incidentTime: useCustomTime ? incidentTime : "", incidentTimeMode: useCustomTime ? "custom" : "automatic", location: getReportLocationPresentation(category, service).visible ? location : "", facilityAreaId, otherLocation, reportType, itemName: text("item-name"), itemDetails: "", facilities: selectedFacilities, otherFacility, service, program: getReportServicePolicy(service).requiresProgram ? program : "", otherCategory }, formCategory as ReportFormCategory)
   }
   async function save(submit: boolean, confirmed?: ReportSubmissionSnapshot) {
     // Only the preview's explicit confirmation can initiate a report submission.
@@ -382,9 +429,9 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
                 {category === "layanan" ? <ServiceReportFields audience={formCategory === "tefa" ? "tefa" : "operasional"} services={services} service={service} program={program} disabled={pending || previewOpen} onServiceChange={(next) => { if (getReportServicePolicy(next).locationMode === "hidden") setLocation(""); setService(next) }} onProgramChange={setProgram} /> : null}
                 {category === "layanan" && catalog && service && !services.includes(service) ? <FieldError>Layanan draft tidak tersedia pada kategori ini. Pilih layanan aktif dari daftar.</FieldError> : null}
                 {category === "layanan" && catalog && !services.length ? <FieldDescription>Belum ada layanan aktif untuk kategori ini. Hubungi pengelola katalog.</FieldDescription> : null}
-                {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum</FieldLabel><Input id="other-category" name="other-category" defaultValue={sourceDraft?.payload.otherCategory} className="h-11 bg-field-surface dark:bg-field-surface" placeholder="Contoh: Usulan kegiatan atau informasi umum" required /></Field> : null}
+                {category === "lainnya" ? <Field><FieldLabel htmlFor="other-category">Kategori umum <span className="font-normal text-muted-foreground">(opsional)</span></FieldLabel><Select value={otherCategory || "__none"} items={[{ value: "__none", label: "Tidak dipilih" }, ...[...new Set([...categories.filter((item) => item.value !== "lainnya").map((item) => item.label), ...(otherCategory ? [otherCategory] : [])])].map((label) => ({ value: label, label }))]} onValueChange={(value) => setOtherCategory(value === "__none" || !value ? "" : value)}><SelectTrigger id="other-category" className="!h-11 w-full bg-field-surface dark:bg-field-surface"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none">Tidak dipilih</SelectItem>{[...new Set([...categories.filter((item) => item.value !== "lainnya").map((item) => item.label), ...(otherCategory ? [otherCategory] : [])])].map((label) => <SelectItem key={label} value={label}>{label}</SelectItem>)}</SelectContent></Select></Field> : null}
                 {category !== "fasilitas" && (formCategory !== "tefa" || Boolean(service)) ? <ReportLocationField category={category} service={service} value={location} onValueChange={setLocation} disabled={pending || previewOpen} /> : null}
-                <Field>
+                {category !== "lainnya" ? <Field>
                   <div className="flex items-center gap-3">
                     <FieldLabel htmlFor="custom-incident-time">Gunakan tanggal &amp; waktu tertentu</FieldLabel>
                     <Switch id="custom-incident-time" checked={useCustomTime} disabled={pending || previewOpen} aria-describedby="incident-time-mode-description" onCheckedChange={(checked) => {
@@ -397,7 +444,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
                     }} />
                   </div>
                   <FieldDescription id="incident-time-mode-description">Aktifkan jika kejadian berlangsung pada waktu lain.</FieldDescription>
-                </Field>
+                </Field> : null}
                 {useCustomTime ? (
                   <div className="grid gap-5 sm:grid-cols-2">
                     <Field data-invalid={Boolean(incidentDateError)}>
@@ -454,7 +501,7 @@ export function ReportForm({ initialDraft, categoryDrafts = [] }: { initialDraft
                   </Tabs>
                 </Field>
                 <div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>Data laporan hanya digunakan untuk penanganan internal JTI.</span></div>
+                  <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><span>{category === "kehilangan-temuan" && reportType === "Temuan" ? "Nama barang, lokasi, deskripsi, dan foto temuan dapat dilihat pengguna Pelapor." : "Data laporan hanya digunakan untuk penanganan internal JTI."}</span></div>
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                     <Button type="button" variant="outline" onClick={handleDraft}><Save />Simpan draft</Button>
                     <Button ref={submitButtonRef} type="submit" disabled={!canSubmit}>Periksa laporan<ArrowRight className="ml-0.5" /></Button>

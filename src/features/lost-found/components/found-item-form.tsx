@@ -183,7 +183,7 @@ export function FoundItemForm({
             className="resize-none bg-background/70"
             maxLength={2000}
           />
-          <FieldDescription>Sertakan ciri barang untuk membantu pencocokan.</FieldDescription>
+          <FieldDescription>{selectedSource ? "Deskripsi laporan Temuan asal dapat dilihat pengguna Pelapor." : "Deskripsi dapat dilihat pengguna Pelapor. Hindari data pribadi."}</FieldDescription>
         </Field>
       </div>
 

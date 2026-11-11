@@ -9,7 +9,7 @@ export default async function PelaporDashboardPage() {
   const user = await requireRole("pelapor")
   const [data, foundNotices] = await Promise.all([
     getReportService().dashboard(user),
-    getFoundNoticeService().list(user, { activeOnly: true, limit: 4 }),
+    getFoundNoticeService().list(user, { activeOnly: true, limit: 3 }),
   ])
   return <PelaporDashboard user={user} data={data} foundNotices={foundNotices} />
 }

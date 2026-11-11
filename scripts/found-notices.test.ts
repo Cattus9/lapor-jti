@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { FoundNoticeService, type FoundNoticeRepository } from "../src/features/found-notices/application/found-notice-service"
-import { parseFoundNoticeCursor, presentFoundNotice } from "../src/features/found-notices/domain/found-notice"
+import { parseFoundNoticeCursor, parseFoundNoticeRef, presentFoundNotice } from "../src/features/found-notices/domain/found-notice"
 
 const actor = { id: randomUUID(), role: "pelapor" }
 const ref = { source: "report" as const, id: randomUUID() }
@@ -12,6 +12,7 @@ function fixture() {
     list: async userId => { calls.push(userId); return { items: [], unread: 0, total: 0, nextCursor: null } },
     detail: async userId => { calls.push(userId); return null },
     markRead: async userId => { calls.push(userId); return true },
+    photo: async userId => { calls.push(userId); return null },
   }
   return { repo, calls, service: new FoundNoticeService(repo) }
 }
@@ -22,13 +23,17 @@ test("shared notices remain limited to Pelapor, including direct detail/read cal
     assert.throws(() => service.list({ ...actor, role }), /Pelapor/)
     await assert.rejects(service.detail({ ...actor, role }, ref), /Pelapor/)
     await assert.rejects(service.markRead({ ...actor, role }, ref), /Pelapor/)
+    await assert.rejects(service.photo({ ...actor, role }, ref), /Pelapor/)
   }
   assert.equal(calls.length, 0)
 })
 
 test("invalid refs, forged sources, cursors and unbounded requests never reach persistence", async () => {
   const { service, calls } = fixture()
-  for (const raw of [null, { ...ref, source: "loss" }, { ...ref, id: "../private" }]) await assert.rejects(service.markRead(actor, raw))
+  for (const raw of [null, { ...ref, source: "loss" }, { ...ref, id: "../private" }]) {
+    await assert.rejects(service.markRead(actor, raw))
+    await assert.rejects(service.photo(actor, raw))
+  }
   for (const cursor of ["bad", "x".repeat(201), JSON.stringify({ ...ref, publishedAt: "bad" }), JSON.stringify({ ...ref, publishedAt: "2026-11-08" })]) assert.throws(() => service.list(actor, { cursor }))
   for (const limit of [0, -1, 21, 1.5]) assert.throws(() => service.list(actor, { limit }))
   assert.equal(calls.length, 0)
@@ -40,9 +45,17 @@ test("receipt identity comes from the authenticated actor, not a supplied userId
   assert.deepEqual(calls, [actor.id])
 })
 
+test("read requests contain only the reference even when finding details are large", () => {
+  const notice = { ...ref, itemName: "🚲".repeat(200), foundLocation: "🏢".repeat(200), userId: randomUUID() }
+  const body = JSON.stringify(parseFoundNoticeRef(notice))
+  assert.deepEqual(JSON.parse(body), ref)
+  assert.ok(Buffer.byteLength(body, "utf8") < 1024)
+})
+
 test("removed or rejected findings return unavailable instead of exposing private report detail", async () => {
   const { service, repo } = fixture()
   await assert.rejects(service.detail(actor, ref), /tidak tersedia/)
+  await assert.rejects(service.photo(actor, ref), /tidak tersedia/)
   repo.markRead = async () => false
   await assert.rejects(service.markRead(actor, ref), /tidak tersedia/)
 })
@@ -56,7 +69,7 @@ test("the shared projection excludes identities, original descriptions, photo ke
   }
   const projected = presentFoundNotice(internal)
   assert.equal(JSON.stringify(projected).includes("PRIVATE"), false)
-  assert.deepEqual(Object.keys(projected).sort(), ["source", "id", "itemName", "foundLocation", "storageLocation", "publishedAt", "state", "read"].sort())
+  assert.deepEqual(Object.keys(projected).sort(), ["source", "id", "itemName", "foundLocation", "storageLocation", "publishedAt", "state", "read", "hasPhoto"].sort())
   assert.equal(projected.read, false)
   assert.equal(presentFoundNotice({ ...internal, readAt: new Date() }).read, true)
   assert.deepEqual(parseFoundNoticeCursor(JSON.stringify({ ...ref, publishedAt: projected.publishedAt })), { ...ref, publishedAt: internal.publishedAt })

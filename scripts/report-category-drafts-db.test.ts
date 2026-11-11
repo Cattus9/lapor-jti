@@ -5,8 +5,9 @@ import { randomUUID } from "node:crypto"
 import { eq } from "drizzle-orm"
 import { createDatabaseClient } from "../src/db/client"
 import { getDatabaseUrl } from "../src/db/environment"
-import { users, reportDrafts, reportAttachments, reports } from "../src/db/schema"
+import { users, reportDrafts, reportAttachments, reportOtherDetails, reports } from "../src/db/schema"
 import { reportCategories, emptyReportPayload } from "../src/features/reports/domain/report"
+import { getIncidentDateTimeInWib } from "../src/features/reports/domain/report-date"
 import { DrizzleReportRepository } from "../src/features/reports/infrastructure/drizzle-report-repository"
 import { ReportService } from "../src/features/reports/application/report-service"
 import type { AttachmentStorage } from "../src/features/reports/application/ports"
@@ -66,6 +67,19 @@ test("Category resume is bounded, owner scoped, ignores submitted/unsupported dr
         assert.equal((await service.write(actor, { id: emptyId, revision: 0, payload: emptyReportPayload }, [], false)).clearedDraftId, emptyId)
         assert.equal(await repository.draft(owner, emptyId), null, "Blank requests must not leave empty draft records")
         assert.ok(await repository.draft(owner, originals.get("lainnya")!), "Clearing one draft must preserve other drafts")
+        const otherDraft = resumed.find((draft) => draft.payload.category === "lainnya")!
+        const result = await service.write(actor, { id: otherDraft.id, revision: otherDraft.revision, payload: {
+          category: "lainnya", title: "Usulan papan informasi", description: "Tambahkan papan informasi di lobi.",
+        } }, [], true)
+        assert.ok(result.report)
+        const [otherReport] = await tx.select().from(reports).where(eq(reports.id, result.report.id))
+        assert.equal(otherReport.handlerRole, "manajemen")
+        assert.equal(otherReport.locationText, "")
+        const time = getIncidentDateTimeInWib(otherReport.submittedAt)
+        assert.equal(otherReport.incidentDate, time.incidentDate)
+        assert.equal(otherReport.incidentTime.slice(0, 5), time.incidentTime)
+        assert.deepEqual(await tx.select().from(reportOtherDetails).where(eq(reportOtherDetails.reportId, otherReport.id)), [])
+        assert.deepEqual((await repository.detail(owner, otherReport.id))?.detail.fields, [])
         throw rollback
       })
     } catch (error) { if (error !== rollback) throw error }

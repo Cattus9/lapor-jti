@@ -1,11 +1,12 @@
-import { requireReporter, ReportError, type ReportActor } from "@/features/reports/domain/report"
-import { parseFoundNoticeCursor, parseFoundNoticeRef, type FoundNotice, type FoundNoticePage, type FoundNoticeRef } from "../domain/found-notice"
+import { requireReporter, ReportError, type ReportActor, type StoredAttachment } from "@/features/reports/domain/report"
+import { parseFoundNoticeCursor, parseFoundNoticeRef, type FoundNoticeDetail, type FoundNoticePage, type FoundNoticeRef } from "../domain/found-notice"
 
 export type FoundNoticeQuery = { cursor?: string; activeOnly?: boolean; limit?: number }
 export interface FoundNoticeRepository {
   list(userId: string, query: FoundNoticeQuery): Promise<FoundNoticePage>
-  detail(userId: string, ref: FoundNoticeRef): Promise<FoundNotice | null>
+  detail(userId: string, ref: FoundNoticeRef): Promise<FoundNoticeDetail | null>
   markRead(userId: string, ref: FoundNoticeRef): Promise<boolean>
+  photo(userId: string, ref: FoundNoticeRef): Promise<StoredAttachment | null>
 }
 
 export class FoundNoticeService {
@@ -26,5 +27,11 @@ export class FoundNoticeService {
     requireReporter(actor)
     if (!await this.repository.markRead(actor.id, parseFoundNoticeRef(raw))) throw new ReportError("Informasi temuan tidak tersedia.", 404)
     return { ok: true }
+  }
+  async photo(actor: ReportActor, raw: unknown) {
+    requireReporter(actor)
+    const file = await this.repository.photo(actor.id, parseFoundNoticeRef(raw))
+    if (!file) throw new ReportError("Foto temuan tidak tersedia.", 404)
+    return file
   }
 }

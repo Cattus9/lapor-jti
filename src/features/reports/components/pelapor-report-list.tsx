@@ -9,7 +9,7 @@ import type { CurrentUser } from "@/lib/auth/current-user"
 import type { ReportPage } from "../application/ports"
 import { PelaporReportFilters } from "./pelapor-report-filters"
 import { PelaporReportHistoryList } from "./pelapor-report-history-list"
-import { hasReportFilters, reportListHref, type ReportListFilters } from "../domain/report-list-filters"
+import { hasReportFilters, type ReportListFilters } from "../domain/report-list-filters"
 
 export function PelaporReportList({
   user,
@@ -41,45 +41,6 @@ export function PelaporReportList({
             </Button>
           }
         />
-
-        {data.drafts.length || draftCursor ? (
-          <Card className="gap-1 rounded-2xl bg-sidebar p-1.5">
-            <div className="rounded-xl border border-border/60 bg-card p-4 md:p-5">
-              <h2 className="text-sm font-semibold">Draft tersimpan</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Draft belum dikirim dan tidak mengikuti filter riwayat. Menampilkan maksimal 20 draft per halaman.
-              </p>
-              <div className="mt-3 space-y-2">
-                {data.drafts.map((draft) => (
-                  <Link
-                    key={draft.id}
-                    href={`/pelapor/buat-laporan?draft=${draft.id}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm hover:bg-muted"
-                  >
-                    <span className="truncate">{draft.payload.title || "Draft tanpa judul"}</span>
-                    <span className="shrink-0 text-xs text-primary">Lanjutkan</span>
-                  </Link>
-                ))}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {draftCursor ? (
-                  <Button variant="outline" nativeButton={false} render={<Link href={reportListHref(filters, { cursor })} />}>
-                    Draft terbaru
-                  </Button>
-                ) : null}
-                {data.nextDraftCursor ? (
-                  <Button
-                    variant="outline"
-                    nativeButton={false}
-                    render={<Link href={reportListHref(filters, { cursor, draftCursor: data.nextDraftCursor })} />}
-                  >
-                    Draft berikutnya
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          </Card>
-        ) : null}
 
         <Card className="gap-1 rounded-2xl border-border bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
           <div className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">

@@ -32,7 +32,7 @@ export function reportSubmissionBody(snapshot: ReportSubmissionSnapshot, id: str
 export function reportSubmissionRows(payload: ReportPayload) {
   const rows = [
     { label: "Judul laporan", value: payload.title },
-    ...(getIncidentTimeMode(payload) === "automatic" ? [
+    ...(payload.category === "lainnya" ? [] : getIncidentTimeMode(payload) === "automatic" ? [
       { label: "Waktu kejadian", value: "Otomatis saat laporan dikirim (WIB)" },
     ] : [
     { label: "Tanggal kejadian", value: new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(`${payload.incidentDate}T00:00:00+07:00`)) },
@@ -49,7 +49,7 @@ export function reportSubmissionRows(payload: ReportPayload) {
     rows.push({ label: "Jenis layanan", value: payload.service })
     if (getReportServicePolicy(payload.service).requiresProgram && payload.program) rows.push({ label: "Unit / program studi", value: payload.program })
   }
-  if (payload.category === "lainnya") rows.push({ label: "Kategori umum", value: payload.otherCategory })
+  if (payload.category === "lainnya" && payload.otherCategory) rows.push({ label: "Kategori umum", value: payload.otherCategory })
   rows.push({ label: "Deskripsi laporan", value: payload.description })
   return rows
 }

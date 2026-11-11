@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs"
 import ts from "typescript"
 import { emptyReportPayload, parsePayload, ReportError } from "../src/features/reports/domain/report"
 import { createReportSubmissionSnapshot, reportSubmissionBody, reportSubmissionRows } from "../src/features/reports/components/report-submission-state"
+import { getReportDraftDescription } from "../src/features/reports/domain/report-form-copy"
 
 const now = new Date("2026-10-04T12:00:00Z")
 const payload = { ...emptyReportPayload, category: "kehilangan-temuan" as const, title: " Dompet hilang ", description: " Kronologi\nbaris kedua ", incidentDate: "2026-10-03", incidentTime: "09:00", location: "Lobi JTI", reportType: "Kehilangan", itemName: "Dompet", itemDetails: "Hitam" }
@@ -32,16 +33,35 @@ test("Reviewed payload, facility arrays and attachment lists do not drift when f
   assert.ok(!rows.some((row) => row.label === "Nama barang"))
 })
 test("Preview shows relevant details for every report category and resolves WIB dates consistently", () => {
-  for (const category of ["kehilangan-temuan", "fasilitas", "layanan", "lainnya"] as const) {
-    const snapshot = createReportSubmissionSnapshot({ ...payload, category, facilities: ["LCD"], service: "E-Learning", program: "Teknik Informatika", otherCategory: "Usulan" }, [], [], now)
+  for (const category of ["kehilangan-temuan", "fasilitas", "layanan"] as const) {
+    const snapshot = createReportSubmissionSnapshot({ ...payload, category, facilities: ["LCD"], service: "E-Learning", program: "Teknik Informatika" }, [], [], now)
     const rows = reportSubmissionRows(snapshot.payload)
     assert.equal(rows.find((row) => row.label === "Tanggal kejadian")?.value, "3 Oktober 2026")
     assert.equal(rows.find((row) => row.label === "Waktu kejadian")?.value, "09.00 WIB")
     assert.equal(rows.at(-1)?.value, "Kronologi\nbaris kedua")
-    const expected = category === "kehilangan-temuan" ? "Nama barang" : category === "fasilitas" ? "Objek fasilitas" : category === "layanan" ? "Unit / program studi" : "Kategori umum"
+    const expected = category === "kehilangan-temuan" ? "Nama barang" : category === "fasilitas" ? "Objek fasilitas" : "Unit / program studi"
     assert.ok(rows.some((row) => row.label === expected))
     assert.ok(!rows.some((row) => row.label === "Ciri-ciri barang"))
   }
+})
+test("Other reports review only title and description, while resumed drafts retain their old context", () => {
+  const raw = { category: "lainnya", title: "Usulan", description: "Tambahkan papan informasi" } as const
+  const snapshot = createReportSubmissionSnapshot(raw, [], [], now)
+  assert.equal(snapshot.payload.incidentTimeMode, "automatic")
+  assert.deepEqual(reportSubmissionRows(snapshot.payload), [
+    { label: "Judul laporan", value: raw.title },
+    { label: "Deskripsi laporan", value: raw.description },
+  ])
+  for (const patch of [{ title: "" }, { description: "" }]) {
+    assert.throws(() => createReportSubmissionSnapshot({ ...raw, ...patch }, [], [], now), ReportError)
+  }
+  const legacy = { ...emptyReportPayload, ...raw, otherCategory: "Masukan", location: "Lobi", incidentDate: "2026-10-03", incidentTime: "09:00" }
+  const description = getReportDraftDescription(legacy)!
+  assert.equal(description, `${raw.description}\n\nWaktu kejadian (WIB): 2026-10-03 09:00`)
+  const withOptions = createReportSubmissionSnapshot({ ...raw, location: "Lobi", otherCategory: "Kerusakan Fasilitas" }, [], [], now)
+  assert.equal(reportSubmissionRows(withOptions.payload).find((row) => row.label === "Kategori umum")?.value, "Kerusakan Fasilitas")
+  assert.equal(reportSubmissionRows(withOptions.payload).find((row) => row.label === "Lokasi kejadian")?.value, "Lobi")
+  assert.equal(getReportDraftDescription({ ...emptyReportPayload, ...raw, description }), description)
 })
 test("Confirmation serializes the reviewed payload and both retained and new files", async () => {
   const snapshot = createReportSubmissionSnapshot(payload, [attachment], [file()], now)

@@ -10,8 +10,10 @@ export type FoundNotice = FoundNoticeRef & {
   publishedAt: string
   state: FoundNoticeState
   read: boolean
+  hasPhoto: boolean
 }
 export type FoundNoticePage = { items: FoundNotice[]; unread: number; total: number; nextCursor: string | null }
+export type FoundNoticeDetail = FoundNotice & { description: string }
 
 export const foundNoticeStates = {
   reported: { label: "Dilaporkan ditemukan", tone: "info" },
@@ -41,11 +43,11 @@ export function parseFoundNoticeCursor(raw?: string) {
 // Explicit shared projection: never spread report/inventory rows into this response.
 export function presentFoundNotice(row: FoundNoticeRef & {
   itemName: string; foundLocation: string; storageLocation: string | null
-  publishedAt: Date; state: FoundNoticeState; readAt: Date | null
+  publishedAt: Date; state: FoundNoticeState; readAt: Date | null; hasPhoto?: boolean
 }): FoundNotice {
   return {
     source: row.source, id: row.id, itemName: row.itemName,
     foundLocation: row.foundLocation, storageLocation: row.storageLocation,
-    publishedAt: row.publishedAt.toISOString(), state: row.state, read: row.readAt !== null,
+    publishedAt: row.publishedAt.toISOString(), state: row.state, read: row.readAt !== null, hasPhoto: Boolean(row.hasPhoto),
   }
 }

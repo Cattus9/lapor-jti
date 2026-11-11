@@ -88,7 +88,7 @@ export function parsePayload(raw: unknown, submitted: boolean, now = new Date())
   }
   if (submitted) {
     const required: (keyof ReportPayload)[] = ["title", "description", "incidentDate", "incidentTime"]
-    if (payload.category !== "layanan" || servicePolicy.locationMode === "required") required.push("location")
+    if (payload.category === "kehilangan-temuan" || payload.category === "fasilitas" || (payload.category === "layanan" && servicePolicy.locationMode === "required")) required.push("location")
     if (payload.category === "kehilangan-temuan") required.push("reportType", "itemName")
     if (payload.category === "fasilitas") {
       if (!payload.facilities.length) throw new ReportError("Pilih minimal satu objek fasilitas.")
@@ -101,7 +101,6 @@ export function parsePayload(raw: unknown, submitted: boolean, now = new Date())
       required.push("service")
       if (getReportServicePolicy(payload.service).requiresProgram) required.push("program")
     }
-    if (payload.category === "lainnya") required.push("otherCategory")
     if (required.some((key) => !payload[key])) throw new ReportError("Lengkapi informasi laporan sebelum mengirim.")
   }
   if (payload.reportType && !["Kehilangan", "Temuan"].includes(payload.reportType)) throw new ReportError("Jenis laporan tidak valid.")

@@ -21,8 +21,8 @@ const categoryLabel = {
 
 export function ReportActivityPanel({ reports }: { reports: ReportListItem[] }) {
   return (
-    <Card className="gap-0 rounded-2xl bg-sidebar p-1.5 text-sidebar-foreground shadow-xs">
-      <div className="rounded-xl border border-border/60 bg-card p-4 shadow-2xs">
+    <Card className="gap-0 rounded-2xl bg-sidebar p-1.5 text-sidebar-foreground shadow-xs xl:h-full">
+      <div className="rounded-xl border border-border/60 bg-card p-4 shadow-2xs xl:flex-1">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-foreground">Aktivitas laporan</p>

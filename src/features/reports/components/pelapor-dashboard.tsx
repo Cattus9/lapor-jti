@@ -27,9 +27,11 @@ export function PelaporDashboard({ user, data, foundNotices }: { user: CurrentUs
           <KpiCard label="Total laporan" value={data.total} icon={ClipboardCheck} detail="Semua kategori" detailValue="Riwayat" href="/pelapor/laporan-saya" />
           <KpiCard label="Laporan selesai" value={completedReports} icon={FileCheck2} iconTone="green" detail="Terselesaikan" detailValue={`${completedReports} tiket`} detailTone="green" href="/pelapor/laporan-saya" />
         </div>
-        <div className="grid items-start gap-6 xl:grid-cols-2">
-          <FoundNoticeList initialPage={foundNotices} preview />
+        <div className="grid items-start gap-6 xl:grid-cols-3 xl:items-stretch">
+          <div className="xl:col-span-2">
           <ReportActivityPanel reports={data.recent} />
+          </div>
+          <FoundNoticeList initialPage={foundNotices} preview />
         </div>
       </ContentShell>
     </DashboardLayout>

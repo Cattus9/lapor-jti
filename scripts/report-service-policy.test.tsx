@@ -88,6 +88,8 @@ test("Service location context uses clear physical/channel or page/feature label
   for (const category of ["kehilangan-temuan", "fasilitas", "lainnya"]) {
     assert.equal(getReportLocationPresentation(category, "JTI Surat").label, "Lokasi kejadian")
   }
+  assert.equal(getReportLocationPresentation("lainnya").visible, true)
+  assert.equal(getReportLocationPresentation("lainnya").required, false)
   for (const service of fieldServices) assert.equal(getReportLocationPresentation("layanan", service).label, "Lokasi yang perlu ditangani")
 })
 
@@ -146,7 +148,8 @@ test("Field requirements follow actionable information rather than the handler r
     assert.equal(parsePayload({ ...base, service, program: "" }, true, now).program, "")
     assert.throws(() => parsePayload({ ...base, service, program: "", location: "" }, true, now), ReportError)
   }
-  for (const category of ["kehilangan-temuan", "fasilitas", "lainnya"] as const) assert.throws(() => parsePayload({ ...base, category, location: "" }, true, now), ReportError)
+  assert.throws(() => parsePayload({ ...base, category: "kehilangan-temuan", reportType: "Temuan", itemName: "Dompet", location: "" }, true, now), ReportError)
+  assert.throws(() => parsePayload({ ...base, category: "fasilitas", facilities: ["LCD"], location: "" }, true, now), ReportError)
 })
 
 test("Legacy Administration/JTI draft context is offered in description without rewriting the original payload", () => {

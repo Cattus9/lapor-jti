@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto"
 import { and, eq, inArray } from "drizzle-orm"
 import { createDatabaseClient } from "../src/db/client"
 import { getDatabaseUrl } from "../src/db/environment"
-import { foundNoticeReads, reportLostFoundDetails, reports, satpamInventory, users } from "../src/db/schema"
+import { foundNoticeReads, reportAttachments, reportLostFoundDetails, reports, satpamInventory, users } from "../src/db/schema"
 import { DrizzleFoundNoticeRepository } from "../src/features/found-notices/infrastructure/drizzle-found-notice-repository"
 import type { ReportStatus } from "../src/features/reports/domain/report"
 
@@ -34,10 +34,26 @@ test("PostgreSQL: immediate visibility, linked inventory deduplication, private 
           return id
         }
         const foundId = await report("temuan"), lostId = await report("kehilangan"), rejectedId = await report("temuan", "ditolak")
+        const foundPhotoKey = randomUUID()
+        await tx.insert(reportAttachments).values([
+          { id: randomUUID(), ownerId: owner, reportId: foundId, storageKey: randomUUID(), name: "document.pdf", mimeType: "application/pdf", size: 5 },
+          { id: randomUUID(), ownerId: owner, reportId: foundId, storageKey: foundPhotoKey, name: "found.jpg", mimeType: "image/jpeg", size: 5 },
+          { id: randomUUID(), ownerId: owner, reportId: lostId, storageKey: randomUUID(), name: "private.jpg", mimeType: "image/jpeg", size: 5 },
+          { id: randomUUID(), ownerId: owner, reportId: rejectedId, storageKey: randomUUID(), name: "rejected.jpg", mimeType: "image/jpeg", size: 5 },
+        ])
         const first = await repository.list(reader)
         assert.equal(first.total, baseline.total + 1)
         const published = first.items.find(row => row.id === foundId)!
         assert.equal(published.state, "reported", "A new finding is visible before Satpam acceptance")
+        const foundDetail = await repository.detail(reader, { source: "report", id: foundId })
+        assert.equal(foundDetail?.description, "PRIVATE DESCRIPTION")
+        assert.deepEqual(Object.keys(foundDetail!).sort(), ["source", "id", "itemName", "foundLocation", "storageLocation", "publishedAt", "state", "read", "hasPhoto", "description"].sort())
+        assert.equal(await repository.detail(reader, { source: "report", id: lostId }), null)
+        assert.equal(await repository.detail(reader, { source: "report", id: rejectedId }), null)
+        assert.equal(published.hasPhoto, true)
+        assert.equal((await repository.photo(reader, { source: "report", id: foundId }))?.storageKey, foundPhotoKey)
+        assert.equal(await repository.photo(reader, { source: "report", id: lostId }), null)
+        assert.equal(await repository.photo(reader, { source: "report", id: rejectedId }), null)
         assert.equal(first.items.some(row => row.id === lostId || row.id === rejectedId), false)
         assert.equal(JSON.stringify(first).includes("PRIVATE"), false)
         assert.equal(await repository.detail(reader, { source: "inventory", id: foundId }), null)
@@ -49,14 +65,27 @@ test("PostgreSQL: immediate visibility, linked inventory deduplication, private 
         assert.equal((await repository.detail(owner, { source: "report", id: foundId }))?.read, false)
         await assert.rejects(repository.markRead(guard, { source: "report", id: foundId }), /Pelapor/)
         const linked = randomUUID()
-        await tx.insert(satpamInventory).values({ id: linked, sourceFoundReportId: foundId, itemName: "Dompet fisik", description: "PRIVATE", founderName: "PRIVATE", registeredBy: guard, registeredByName: "PRIVATE", createdAt: future })
+        const inventoryPhotoKey = randomUUID(), handoverPhotoKey = randomUUID()
+        await tx.insert(satpamInventory).values({ id: linked, sourceFoundReportId: foundId, itemName: "Dompet fisik", description: "PRIVATE", founderName: "PRIVATE", registeredBy: guard, registeredByName: "PRIVATE", createdAt: future, photoStorageKey: inventoryPhotoKey, photoMimeType: "image/png", handoverPhotoStorageKey: handoverPhotoKey, handoverPhotoMimeType: "image/jpeg" })
         const stored = await repository.list(reader)
         assert.equal(stored.total, first.total, "Receiving the finding does not publish a second entry")
         assert.equal(stored.items.some(row => row.id === linked), false)
         assert.equal(stored.items.find(row => row.id === foundId)?.state, "stored")
         assert.equal(stored.items.find(row => row.id === foundId)?.read, true)
+        assert.equal((await repository.detail(reader, { source: "report", id: foundId }))?.description, "PRIVATE DESCRIPTION", "Linked inventory preserves the original report description")
+        assert.equal((await repository.photo(reader, { source: "report", id: foundId }))?.storageKey, inventoryPhotoKey)
+        assert.equal(await repository.photo(reader, { source: "inventory", id: linked }), null)
         const inventoryIds = Array.from({ length: 23 }, () => randomUUID())
         await tx.insert(satpamInventory).values(inventoryIds.map(id => ({ id, itemName: "Barang inventaris uji", description: "PRIVATE", registeredBy: guard, registeredByName: "PRIVATE", createdAt: future })))
+        const standaloneKey = randomUUID()
+        const fullDescription = "Deskripsi inventaris lengkap\nBaris kedua"
+        await tx.update(satpamInventory).set({ photoStorageKey: standaloneKey, photoMimeType: "image/webp", description: fullDescription }).where(eq(satpamInventory.id, inventoryIds[0]))
+        await tx.update(satpamInventory).set({ handoverPhotoStorageKey: randomUUID(), handoverPhotoMimeType: "image/jpeg" }).where(eq(satpamInventory.id, inventoryIds[1]))
+        assert.equal((await repository.detail(reader, { source: "inventory", id: inventoryIds[0] }))?.hasPhoto, true)
+        assert.equal((await repository.detail(reader, { source: "inventory", id: inventoryIds[0] }))?.description, fullDescription)
+        assert.equal((await repository.photo(reader, { source: "inventory", id: inventoryIds[0] }))?.storageKey, standaloneKey)
+        assert.equal((await repository.detail(reader, { source: "inventory", id: inventoryIds[1] }))?.hasPhoto, false)
+        assert.equal(await repository.photo(reader, { source: "inventory", id: inventoryIds[1] }), null, "Handover evidence is never an item photo")
         const pages = [], seen = new Set<string>()
         let cursor: string | undefined
         do {
@@ -76,6 +105,7 @@ test("PostgreSQL: immediate visibility, linked inventory deduplication, private 
         assert.equal((await repository.list(reader, { activeOnly: true })).items.some(row => row.id === foundId), false)
         await tx.update(reports).set({ status: "ditolak" }).where(eq(reports.id, foundId))
         assert.equal(await repository.detail(reader, { source: "report", id: foundId }), null)
+        assert.equal(await repository.photo(reader, { source: "report", id: foundId }), null)
         assert.equal(await repository.markRead(reader, { source: "report", id: foundId }), false)
         await tx.update(satpamInventory).set({ status: "diserahkan", handedOverAt: new Date() }).where(inArray(satpamInventory.id, inventoryIds))
         assert.equal((await repository.detail(reader, { source: "inventory", id: inventoryIds[0] }))?.state, "returned")
