@@ -6,8 +6,7 @@ import { requireRole } from "@/lib/auth/require-role"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { getReportService } from "@/features/reports/server"
-import { getFoundNoticeService } from "@/features/found-notices/server"
-import { PelaporNotificationTabs } from "@/features/notifications/components/pelapor-notification-tabs"
+import { redirect } from "next/navigation"
 
 export default async function PelaporPage({ searchParams }: { searchParams: Promise<{ cursor?: string; tab?: string }> }) {
   // [AUTH-ROLE] Halaman ini hanya untuk role "pelapor" dari database aplikasi.
@@ -15,12 +14,15 @@ export default async function PelaporPage({ searchParams }: { searchParams: Prom
   const user = await requireRole("pelapor")
 
   const query = await searchParams
-  const [data, found] = await Promise.all([getReportService().notifications(user, query.cursor), getFoundNoticeService().list(user)])
+  if (query.tab === "temuan") redirect("/pelapor/berita")
+
+  const data = await getReportService().notifications(user, query.cursor)
   return <DashboardLayout role="pelapor"><ContentShell>
-    <PageHeader title="Notifikasi" description="Pembaruan laporan Anda dan informasi barang temuan di lingkungan JTI." />
-    <PelaporNotificationTabs key={`${query.tab ?? "laporan"}:${query.cursor ?? "latest"}`} initialTab={query.tab} found={found} personal={<>
-      <PelaporNotificationList key={query.cursor ?? "latest"} items={data.items} unread={data.unread} />
-      <div className="flex items-center justify-between gap-3">{query.cursor ? <Button variant="outline" nativeButton={false} render={<Link href="/pelapor/notifikasi" />}>Kembali ke terbaru</Button> : <span />}{data.nextCursor ? <Button variant="outline" nativeButton={false} render={<Link href={`/pelapor/notifikasi?cursor=${encodeURIComponent(data.nextCursor)}`} />}>Notifikasi berikutnya</Button> : null}</div>
-    </>} />
+    <PageHeader title="Notifikasi" description="Pembaruan status dan tanggapan untuk laporan Anda." />
+    <PelaporNotificationList key={query.cursor ?? "latest"} items={data.items} unread={data.unread} />
+    {query.cursor || data.nextCursor ? <div className="flex flex-wrap justify-end gap-3">
+      {query.cursor ? <Button variant="outline" className="mr-auto" nativeButton={false} render={<Link href="/pelapor/notifikasi" />}>Kembali ke terbaru</Button> : null}
+      {data.nextCursor ? <Button variant="outline" nativeButton={false} render={<Link href={`/pelapor/notifikasi?cursor=${encodeURIComponent(data.nextCursor)}`} />}>Notifikasi berikutnya</Button> : null}
+    </div> : null}
   </ContentShell></DashboardLayout>
 }

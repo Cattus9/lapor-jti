@@ -74,15 +74,15 @@ export function FoundNoticeList({ initialPage, preview = false }: { initialPage:
 
   return <>
     <SectionCard title="Informasi barang temuan" icon={PackageSearch} className={preview ? "xl:h-full" : undefined} contentClassName={preview ? "xl:flex xl:flex-1 xl:flex-col" : undefined} meta={preview
-      ? <Button variant="ghost" size="xs" className="-my-1.5" nativeButton={false} render={<Link href="/pelapor/notifikasi?tab=temuan" />}>Lihat semua<ArrowRight className="size-3.5" /></Button>
+      ? <Button variant="ghost" size="xs" className="-my-1.5" nativeButton={false} render={<Link href="/pelapor/berita" />}>Lihat semua<ArrowRight className="size-3.5" /></Button>
       : `${page.unread} belum dibaca`}>
-      {preview ? page.items.length ? <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      {preview && page.items.length > 0 ? <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">Temuan terbaru</p>
         <div className="flex gap-1 rounded-lg border border-border bg-muted/50 p-1" role="group" aria-label="Tampilan barang temuan">
           <Button type="button" size="sm" variant={view === "list" ? "secondary" : "ghost"} className="h-7 px-2" aria-pressed={view === "list"} onClick={() => setView("list")}><List />Daftar</Button>
           <Button type="button" size="sm" variant={view === "photo" ? "secondary" : "ghost"} className="h-7 px-2" aria-pressed={view === "photo"} onClick={() => setView("photo")}><ImageIcon />Foto</Button>
         </div>
-      </div> : null : <p className="mb-4 text-xs leading-relaxed text-muted-foreground">Barang yang dilaporkan ditemukan di lingkungan JTI.</p>}
+      </div> : null}
       {error && !selected ? <FieldError className="mb-3">{error}</FieldError> : null}
       {preview && view === "photo" && page.items.length ? <div className="flex flex-1 flex-col gap-3">
         {(() => { const notice = page.items[Math.min(photoIndex, page.items.length - 1)]; return <Button key={key(notice)} type="button" variant="outline" onClick={() => void open(notice)} className="h-auto w-full flex-col items-stretch gap-3 whitespace-normal bg-report-surface p-3 text-left shadow-none">

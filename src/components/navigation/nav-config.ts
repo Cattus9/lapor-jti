@@ -1,4 +1,4 @@
-import { Archive, BellRing, ChartColumnIncreasing, ChartNoAxesCombined, ClipboardCheck, ClipboardPenLine, FileSpreadsheet, Inbox, LifeBuoy, MapPinned, PackageCheck, Settings2, UserRoundCog, UsersRound, Wrench } from "lucide-react"
+import { Archive, BellRing, ChartColumnIncreasing, ChartNoAxesCombined, ClipboardCheck, ClipboardPenLine, FileSpreadsheet, Inbox, LifeBuoy, MapPinned, Newspaper, PackageCheck, Settings2, UserRoundCog, UsersRound, Wrench } from "lucide-react"
 // [AUTH-ROLE] Pemetaan navigasi menurut role internal aplikasi, independen dari metode login.
 // Menyembunyikan menu tidak mengamankan endpoint; pertahankan pemeriksaan role di server.
 import type { AppRole } from "@/lib/auth/roles"
@@ -14,6 +14,7 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
     { title: "Ringkasan", url: "/pelapor/dashboard", icon: ChartNoAxesCombined },
     { title: "Buat Laporan", url: "/pelapor/buat-laporan", icon: ClipboardCheck },
     { title: "Laporan Saya", url: "/pelapor/laporan-saya", icon: Archive },
+    { title: "Berita", url: "/pelapor/berita", icon: Newspaper },
     { title: "Notifikasi", url: "/pelapor/notifikasi", icon: BellRing },
     { title: "Profil", url: "/pelapor/profil", icon: UserRoundCog },
   ],
