@@ -5,7 +5,7 @@ import { assertInventoryReportCompletable, validateCreateInventory, validateHand
 import { SatpamService } from "../src/features/lost-found/application/satpam-service"
 import type { SatpamRepository } from "../src/features/lost-found/application/ports"
 import type { AttachmentStorage } from "../src/features/reports/application/ports"
-import type { ReportActor } from "../src/features/reports/domain/report"
+import { ReportError, type ReportActor } from "../src/features/reports/domain/report"
 import { validateSatpamIncident } from "../src/features/lost-found/domain/incident-time"
 
 const fakeRepository = {
@@ -34,17 +34,46 @@ test("Inventory validates image bytes before storage, and cleans only newly stag
   const staged = { id: randomUUID(), storageKey: randomUUID(), name: "photo.png", mimeType: "image/png", size: 8, digest: "digest" }
   let writes = 0
   const storage = { store: async () => { writes++; return [staged] }, remove: async (files: { storageKey: string }[]) => { removed.push(...files.map(f => f.storageKey)) } } as unknown as AttachmentStorage
-  const failing = new SatpamService({ createInventory: async () => { throw new Error("persistence failed") } } as unknown as SatpamRepository, storage)
+  const failing = new SatpamService({ createInventory: async () => { throw new ReportError("persistence failed") }, isPhotoReferenced: async () => false } as unknown as SatpamRepository, storage)
   await assert.rejects(failing.createInventory(actor, { itemName: "Barang" }, { name: "fake.png", mimeType: "image/png", bytes: new Uint8Array([1, 2]) }), /valid/)
   assert.equal(writes, 0)
   const image = { name: "photo.png", mimeType: "image/png", bytes: new Uint8Array([137,80,78,71,13,10,26,10]) }
   await assert.rejects(failing.createInventory(actor, { itemName: "Barang" }, image), /persistence failed/)
   assert.deepEqual(removed, [staged.storageKey])
   const originalKey = randomUUID()
-  const retry = new SatpamService({ createInventory: async () => ({ id: randomUUID() }), getInventoryPhoto: async () => ({ storageKey: originalKey }) } as unknown as SatpamRepository, storage)
+  const retry = new SatpamService({ createInventory: async () => ({ id: randomUUID() }), isPhotoReferenced: async () => false } as unknown as SatpamRepository, storage)
   await retry.createInventory(actor, { itemName: "Barang" }, image)
   assert.deepEqual(removed, [staged.storageKey, staged.storageKey])
   assert.ok(!removed.includes(originalKey))
+})
+
+test("Photo cleanup preserves referenced files and uncertain database outcomes", async () => {
+  const actor: ReportActor = { id: randomUUID(), role: "satpam" }
+  const staged = { id: randomUUID(), storageKey: randomUUID(), name: "photo.png", mimeType: "image/png", size: 8, digest: "digest" }
+  const removed: string[] = []
+  const storage = { store: async () => [staged], remove: async (files: typeof staged[]) => { removed.push(...files.map(f => f.storageKey)) } } as unknown as AttachmentStorage
+  const image = { name: staged.name, mimeType: staged.mimeType, bytes: new Uint8Array([137,80,78,71,13,10,26,10]) }
+  const committed = new SatpamService({ createInventory: async () => ({ id: randomUUID() }), isPhotoReferenced: async () => { throw new Error("read failed") } } as unknown as SatpamRepository, storage)
+  await committed.createInventory(actor, { itemName: "Barang" }, image)
+  const uncertain = new SatpamService({ createInventory: async () => { throw new Error("connection lost") } } as unknown as SatpamRepository, storage)
+  await assert.rejects(uncertain.createInventory(actor, { itemName: "Barang" }, image), /connection lost/)
+  const referenced = new SatpamService({ createInventory: async () => ({ id: randomUUID() }), isPhotoReferenced: async () => true } as unknown as SatpamRepository, storage)
+  await referenced.createInventory(actor, { itemName: "Barang" }, image)
+  assert.deepEqual(removed, [])
+})
+
+test("Both handover paths discard an unused retry photo", async () => {
+  const actor: ReportActor = { id: randomUUID(), role: "satpam" }
+  const photo = { id: randomUUID(), storageKey: randomUUID(), name: "photo.png", mimeType: "image/png", size: 8, digest: "digest" }
+  const removed: string[] = []
+  const storage = { store: async () => [photo], remove: async (files: typeof photo[]) => { removed.push(...files.map(f => f.storageKey)) } } as unknown as AttachmentStorage
+  const repository = { isPhotoReferenced: async () => false, execute: async () => {}, handoverInventory: async () => ({ id: randomUUID() }) } as unknown as SatpamRepository
+  const service = new SatpamService(repository, storage)
+  const file = { name: photo.name, mimeType: photo.mimeType, bytes: new Uint8Array([137,80,78,71,13,10,26,10]) }
+  const common = { officerId: randomUUID(), recipient: "Pemilik", recipientPhone: "08123456789", ownershipEvidence: "Ciri cocok", submissionKey: randomUUID() }
+  await service.handoverInventory(actor, { ...common, id: randomUUID() }, file)
+  await service.execute(actor, { ...common, type: "handover", matchId: randomUUID(), location: "Pos Satpam", note: "" }, file)
+  assert.deepEqual(removed, [photo.storageKey, photo.storageKey])
 })
 
 

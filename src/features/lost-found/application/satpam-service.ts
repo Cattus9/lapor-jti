@@ -11,6 +11,12 @@ import { validateUploads } from "../../reports/domain/report"
 
 export class SatpamService {
   constructor(private readonly repository: SatpamRepository, private readonly storage: AttachmentStorage) {}
+  private async discardUnusedPhoto(photo?: StoredAttachment) {
+    if (!photo) return
+    // If the database cannot confirm the reference, preserve the file for recovery.
+    try { if (!(await this.repository.isPhotoReferenced(photo.storageKey))) await this.storage.remove([photo]) }
+    catch { console.error("Could not verify staged photo; retained for recovery.") }
+  }
   private async readPhoto(file: StoredAttachment, preview: boolean) {
     if (preview && file.mimeType.startsWith("image/") && this.storage.readPreview) return this.storage.readPreview(file)
     return { bytes: await this.storage.read(file), mimeType: file.mimeType }
@@ -29,7 +35,7 @@ export class SatpamService {
   async execute(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
     requireSatpam(actor)
     const command = parseSatpamCommand(raw)
-    let storedPhoto: { storageKey: string; mimeType: string; name: string; id: string; size: number } | undefined
+    let storedPhoto: StoredAttachment | undefined
     if (file && command.type === "handover") {
       validateUploads([file], 0)
       if (!file.mimeType.startsWith("image/")) throw new ReportError("Lampiran penyerahan harus berupa foto.")
@@ -37,10 +43,11 @@ export class SatpamService {
       storedPhoto = photo
     }
     try {
-      await this.repository.execute(actor, command, storedPhoto ? { storageKey: storedPhoto.storageKey, mimeType: storedPhoto.mimeType, name: storedPhoto.name } : undefined)
+      await this.repository.execute(actor, command, storedPhoto)
+      await this.discardUnusedPhoto(storedPhoto)
       return { ok: true }
     } catch (error) {
-      if (storedPhoto) await this.storage.remove([storedPhoto]).catch(() => {})
+      if (error instanceof ReportError) await this.discardUnusedPhoto(storedPhoto)
       throw error
     }
   }
@@ -77,10 +84,10 @@ export class SatpamService {
     try {
       const item = await this.repository.createInventory(actor, validated, storedPhoto)
       // On an idempotent retry a newly staged photo must not become an orphan.
-      if (storedPhoto && (await this.repository.getInventoryPhoto(item.id))?.storageKey !== storedPhoto.storageKey) await this.storage.remove([storedPhoto])
+      await this.discardUnusedPhoto(storedPhoto)
       return item
     } catch (error) {
-      if (storedPhoto) await this.storage.remove([storedPhoto])
+      if (error instanceof ReportError) await this.discardUnusedPhoto(storedPhoto)
       throw error
     }
   }
@@ -88,7 +95,7 @@ export class SatpamService {
   async handoverInventory(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
     requireSatpam(actor)
     const validated = validateHandoverInventory(raw)
-    let storedPhoto: { storageKey: string; mimeType: string; name: string; id: string; size: number } | undefined
+    let storedPhoto: StoredAttachment | undefined
     if (file) {
       validateUploads([file], 0)
       if (!file.mimeType.startsWith("image/")) throw new ReportError("Lampiran penyerahan harus berupa foto.")
@@ -96,9 +103,11 @@ export class SatpamService {
       storedPhoto = photo
     }
     try {
-      return await this.repository.handoverInventory(actor, validated, storedPhoto ? { storageKey: storedPhoto.storageKey, mimeType: storedPhoto.mimeType, name: storedPhoto.name } : undefined)
+      const result = await this.repository.handoverInventory(actor, validated, storedPhoto)
+      await this.discardUnusedPhoto(storedPhoto)
+      return result
     } catch (error) {
-      if (storedPhoto) await this.storage.remove([storedPhoto]).catch(() => {})
+      if (error instanceof ReportError) await this.discardUnusedPhoto(storedPhoto)
       throw error
     }
   }
@@ -139,7 +148,7 @@ export class SatpamService {
   async createLossReport(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
     requireSatpam(actor)
     const validated = validateCreateLossReport(raw as CreateLossReportInput)
-    let storedPhoto: { storageKey: string; mimeType: string; name: string } | undefined
+    let storedPhoto: StoredAttachment | undefined
     if (file) {
       validateUploads([file], 0)
       if (!["image/jpeg", "image/png"].includes(file.mimeType)) throw new ReportError("Lampiran harus berupa foto JPG atau PNG.")
@@ -148,10 +157,10 @@ export class SatpamService {
     }
     try {
       const result = await this.repository.createLossReport(actor, validated, storedPhoto)
-      if (storedPhoto && (await this.repository.getLossReportPhoto(result.id))?.storageKey !== storedPhoto.storageKey) await this.storage.remove([{ ...storedPhoto, id: "", size: 0 }])
+      await this.discardUnusedPhoto(storedPhoto)
       return result
     } catch (error) {
-      if (storedPhoto) await this.storage.remove([{ ...storedPhoto, id: "", size: 0 }])
+      if (error instanceof ReportError) await this.discardUnusedPhoto(storedPhoto)
       throw error
     }
   }
@@ -168,7 +177,7 @@ export class SatpamService {
   async createFoundReport(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
     requireSatpam(actor)
     const validated = validateCreateFoundReport(raw as CreateFoundReportInput)
-    let storedPhoto: { storageKey: string; mimeType: string; name: string } | undefined
+    let storedPhoto: StoredAttachment | undefined
     if (file) {
       validateUploads([file], 0)
       if (!["image/jpeg", "image/png"].includes(file.mimeType)) throw new ReportError("Lampiran harus berupa foto JPG atau PNG.")
@@ -176,9 +185,11 @@ export class SatpamService {
       storedPhoto = stored
     }
     try {
-      return await this.repository.createFoundReport(actor, validated, storedPhoto)
+      const result = await this.repository.createFoundReport(actor, validated, storedPhoto)
+      await this.discardUnusedPhoto(storedPhoto)
+      return result
     } catch (error) {
-      if (storedPhoto) await this.storage.remove([{ ...storedPhoto, id: "", size: 0 }])
+      if (error instanceof ReportError) await this.discardUnusedPhoto(storedPhoto)
       throw error
     }
   }

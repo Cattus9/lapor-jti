@@ -13,11 +13,12 @@ export interface SatpamDraftRepository {
 }
 
 export interface SatpamRepository {
+  isPhotoReferenced(storageKey: string): Promise<boolean>
   workspace(): Promise<SatpamWorkspaceData>
   pending(cursor?: string): Promise<SatpamPage<import("../types").SatpamPendingHandover>>
   list(filter: SatpamListFilter): Promise<SatpamPage<SatpamLostFoundReport>>
   detail(ticket: string): Promise<SatpamDetail | null>
-  execute(actor: ReportActor, command: SatpamCommand, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<void>
+  execute(actor: ReportActor, command: SatpamCommand, storedPhoto?: { storageKey: string; mimeType: string; name: string; digest?: string }): Promise<void>
   dashboard(): Promise<SatpamDashboardData>
   history(filter: SatpamHistoryFilter): Promise<SatpamPage<SatpamHandoverHistoryItem>>
   attachment(id: string): Promise<StoredAttachment | null>
@@ -25,7 +26,7 @@ export interface SatpamRepository {
   markRead(actorId: string, id?: string): Promise<void>
   listInventory(filter: InventoryFilter): Promise<SatpamPage<InventoryItem>>
   createInventory(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string; digest?: string }): Promise<InventoryItem>
-  handoverInventory(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<InventoryItem>
+  handoverInventory(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string; digest?: string }): Promise<InventoryItem>
   getInventoryPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null>
   getHandoverPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null>
   correctInventory(actor: ReportActor, id: string, raw: unknown): Promise<InventoryItem>
@@ -33,6 +34,6 @@ export interface SatpamRepository {
   listLossReports(): Promise<{ items: LossReport[]; total: number }>
   createLossReport(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<LossReport>
   getLossReportPhoto(id: string): Promise<{ mimeType: string; storageKey: string; name: string } | null>
-  createFoundReport(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string }): Promise<FoundReport>
+  createFoundReport(actor: ReportActor, raw: unknown, storedPhoto?: { storageKey: string; mimeType: string; name: string; size?: number; digest?: string }): Promise<FoundReport>
 }
 

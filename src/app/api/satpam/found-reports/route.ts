@@ -11,6 +11,7 @@ export async function POST(request: Request) {
     if (contentType.startsWith("multipart/form-data")) {
       const formData = await readSatpamPhotoForm(request)
       const title = String(formData.get("title") ?? "")
+      const submissionKey = String(formData.get("submissionKey") ?? "")
       const itemName = String(formData.get("itemName") ?? "")
       const location = String(formData.get("location") ?? "")
       const incidentDate = String(formData.get("incidentDate") ?? "")
@@ -39,13 +40,14 @@ export async function POST(request: Request) {
 
       return getSatpamService().createFoundReport(
         actor,
-        { title, itemName, location, incidentDate, incidentTime, founderName, characteristics, description, status, photoUrl },
+        { submissionKey, title, itemName, location, incidentDate, incidentTime, founderName, characteristics, description, status, photoUrl },
         uploadFile
       )
     }
 
     if (contentType.startsWith("application/json")) {
       const body = await readSatpamJson(request)
+      if (!body || typeof body !== "object" || !("submissionKey" in body) || !body.submissionKey) throw new ReportError("Kunci pengiriman wajib diisi.")
       return getSatpamService().createFoundReport(actor, body)
     }
 

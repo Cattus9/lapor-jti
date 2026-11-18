@@ -53,9 +53,11 @@ test("Satpam links receipts, audits corrections, cancels mistaken matches and cl
       await execute({ type: "match", lossTicket: missing.ticket, foundTicket: discovery.ticket })
       const [replacement] = await tx.select().from(lostFoundMatches).where(eq(lostFoundMatches.lossReportId, missing.id))
       const handover = { type: "handover", matchId: replacement.id, officerId, recipient: "Pemilik", recipientEmail: "pemilik@example.com", recipientPhone: "081234567890", location: "Pos", note: "", ownershipEvidence: "Ciri khusus sesuai", submissionKey: randomUUID() }
-      await execute(handover)
-      await execute(handover)
-      await assert.rejects(execute({ ...handover, recipient: "Orang lain" }), /data berbeda/)
+      const photo = { storageKey: randomUUID(), name: "bukti.png", mimeType: "image/png", digest: "photo-one" }
+      await repo.execute(actor, parseSatpamCommand(handover), photo)
+      await repo.execute(actor, parseSatpamCommand(handover), { ...photo, storageKey: randomUUID() })
+      await assert.rejects(repo.execute(actor, parseSatpamCommand(handover), { ...photo, digest: "different" }), /data berbeda/)
+      await assert.rejects(repo.execute(actor, parseSatpamCommand({ ...handover, recipient: "Orang lain" }), photo), /data berbeda/)
       assert.equal((await tx.select().from(reportHandovers).where(eq(reportHandovers.matchId, replacement.id))).length, 1)
       const complete = await tx.select().from(reports).where(inArray(reports.id, [missing.id, discovery.id]))
       assert.ok(complete.every(row => row.status === "selesai" && row.completedAt))

@@ -65,7 +65,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               <Field>
                 <FieldLabel htmlFor="password">Password</FieldLabel>
                 <div className="relative">
-                  <Input id="password" name="password" type={showPassword ? "text" : "password"} className="h-12 pl-3.5 pr-14" value={password} onChange={(event) => { setPassword(event.target.value); setError("") }} autoComplete="current-password" required maxLength={128} disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
+                  <Input id="password" name="password" type={showPassword ? "text" : "password"} className="h-12 pl-3.5 pr-14" value={password} onChange={(event) => { setPassword(event.target.value); setError("") }} autoComplete="current-password" required maxLength={128} disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "password-hint login-error" : "password-hint"} />
                   <Button
                     type="button"
                     variant="ghost"
@@ -80,6 +80,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                     {showPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
                   </Button>
                 </div>
+                <FieldDescription id="password-hint">Password akun terdiri dari 12–128 karakter.</FieldDescription>
               </Field>
               <div>
                 {error ? <p id="login-error" className="mb-3 text-sm text-destructive" role="alert">{error}</p> : null}

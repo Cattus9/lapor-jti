@@ -1,5 +1,5 @@
 import { validateSatpamIncident } from "./incident-time"
-import { ReportError } from "../../reports/domain/report"
+import { isUuid, ReportError } from "../../reports/domain/report"
 
 export type FoundReport = {
   id: string
@@ -20,6 +20,7 @@ export type FoundReport = {
 }
 
 export type CreateFoundReportInput = {
+  submissionKey?: string
   title?: string
   itemName: string
   location?: string
@@ -35,6 +36,7 @@ export type CreateFoundReportInput = {
 export function validateCreateFoundReport(input: CreateFoundReportInput) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ReportError("Isian laporan tidak valid.")
   for (const value of Object.values(input)) if (value !== undefined && typeof value !== "string") throw new ReportError("Isian laporan tidak valid.")
+  if (input.submissionKey !== undefined && !isUuid(input.submissionKey)) throw new ReportError("Kunci pengiriman tidak valid.")
   if (input.status !== undefined && !["baru", "diproses"].includes(input.status)) throw new ReportError("Status awal temuan tidak valid.")
   const itemName = input.itemName?.trim() ?? ""
   if (!itemName) throw new ReportError("Nama barang temuan wajib diisi.", 400)
@@ -74,6 +76,7 @@ export function validateCreateFoundReport(input: CreateFoundReportInput) {
   if (photoUrl) throw new ReportError("Gunakan unggahan foto privat. Tautan foto eksternal tidak didukung.")
 
   return {
+    submissionKey: input.submissionKey,
     title,
     itemName,
     location,

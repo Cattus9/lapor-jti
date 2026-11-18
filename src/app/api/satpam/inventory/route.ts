@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       const photoUrl = String(formData.get("photoUrl") ?? "")
       const sourceFoundTicket = formData.get("sourceFoundTicket") ?? undefined
       const submissionKey = formData.get("submissionKey") ?? undefined
+      if (!submissionKey) throw new ReportError("Kunci pengiriman wajib diisi.")
       const photoFile = formData.get("photo")
 
       let uploadFile: AttachmentUpload | undefined
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
 
     if (contentType.startsWith("application/json")) {
       const body = await readSatpamJson(request)
+      if (!body || typeof body !== "object" || !("submissionKey" in body) || !body.submissionKey) throw new ReportError("Kunci pengiriman wajib diisi.")
       return getSatpamService().createInventory(actor, body)
     }
 

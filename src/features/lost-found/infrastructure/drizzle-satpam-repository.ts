@@ -40,6 +40,16 @@ const foundUsers = alias(users, "found_users")
 export class DrizzleSatpamRepository implements SatpamRepository {
   constructor(private readonly db: Database = getDb()) {}
 
+  async isPhotoReferenced(key: string) {
+    const result = await this.db.execute(sql`select exists (
+      select 1 from report_attachments where storage_key = ${key}
+      union all select 1 from satpam_inventory where photo_storage_key = ${key} or handover_photo_storage_key = ${key}
+      union all select 1 from report_handovers where photo_storage_key = ${key}
+      union all select 1 from satpam_loss_reports where photo_storage_key = ${key}
+    ) as referenced`)
+    return result.rows[0]?.referenced === true
+  }
+
   async list(filter: SatpamListFilter, exactTicket?: string): Promise<SatpamPage<SatpamLostFoundReport>> {
     const after = cursorValue(filter.cursor)
     const bounds = reportDateBounds({ ...defaultReportFilters, period: filter.period })
@@ -66,7 +76,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         .innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).innerJoin(users, eq(users.id, reports.reporterId)).leftJoin(satpamInventory, eq(satpamInventory.sourceFoundReportId, reports.id)).leftJoin(satpamLossReports, eq(satpamLossReports.id, reports.id))
         .where(and(criteria, after ? or(compare(reports.submittedAt, after.date), and(eq(reports.submittedAt, after.date), compare(reports.id, after.id))) : undefined))
         .orderBy(order(reports.submittedAt), order(reports.id)).limit(pageSize + 1),
-      this.db.select({ count: sql<number>`count(*)::integer` }).from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).where(criteria),
+      exactTicket ? Promise.resolve([{ count: 0 }]) : this.db.select({ count: sql<number>`count(*)::integer` }).from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).where(criteria),
     ])
     const page = rows.slice(0, pageSize), ids = page.map((r) => r.report.id)
     // One batch for this page, not one attachment query per card.
@@ -79,7 +89,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         description: r.description, characteristics, attachments: attached.length, photoUrl: photo ? `/api/satpam/attachments/${photo.id}?preview=1` : undefined }
     })
     const last = page.at(-1)
-    return { items, total: totals[0].count, nextCursor: rows.length > pageSize && last ? cursorFor(last.report.submittedAt, last.report.id) : null }
+    return { items, total: exactTicket ? rows.length : totals[0].count, nextCursor: rows.length > pageSize && last ? cursorFor(last.report.submittedAt, last.report.id) : null }
   }
 
   async detail(ticket: string) {
@@ -240,7 +250,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         await update([foundReport], "barang_teridentifikasi", `Dicocokkan dengan tiket ${loss.ticketNumber}.`)
       } else if (command.type === "handover") {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${command.submissionKey}, 0))`)
-        const fingerprint = createHash("sha256").update(JSON.stringify({ actor: actor.id, ...command })).digest("hex")
+        const fingerprint = createHash("sha256").update(JSON.stringify({ actor: actor.id, ...command, ...(photo ? { photo: { digest: photo.digest, name: photo.name, mimeType: photo.mimeType } } : {}) })).digest("hex")
         const [retry] = await tx.select().from(reportHandovers).where(eq(reportHandovers.submissionKey, command.submissionKey))
         if (retry) {
           if (retry.submissionFingerprint !== fingerprint) throw new ReportError("Kunci penyerahan telah digunakan untuk data berbeda.", 409)
@@ -569,7 +579,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
   async createFoundReport(
     actor: ReportActor,
     raw: unknown,
-    storedPhoto?: { storageKey: string; mimeType: string; name: string; size?: number }
+    storedPhoto?: { storageKey: string; mimeType: string; name: string; size?: number; digest?: string }
   ): Promise<FoundReport> {
     const input = validateCreateFoundReport(raw as CreateFoundReportInput)
     const [account] = await this.db
@@ -587,8 +597,19 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const title = input.title?.trim() || `Temuan ${input.itemName}`
     const locationText = input.location?.trim() || "Lingkungan Kampus JTI"
     const targetStatus = input.status === "baru" ? "baru" : "diproses"
+    const fingerprint = createHash("sha256").update(JSON.stringify({ actor: actor.id, ...input, photo: storedPhoto ? { name: storedPhoto.name, mimeType: storedPhoto.mimeType, digest: storedPhoto.digest } : null })).digest("hex")
 
     return await this.db.transaction(async (tx) => {
+      if (input.submissionKey) {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${input.submissionKey}, 0))`)
+        const [existing] = await tx.select({ id: reports.id, reporterId: reports.reporterId }).from(reports).where(eq(reports.submissionKey, input.submissionKey))
+        if (existing) {
+          const [record] = await tx.select({ after: operationalAudit.after }).from(operationalAudit).where(and(eq(operationalAudit.entity, "satpam_found_submission"), eq(operationalAudit.entityId, existing.id), eq(operationalAudit.action, "create"))).limit(1)
+          const saved = record?.after as { fingerprint?: string; result?: FoundReport } | undefined
+          if (existing.reporterId !== actor.id || saved?.fingerprint !== fingerprint || !saved.result) throw new ReportError("Kunci pengiriman telah digunakan untuk data berbeda.", 409)
+          return saved.result
+        }
+      }
       // 1. Generate unique sequential ticket code LJ-YYYY-XXXXX
       const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Jakarta" }).format(now))
       const [counter] = await tx
@@ -603,7 +624,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         .insert(reports)
         .values({
           ticketNumber,
-          submissionKey: randomUUID(),
+          submissionKey: input.submissionKey ?? randomUUID(),
           reporterId: actor.id,
           category: "kehilangan-temuan",
           title,
@@ -660,7 +681,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         createdAt: now,
       })
 
-      return {
+      const result: FoundReport = {
         id: reportRow.id,
         ticket: ticketNumber,
         ticketNumber,
@@ -677,6 +698,8 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         registeredByName: account.name,
         createdAt: dateLabel(now),
       }
+      if (input.submissionKey) await tx.insert(operationalAudit).values({ actorId: actor.id, actorName: account.name, entity: "satpam_found_submission", entityId: reportRow.id, action: "create", after: { fingerprint, result } })
+      return result
     })
   }
 }

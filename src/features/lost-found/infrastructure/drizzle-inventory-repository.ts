@@ -135,7 +135,7 @@ export class DrizzleInventoryRepository {
   }
   async handover(actor: ReportActor, raw: unknown, photo?: InventoryPhoto) {
     const input = validateHandoverInventory(raw)
-    const fingerprint = hash({ actor: actor.id, ...input })
+    const fingerprint = hash({ actor: actor.id, ...input, ...(photo ? { photo: { digest: photo.digest, name: photo.name, mimeType: photo.mimeType } } : {}) })
     return this.db.transaction(async tx => {
       const repo = new DrizzleInventoryRepository(tx as unknown as Database)
       const [account] = await tx.select({ name: users.name }).from(users).where(and(eq(users.id, actor.id), eq(users.role, "satpam"), eq(users.isActive, true))).for("share")

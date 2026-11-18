@@ -47,6 +47,13 @@ test("Inventory receipts, linked returns, retry guards, private photos, unified 
       assert.equal((await repo.dashboard()).storedItems, before.storedItems)
 
       const found = await repo.createFoundReport(actor, { itemName: "Payung fixture", description: "Payung hitam" })
+      const foundKey = randomUUID()
+      const foundInput = { submissionKey: foundKey, itemName: "Kunci fixture", description: "Kunci hitam" }
+      const createdFound = await repo.createFoundReport(actor, foundInput)
+      assert.equal((await repo.createFoundReport(actor, foundInput)).id, createdFound.id)
+      await assert.rejects(repo.createFoundReport(actor, { ...foundInput, description: "Berbeda" }), /data berbeda/)
+      const stagedKey = randomUUID()
+      assert.equal(await repo.isPhotoReferenced(stagedKey), false)
       const loss = await repo.createLossReport(actor, { itemName: "Payung fixture", characteristics: "Hitam", description: "Tertinggal", ownerName: "Pemilik langsung", ownerContact: "owner@example.invalid" })
       const projection = await repo.detail(loss.ticket!)
       assert.equal(projection?.report.reporter, "Pemilik langsung")
@@ -73,7 +80,11 @@ test("Inventory receipts, linked returns, retry guards, private photos, unified 
       assert.equal(unified[0].sortDate, originalCandidate.sortDate)
       assert.equal(unified[0].custody, "di-pos")
       const completion = { id: receipt.id, submissionKey: randomUUID(), officerId, recipient: "Pemilik payung", recipientPhone: "089876543210", ownershipEvidence: "Ciri khusus terkonfirmasi", lossTicket: loss.ticket }
-      await repo.handoverInventory(actor, completion)
+      const photo = { storageKey: stagedKey, name: "bukti.png", mimeType: "image/png", digest: "photo-one" }
+      await repo.handoverInventory(actor, completion, photo)
+      assert.equal(await repo.isPhotoReferenced(stagedKey), true)
+      assert.equal((await repo.handoverInventory(actor, completion, { ...photo, storageKey: randomUUID() })).id, receipt.id)
+      await assert.rejects(repo.handoverInventory(actor, completion, { ...photo, digest: "different" }), /data berbeda/)
       const states = await tx.select().from(reports).where(inArray(reports.id, [found.id, loss.id]))
       assert.ok(states.every(r => r.status === "selesai" && r.completedAt))
       assert.equal((await tx.select().from(notifications).where(and(eq(notifications.reportId, loss.id), eq(notifications.recipientId, ownerId)))).length, 1)

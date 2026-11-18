@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       const photoUrl = String(formData.get("photoUrl") ?? "")
       const submissionKey = String(formData.get("submissionKey") ?? "")
       const draftRevision = String(formData.get("draftRevision") ?? "")
+      if (!submissionKey || !draftRevision) throw new ReportError("Draft dan revisi wajib diisi sebelum mengirim laporan.")
       const photoFile = formData.get("photo")
 
       let uploadFile: AttachmentUpload | undefined
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
 
     if (contentType.startsWith("application/json")) {
       const body = await readSatpamJson(request)
+      if (!body || typeof body !== "object" || !("submissionKey" in body) || !body.submissionKey || !("draftRevision" in body) || !body.draftRevision) throw new ReportError("Draft dan revisi wajib diisi sebelum mengirim laporan.")
       return getSatpamService().createLossReport(actor, body)
     }
 
