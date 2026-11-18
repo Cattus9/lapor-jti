@@ -65,7 +65,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               <Field>
                 <FieldLabel htmlFor="password">Password</FieldLabel>
                 <div className="relative">
-                  <Input id="password" name="password" type={showPassword ? "text" : "password"} className="h-12 pl-3.5 pr-14" value={password} onChange={(event) => { setPassword(event.target.value); setError("") }} autoComplete="current-password" required maxLength={128} disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "password-hint login-error" : "password-hint"} />
+                  <Input id="password" name="password" type={showPassword ? "text" : "password"} className="h-12 pl-3.5 pr-14" value={password} onChange={(event) => { setPassword(event.target.value); setError("") }} placeholder="Password akun Anda" autoComplete="current-password" required maxLength={128} disabled={isPending} aria-invalid={Boolean(error)} aria-describedby={error ? "password-hint login-error" : "password-hint"} />
                   <Button
                     type="button"
                     variant="ghost"

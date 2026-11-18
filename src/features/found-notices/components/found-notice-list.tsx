@@ -17,10 +17,10 @@ import { foundNoticeStates, parseFoundNoticeRef, type FoundNotice, type FoundNot
 const time = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })
 const key = (notice: FoundNoticeRef) => `${notice.source}:${notice.id}`
 
-function FoundPhoto({ notice, large = false, detail = false }: { notice: FoundNotice; large?: boolean; detail?: boolean }) {
+function FoundPhoto({ notice, large = false, detail = false, thumbnail = false }: { notice: FoundNotice; large?: boolean; detail?: boolean; thumbnail?: boolean }) {
   const [failed, setFailed] = useState(false)
-  return <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40 text-muted-foreground ${detail ? "aspect-video max-h-80 w-full" : large ? "aspect-video max-h-40 w-full" : "size-12"}`}>
-    {notice.hasPhoto && !failed ? <Image src={`/api/pelapor/found-notices/${encodeURIComponent(notice.id)}/photo?source=${notice.source}`} alt={detail ? `Foto barang ${notice.itemName}` : ""} fill sizes={detail ? "(min-width: 640px) 576px, 90vw" : large ? "(min-width: 1280px) 32vw, 100vw" : "48px"} className={large || detail ? "object-contain" : "object-cover"} unoptimized onError={() => setFailed(true)} /> : <span className="flex flex-col items-center gap-2"><PackageSearch className={large || detail ? "size-10" : "size-5"} aria-hidden="true" />{detail ? <span className="text-xs">Foto belum tersedia</span> : null}</span>}
+  return <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40 text-muted-foreground ${detail ? "aspect-video max-h-80 w-full" : large ? "aspect-video max-h-40 w-full" : thumbnail ? "size-24 sm:size-28" : "size-12"}`}>
+    {notice.hasPhoto && !failed ? <Image src={`/api/pelapor/found-notices/${encodeURIComponent(notice.id)}/photo?source=${notice.source}`} alt={detail ? `Foto barang ${notice.itemName}` : ""} fill sizes={detail ? "(min-width: 640px) 576px, 90vw" : large ? "(min-width: 1280px) 32vw, 100vw" : thumbnail ? "(min-width: 640px) 112px, 96px" : "48px"} className={large || detail || thumbnail ? "object-contain" : "object-cover"} unoptimized onError={() => setFailed(true)} /> : <span className="flex flex-col items-center gap-1 text-center"><PackageSearch className={large || detail ? "size-10" : thumbnail ? "size-6" : "size-5"} aria-hidden="true" />{detail ? <span className="text-xs">Foto belum tersedia</span> : thumbnail ? <span className="text-xs font-normal">Tanpa foto</span> : null}</span>}
   </span>
 }
 
@@ -97,14 +97,14 @@ export function FoundNoticeList({ initialPage, preview = false }: { initialPage:
           <Button type="button" variant="outline" size="icon-sm" aria-label="Barang berikutnya" disabled={photoIndex >= page.items.length - 1} onClick={() => setPhotoIndex(index => Math.min(page.items.length - 1, index + 1))}><ChevronRight /></Button>
         </div>
       </div> : <div className="space-y-2">
-        {page.items.map(notice => <Button key={key(notice)} type="button" variant="outline" disabled={loadingMore} onClick={() => void open(notice)} className={cn("h-auto w-full items-start justify-start gap-3 whitespace-normal rounded-xl p-4 text-left shadow-none transition-colors hover:border-primary/40", !preview && !notice.read ? "border-primary/20 bg-primary/5" : "bg-report-surface")}>
-          <FoundPhoto key={key(notice)} notice={notice} />
+        {page.items.map(notice => <Button key={key(notice)} type="button" variant="outline" disabled={loadingMore} onClick={() => void open(notice)} className={cn("h-auto w-full justify-start gap-3 whitespace-normal rounded-xl p-4 text-left shadow-none transition-colors hover:border-primary/40", preview ? "items-start" : "items-center sm:gap-4", !preview && !notice.read ? "border-primary/20 bg-primary/5" : "bg-report-surface")}>
+          <FoundPhoto key={key(notice)} notice={notice} thumbnail={!preview} />
           <span className="min-w-0 flex-1 space-y-1.5">
             <span className="flex flex-wrap items-center gap-2"><span className="min-w-0 break-words font-semibold text-foreground">{notice.itemName}</span><Badge variant="outline" tone={foundNoticeStates[notice.state].tone}>{foundNoticeStates[notice.state].label}</Badge>{!notice.read ? <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="Belum dibaca" /> : null}</span>
             <span className="flex items-start gap-1.5 text-xs font-normal text-muted-foreground"><MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{notice.foundLocation}</span>
             <span className="block text-xs font-normal text-muted-foreground">{time.format(new Date(notice.publishedAt))} WIB</span>
           </span>
-          <ArrowRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ArrowRight className={cn("size-4 shrink-0 text-muted-foreground", preview && "mt-1")} aria-hidden="true" />
         </Button>)}
         {!page.items.length ? <CollectionEmptyState icon={PackageSearch} title={preview ? "Belum ada informasi temuan aktif" : "Belum ada informasi temuan"} description="Informasi muncul ketika mahasiswa melaporkan temuan atau Satpam menerima barang di pos." size="compact" /> : null}
       </div>}
