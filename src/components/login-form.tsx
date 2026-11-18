@@ -6,13 +6,79 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import Image from "next/image"
-import { Eye, EyeOff, LogIn } from "lucide-react"
+import { ChevronRight, Eye, EyeOff, ImageOff, LogIn, MapPin, PackageSearch, ShieldCheck } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { SectionCard } from "@/components/ui/section-card"
 import { authClient } from "@/lib/auth/client"
+
+const sampleFoundItems = [
+  { name: "Botol minum", location: "Ruang kelas", description: "Botol minum berwarna biru ditemukan di atas meja." },
+  { name: "Payung", location: "Area gedung", description: "Payung lipat berwarna hitam ditemukan di dekat pintu masuk." },
+]
+
+function LoginFoundItems() {
+  return (
+    <SectionCard
+      title="Barang temuan terbaru"
+      icon={PackageSearch}
+      meta={<span className="text-login-panel-muted">Data contoh</span>}
+      className={cn(
+        "max-w-3xl border-login-panel-foreground/25 bg-login-panel/65 shadow-none backdrop-blur-sm",
+        "[&_[data-slot=section-header]_h2]:text-login-panel-foreground [&_[data-slot=section-header]_svg]:text-login-panel-foreground",
+      )}
+      contentClassName="space-y-2 border-0 bg-transparent p-2 pt-0 text-login-panel-foreground shadow-none md:p-2 md:pt-0"
+    >
+      {sampleFoundItems.map(item => (
+        <Dialog key={item.name}>
+          <DialogTrigger render={
+            <Button
+              type="button"
+              variant="ghost"
+              className={cn(
+                "h-auto w-full justify-start gap-3 whitespace-normal rounded-xl p-3 text-left",
+                "border-login-panel-foreground/20 bg-login-panel-foreground/5 hover:bg-login-panel-foreground/10 hover:text-login-panel-foreground dark:hover:bg-login-panel-foreground/10",
+                "focus-visible:border-login-panel-foreground focus-visible:ring-login-panel-foreground/60",
+                "aria-expanded:bg-login-panel-foreground/10 aria-expanded:text-login-panel-foreground",
+              )}
+            />
+          }>
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-login-panel-foreground/10 text-login-panel-muted">
+              <ImageOff className="size-4" aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1 space-y-1">
+              <span className="block"><span className="sr-only">Lihat detail </span>{item.name}</span>
+              <span className="flex items-center gap-1 text-xs text-login-panel-muted"><MapPin className="size-3.5" aria-hidden="true" />{item.location}</span>
+            </span>
+            <ChevronRight className="ml-auto size-4 text-login-panel-muted" aria-hidden="true" />
+          </DialogTrigger>
+          <DialogContent className="max-w-md gap-4 p-5 sm:p-6">
+            <DialogHeader className="pr-8">
+              <DialogTitle>{item.name}</DialogTitle>
+              <DialogDescription>Contoh detail barang temuan</DialogDescription>
+            </DialogHeader>
+            <div className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-empty-surface p-4 text-muted-foreground">
+              <ImageOff className="size-5" aria-hidden="true" />
+              <span className="text-xs">Foto tidak tersedia</span>
+            </div>
+            <div className="space-y-2">
+              <p className="flex items-center gap-2 text-sm font-medium"><MapPin className="size-4 text-muted-foreground" aria-hidden="true" />{item.location}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">{item.description}</p>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-border bg-field-surface p-3 text-xs leading-relaxed text-muted-foreground">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p>Untuk mengklaim barang temuan, hubungi Pos Satpam dan jelaskan ciri khusus barang Anda.</p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ))}
+    </SectionCard>
+  )
+}
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter()
@@ -89,11 +155,13 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">Dengan melanjutkan, Anda menyetujui penggunaan AspirasiJTI untuk kebutuhan pelaporan internal Jurusan Teknologi Informasi.</p>
           </form>
-          <aside className="login-visual-panel hidden min-w-0 items-center rounded-xl border border-primary/30 p-10 text-login-panel-foreground md:flex lg:p-16" aria-label="Tentang AspirasiJTI">
+          <aside className="login-visual-panel flex min-w-0 items-center rounded-xl border border-primary/30 p-6 text-login-panel-foreground sm:p-8 md:p-10 lg:p-16" aria-label="Tentang AspirasiJTI dan barang temuan">
             <div className="w-full text-left">
               <Image src="/login/aspirasijti.png" alt="AspirasiJTI" width={866} height={288} sizes="(min-width: 1024px) 480px, 60vw" className="h-auto w-full max-w-[480px]" />
-              {/* The logo PNG has transparent margins; align the copy to its visible artwork. */}
-              <p className="-mt-5 pl-[min(12.2%,59px)] text-base leading-relaxed lg:-mt-7 lg:text-lg">Selamat datang di AspirasiJTI, ruang untuk menyampaikan aspirasi dan laporan di lingkungan Jurusan Teknologi Informasi. Laporkan kebutuhan fasilitas, kendala layanan, atau kehilangan dan temuan melalui satu portal. Masuk untuk memantau progres penanganan dan mengetahui tindak lanjut setiap laporan hingga selesai.</p>
+              <div className="-mt-5 ml-(--login-brand-inset) space-y-6 lg:-mt-7">
+                <p className="max-w-4xl text-base leading-relaxed lg:text-lg">Selamat datang di AspirasiJTI, ruang untuk menyampaikan aspirasi dan laporan di lingkungan Jurusan Teknologi Informasi. Laporkan kebutuhan fasilitas, kendala layanan, atau kehilangan dan temuan melalui satu portal. Masuk untuk memantau progres penanganan dan mengetahui tindak lanjut setiap laporan hingga selesai.</p>
+                <LoginFoundItems />
+              </div>
             </div>
           </aside>
         </CardContent>

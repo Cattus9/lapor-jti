@@ -10,6 +10,8 @@
 }
 
 .login-visual-panel {
+  /* Match the visible left edge of the login logo PNG at widths up to 480px. */
+  --login-brand-inset: min(12.24%, 58.75px);
   background: linear-gradient(
     135deg,
     color-mix(in srgb, var(--primary) 70%, black) 0%,
