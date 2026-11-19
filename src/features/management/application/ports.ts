@@ -7,7 +7,7 @@ export interface ManagementRepository {
   detail(ticket: string, operational: boolean): Promise<ManagementDetail | null>
   dashboard(): Promise<ManagementDashboard>
   statistics(filter: ManagementFilter): Promise<ManagementStatisticsData>
-  export(filter: ManagementFilter): Promise<ManagementReport[]>
+  export(filter: ManagementFilter, operational: boolean): Promise<ManagementReport[]>
   execute(actor: ReportActor, command: ManagementCommand): Promise<void>
   attachment(id: string): Promise<StoredAttachment | null>
   notifications(actorId: string, cursor?: string): Promise<ManagementNotifications>

@@ -35,9 +35,12 @@ export function parseManagementFilter(raw: Record<string, unknown> = {}, operati
   const dateBasis = raw.date ?? "submitted"
   if ((dateBasis !== "submitted" && dateBasis !== "completed") || (dateBasis === "completed" && status !== "selesai")) throw new ReportError("Tanggal selesai hanya tersedia untuk laporan selesai.")
   if (sort !== "terbaru" && sort !== "terlama") throw new ReportError("Urutan laporan tidak valid.")
+  const handler = raw.handler === undefined || raw.handler === "semua" ? undefined : raw.handler
+  if (handler !== undefined && (typeof handler !== "string" || !Object.hasOwn(handlerLabels, handler))) throw new ReportError("Pengelola filter tidak valid.")
+  if (operational && handler !== undefined && handler !== "manajemen") throw new ReportError("Pengelola ini hanya tersedia di Monitoring.", 403)
   const dates = parseReportListFilters({ ...defaultReportFilters, period: raw.period ?? "semua", from: raw.from, to: raw.to })
   return { category: category as ManagementFilter["category"], status: status as ManagementFilter["status"], dateBasis, sort, period: dates.period, from: dates.from, to: dates.to,
-    query: text(raw.q, "Pencarian", 200), cursor: raw.cursor === undefined ? undefined : text(raw.cursor, "Pagination", 160, true) }
+    ...(operational && raw.followUp === "1" ? { followUpOnly: true } : {}), handler: handler as ManagementFilter["handler"], query: text(raw.q, "Pencarian", 200), cursor: raw.cursor === undefined ? undefined : text(raw.cursor, "Pagination", 160, true) }
 }
 export function requireManagementNotificationId(id?: string) {
   if (id !== undefined && !isUuid(id)) throw new ReportError("Notifikasi tidak valid.")

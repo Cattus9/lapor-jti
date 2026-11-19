@@ -1,3 +1,4 @@
+import type { ReportAttention } from "@/features/reports/domain/report-follow-up"
 import type { ReportStatus } from "../reports/domain/report"
 import type { NotificationItem } from "../notifications/types"
 import type { reportPeriods } from "../reports/domain/report-list-filters"
@@ -6,7 +7,7 @@ import type { TechnicianReportTiming } from "./domain/technician-report-timing"
 export type TechnicianStatus = Extract<ReportStatus, "baru" | "diverifikasi" | "diproses" | "selesai" | "ditolak">
 export type TechnicianReportStatus = "Baru" | "Diverifikasi" | "Diproses" | "Selesai" | "Ditolak"
 export type TechnicianFacilityReport = {
-  firstOpenedAt?: string | null; unopened?: boolean
+  firstOpenedAt?: string | null; unopened?: boolean; attention?: ReportAttention | null
   id: string; ticket: string; title: string; facility: string; facilities: string[]; locationId: string | null
   room: string; location: string; reporter: string; submittedAt: string; updatedAt: string
   eventDate: string; eventTime: string; completedAt?: string; status: TechnicianReportStatus
@@ -17,7 +18,7 @@ export type TechnicianRoomPriority = {
   facilities: Array<{ facility: string; activeReports: number }>
 }
 export type TechnicianFilter = {
-  query: string; status: TechnicianStatus | "semua"; period: keyof typeof reportPeriods
+  followUpOnly?: boolean; query: string; status: TechnicianStatus | "semua"; period: keyof typeof reportPeriods
   from: string; to: string; sort: "terbaru" | "terlama"; locationId?: string; activeOnly: boolean; classifiedOnly: boolean; cursor?: string
 }
 export type TechnicianPage<T> = { items: T[]; total: number; nextCursor: string | null }

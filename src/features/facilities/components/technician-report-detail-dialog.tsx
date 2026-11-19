@@ -5,6 +5,7 @@ import Image from "next/image"
 import { CalendarDays, MapPin, Paperclip, ScrollText, UserRound, Wrench } from "lucide-react"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { ReportAttachmentsEmptyState } from "@/components/reports/report-attachments-empty-state"
+import { ReportProgressAction } from "@/components/reports/report-progress-action"
 import { ReportOpeningTracker } from "@/components/reports/report-opening"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
 import { Button } from "@/components/ui/button"
@@ -48,6 +49,7 @@ export function TechnicianReportDetailDialog({ report: initialReport, open, onOp
   const actionPanel = <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">{canComplete ? "Tindak lanjut" : report.status === "Selesai" ? "Laporan selesai" : "Laporan ditolak"}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{canComplete ? "Setelah fasilitas diperbaiki, catat pekerjaan dan kondisi akhirnya." : report.status === "Selesai" ? "Catatan pekerjaan tersimpan pada riwayat." : "Alasan penolakan tersimpan pada riwayat."}</p></div>
       {canComplete ? <div className="flex flex-wrap gap-2"><Button type="button" disabled={!ready} onClick={() => choose("selesai")}>Selesaikan perbaikan</Button><Button type="button" variant="outline" disabled={!ready} onClick={() => choose("ditolak")}>Tolak laporan</Button></div> : null}</div>
+    {canComplete && detail.data ? <div className="mt-3"><ReportProgressAction id={report.id} handler="teknisi" disabled={!ready} onSaved={onRetry} /></div> : null}
     {detail.loading ? <p role="status" className="mt-3 text-xs text-muted-foreground">Memuat status terbaru…</p> : null}
     {detail.error ? <div className="mt-3 space-y-2"><FieldError>{detail.error}</FieldError><Button type="button" variant="outline" size="sm" onClick={onRetry}>Coba lagi</Button></div> : null}
     {error ? <FieldError className="mt-3">{error}</FieldError> : null}

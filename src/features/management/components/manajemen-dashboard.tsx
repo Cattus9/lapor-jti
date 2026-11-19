@@ -82,7 +82,7 @@ export function ManajemenDashboard({ user, data: managementOverview }: { user: C
                     </span>
                     <div>
                       <CardTitle className="text-base">Antrean prioritas</CardTitle>
-                      <p className="mt-1 text-sm text-muted-foreground">Maksimal 5 laporan aktif, diurutkan dari yang paling lama dikirim.</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Maksimal 5 laporan aktif. Laporan yang perlu tindak lanjut atau pembaruan ditampilkan lebih dulu.</p>
                     </div>
                   </div>
                   <span className="shrink-0 text-xs text-muted-foreground">{managementOverview.updatedAt}</span>
@@ -103,7 +103,7 @@ export function ManajemenDashboard({ user, data: managementOverview }: { user: C
                     <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
                       <span className="text-xs text-muted-foreground">{report.updatedAt}</span>
                       <Badge tone={report.category === "Layanan" ? "violet" : "warning"} variant="outline">{report.category}</Badge>
-                      <UnopenedReportBadge unseen={report.unopened} /><StatusBadge status={report.status} />
+                      <UnopenedReportBadge unseen={report.unopened} attention={report.attention} /><StatusBadge status={report.status} />
                       <Button nativeButton={false} render={<Link href={`/manajemen/laporan?ticket=${encodeURIComponent(report.ticket)}`} />} variant="outline" size="sm" className="bg-accent text-accent-foreground">Detail<ArrowRight /></Button>
                     </div>
                   </article>

@@ -107,13 +107,13 @@ export function TeknisiDashboard({ user, data: technicianOverview }: { user: Cur
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                     <span className="text-xs text-muted-foreground">Dikirim {item.submittedAt} WIB</span>
-                    <UnopenedReportBadge unseen={item.unopened} /><StatusBadge status={item.status} />
+                    <UnopenedReportBadge unseen={item.unopened} attention={item.attention} /><StatusBadge status={item.status} />
                     <Button nativeButton={false} render={<Link href={`/teknisi/laporan-fasilitas?ticket=${encodeURIComponent(item.ticket)}`} />} variant="outline" size="xs" className="bg-primary/5 text-primary-action-hover hover:bg-primary/10 dark:text-primary">Detail<ArrowRight className="size-3.5" /></Button>
                   </div>
                 </article>
               ))}
               {!technicianRepairQueue.length ? <TechnicianEmptyState context="queue" /> : null}
-              {technicianRepairQueue.length ? <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">Maksimal 5 laporan aktif terbaru.</p> : null}
+              {technicianRepairQueue.length ? <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">Maksimal 5 laporan aktif. Tiket yang perlu ditindaklanjuti tampil lebih dulu.</p> : null}
             </CardContent>
           </div>
         </Card>

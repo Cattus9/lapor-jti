@@ -21,7 +21,7 @@ export function PelaporDashboard({ user, data, foundNotices }: { user: CurrentUs
   return (
     <DashboardLayout role="pelapor">
       <ContentShell>
-        <PageHeader title="Dashboard Pelapor" description={`Selamat datang kembali, ${user.name}. Pantau laporan Anda di sini.`} action={<Button nativeButton={false} render={<Link href="/pelapor/buat-laporan" />}><FilePlus2 />Buat Laporan</Button>} />
+        <PageHeader title="Dashboard" description={`Selamat datang kembali, ${user.name}. Pantau laporan Anda di sini.`} action={<Button nativeButton={false} render={<Link href="/pelapor/buat-laporan" />}><FilePlus2 />Buat Laporan</Button>} />
         <div className="grid gap-4 sm:grid-cols-3">
           <KpiCard label="Laporan aktif" value={activeReports} icon={Clock3} iconTone="amber" detail="Sedang ditangani" detailValue={`${activeReports} tiket`} detailTone="amber" href="/pelapor/laporan-saya" />
           <KpiCard label="Total laporan" value={data.total} icon={ClipboardCheck} detail="Semua kategori" detailValue="Riwayat" href="/pelapor/laporan-saya" />

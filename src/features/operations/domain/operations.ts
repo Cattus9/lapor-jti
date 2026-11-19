@@ -7,8 +7,9 @@ export const roleLabels: Record<OperationalRole, string> = { pelapor: "Pelapor",
 export type MasterKind = "areas" | "locations" | "objects" | "services" | "officers"
 export type MasterRecord = { id: string; name: string; isActive: boolean; revision: number; kind?: string; sortOrder?: number; areaId?: string; group?: string; objectIds?: string[]; handlerRole?: "manajemen" | "tefa" }
 export type OperationalCatalog = Record<MasterKind, MasterRecord[]>
-export type UserRecord = { id: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; updatedAt: string }
+export type UserRecord = { id: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; updatedAt: string; hasLocalPassword?: boolean }
 export type UsersPage = { items: UserRecord[]; total: number; page: number; pageSize: number }
+export const managedUserBatchSize = 50
 export type MasterCommand = { entity: MasterKind; id?: string; revision?: number; name: string; isActive: boolean; kind: "floor" | "area"; sortOrder: number; areaId: string; group: FacilityCategory | ""; objectIds: string[]; handlerRole?: "manajemen" | "tefa" }
 export type UserCommand = { id?: string; updatedAt?: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; password?: string }
 function object(raw: unknown) {
@@ -63,6 +64,13 @@ export function assertUserChange(actorId: string, before: { id: string; role: st
   if (!operationalRoles.includes(before.role as OperationalRole)) throw new ReportError("Akun ini tidak dapat dikelola.", 403)
   if (actorId === before.id && (!after.isActive || after.role !== "manajemen")) throw new ReportError("Anda tidak dapat menonaktifkan atau mengganti peran akun sendiri.", 409)
   if (before.role === "manajemen" && before.isActive && (after.role !== "manajemen" || !after.isActive) && activeManagers <= 1) throw new ReportError("Minimal satu akun Manajemen harus tetap aktif.", 409)
+}
+export function parsePasswordReset(raw: unknown) {
+  const { id, updatedAt, password } = object(raw)
+  if (typeof id !== "string" || !isUuid(id)) throw new ReportError("ID pengguna tidak valid.")
+  if (typeof updatedAt !== "string" || !Number.isFinite(Date.parse(updatedAt))) throw new ReportError("Versi pengguna tidak valid.")
+  if (typeof password !== "string" || password.length < 12 || password.length > 128) throw new ReportError("Password baru harus 12–128 karakter.")
+  return { id, updatedAt, password }
 }
 export function availableFacilities(catalog: OperationalCatalog, locationName: string) {
   const location = catalog.locations.find((row) => row.name === locationName)

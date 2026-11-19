@@ -15,7 +15,13 @@ export class ManagementService {
     if (filter.period === "rentang" && (Date.parse(filter.to) - Date.parse(filter.from)) / 86400000 > 3660) throw new ReportError("Rentang statistik maksimal 10 tahun. Persempit periode.")
     return this.repository.statistics(filter)
   }
-  async export(actor: ReportActor, raw: Record<string, unknown>) { requireManagement(actor); return managementCsv(await this.repository.export(parseManagementFilter(raw, true))) }
+  async export(actor: ReportActor, raw: Record<string, unknown>) {
+    requireManagement(actor)
+    const scope = raw.scope ?? "operational"
+    if (scope !== "operational" && scope !== "monitoring") throw new ReportError("Cakupan ekspor tidak valid.")
+    const operational = scope === "operational"
+    return managementCsv(await this.repository.export(parseManagementFilter(raw, operational), operational))
+  }
   async detail(actor: ReportActor, ticket: string, operational = true) {
     requireManagement(actor)
     const result = await this.repository.detail(requireManagementTicket(ticket), operational)

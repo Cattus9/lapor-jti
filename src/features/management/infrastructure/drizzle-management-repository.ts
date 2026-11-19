@@ -1,8 +1,10 @@
 import "server-only"
+import { getReportAttention, reportAttentionCutoffs } from "../../reports/domain/report-follow-up"
+import { reportAttentionOrder, requiresReportFollowUp } from "../../reports/infrastructure/report-follow-up"
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { sequentialQueries } from "@/db/sequential"
-import { users, reports, reportAttachments, reportStatusHistory, reportFacilityObjects, reportServiceDetails, reportOtherDetails, reportLostFoundDetails } from "@/db/schema"
+import { users, reports, reportAttachments, reportStatusHistory, reportFacilityObjects, reportServiceDetails, reportOtherDetails, reportLostFoundDetails, locations } from "@/db/schema"
 import { notifications } from "@/db/reports-schema"
 import { assertTransition, isUuid, ReportError, statusLabels, type ReportActor } from "../../reports/domain/report"
 import { defaultReportFilters, reportDateBounds } from "../../reports/domain/report-list-filters"
@@ -34,6 +36,8 @@ function criteria(filter: ManagementFilter, operational: boolean, withDates = tr
   const q = escaped(filter.query)
   const date = filter.dateBasis === "completed" ? reports.completedAt : reports.submittedAt
   return and(operational || operator === "tefa" ? operatorScope(operator) : undefined,
+    filter.followUpOnly ? requiresReportFollowUp() : undefined,
+    filter.handler ? eq(reports.handlerRole, filter.handler) : undefined,
     filter.lifecycle === "active" ? active : filter.lifecycle === "closed" ? inArray(reports.status, ["selesai", "ditolak"]) : undefined,
     filter.serviceId ? sql`exists (select 1 from ${reportServiceDetails} where ${reportServiceDetails.reportId} = ${reports.id} and ${reportServiceDetails.serviceId} = ${filter.serviceId})` : undefined,
     filter.category !== "semua" ? eq(reports.category, filter.category) : undefined,
@@ -53,7 +57,7 @@ export class DrizzleManagementRepository implements ManagementRepository {
   }
   private get scope() { return operatorScope(this.operator) }
   private criteria(filter: ManagementFilter, operational: boolean, withDates = true) { return criteria(filter, operational, withDates, this.operator) }
-  private async hydrate(rows: Row[]): Promise<ManagementReport[]> {
+  private async hydrate(rows: Row[], attentionCutoffs = reportAttentionCutoffs(new Date())): Promise<ManagementReport[]> {
     if (!rows.length) return []
     const ids = rows.map((r) => r.report.id)
     // One bounded batch per relation. Never join the object/file collections onto paginated reports.
@@ -71,7 +75,7 @@ export class DrizzleManagementRepository implements ManagementRepository {
     return rows.map(({ report: r, reporter, unit }) => {
       const service = serviceMap.get(r.id)
       const context = service?.serviceName ?? otherMap.get(r.id) ?? lostMap.get(r.id) ?? objects.get(r.id)?.join(", ") ?? categoryLabels[r.category]
-      return { id: r.id, firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status), ticket: r.ticketNumber, title: r.title, category: categoryLabels[r.category], categoryKey: r.category,
+      return { id: r.id, attention: getReportAttention(r, attentionCutoffs), firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status), ticket: r.ticketNumber, title: r.title, category: categoryLabels[r.category], categoryKey: r.category,
         status: statusLabels[r.status] as MonitoringReportStatus, statusKey: r.status, handler: handlerLabels[r.handlerRole], reporter, reporterUnit: unit ?? "Belum diisi",
         service: context, context, program: service?.program, location: r.locationText, submittedAt: dateLabel(r.submittedAt), submittedAtIso: r.submittedAt.toISOString(), reportedOn: dayLabel(r.submittedAt),
         updatedAt: dateLabel(r.updatedAt), completedOn: r.completedAt ? dayLabel(r.completedAt) : undefined, completedAt: r.completedAt ? dateLabel(r.completedAt) : undefined, description: r.description, attachments: countMap.get(r.id) ?? 0,
@@ -116,15 +120,16 @@ export class DrizzleManagementRepository implements ManagementRepository {
   }
   async dashboard(): Promise<ManagementDashboard> {
     if (!this.inReadSnapshot) return this.snapshot((repository) => repository.dashboard())
+    const attentionCutoffs = reportAttentionCutoffs(new Date())
     const month = reportDateBounds({ ...defaultReportFilters, period: "bulan-ini" })
     const [totals, queue] = await sequentialQueries([
       this.db.select({ newReports: sql<number>`count(*) filter (where ${reports.status} = 'baru')::integer`, inProgress: sql<number>`count(*) filter (where ${reports.status} = 'diproses')::integer`,
         completedThisMonth: sql<number>`count(*) filter (where ${reports.completedAt} >= ${month.from} and ${reports.completedAt} < ${month.until})::integer`,
         activeServiceReports: sql<number>`count(*) filter (where ${reports.category} = 'layanan' and ${active})::integer`,
       }).from(reports).where(this.scope),
-      this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(this.scope, active)).orderBy(asc(reports.submittedAt), asc(reports.id)).limit(5),
+      this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(this.scope, active)).orderBy(reportAttentionOrder(attentionCutoffs), asc(reports.submittedAt), asc(reports.id)).limit(5),
     ])
-    return { ...totals[0], queue: await this.hydrate(queue), updatedAt: dateLabel(new Date()) }
+    return { ...totals[0], queue: await this.hydrate(queue, attentionCutoffs), updatedAt: dateLabel(new Date()) }
   }
   async statistics(filter: ManagementFilter): Promise<ManagementStatisticsData> {
     if (!this.inReadSnapshot) return this.snapshot((repository) => repository.statistics(filter))
@@ -139,6 +144,7 @@ export class DrizzleManagementRepository implements ManagementRepository {
     const bucketUnit = sql.raw(`'${granularity}'`)
     const dateBucket = (column: typeof reports.submittedAt | typeof reports.completedAt) => sql<string>`to_char(date_trunc(${bucketUnit}, ${column} at time zone 'Asia/Jakarta'), 'YYYY-MM-DD')`
     const roomKey = sql<string>`coalesce(${reports.locationId}, 'text:' || ${reports.locationText})`
+    const roomLabel = sql<string>`coalesce(max(${locations.name}), max(${reports.locationText}))`
     const [totals, categories, handlers, incoming, completed, rooms, objects, unclassified] = await sequentialQueries([
       this.db.select({ total: sql<number>`count(*)::integer`, newReports: sql<number>`count(*) filter (where ${reports.status} = 'baru')::integer`,
         inProgress: sql<number>`count(*) filter (where ${active} and ${reports.status} <> 'baru')::integer`, completed: sql<number>`count(*) filter (where ${reports.status} = 'selesai')::integer`, rejected: sql<number>`count(*) filter (where ${reports.status} = 'ditolak')::integer` }).from(reports).where(where),
@@ -146,8 +152,9 @@ export class DrizzleManagementRepository implements ManagementRepository {
       this.db.select({ handler: reports.handlerRole, total: sql<number>`count(*)::integer`, active: sql<number>`count(*) filter (where ${active})::integer` }).from(reports).where(where).groupBy(reports.handlerRole),
       this.db.select({ date: dateBucket(reports.submittedAt), value: sql<number>`count(*)::integer` }).from(reports).where(and(withoutDates, gte(reports.submittedAt, from), lt(reports.submittedAt, until))).groupBy(dateBucket(reports.submittedAt)),
       this.db.select({ date: dateBucket(reports.completedAt), value: sql<number>`count(*)::integer` }).from(reports).where(and(withoutDates, isNotNull(reports.completedAt), gte(reports.completedAt, from), lt(reports.completedAt, until))).groupBy(dateBucket(reports.completedAt)),
-      this.db.select({ id: roomKey, room: reports.locationText, totalReports: sql<number>`count(*)::integer`, activeReports: sql<number>`count(*) filter (where ${active})::integer`, completedReports: sql<number>`count(*) filter (where ${reports.status} = 'selesai')::integer` }).from(reports)
-        .where(and(where, eq(reports.category, "fasilitas"))).groupBy(roomKey, reports.locationText).orderBy(sql`count(*) desc`, asc(reports.locationText), asc(roomKey)),
+      this.db.select({ id: roomKey, room: roomLabel, totalReports: sql<number>`count(*)::integer`, activeReports: sql<number>`count(*) filter (where ${active})::integer`, completedReports: sql<number>`count(*) filter (where ${reports.status} = 'selesai')::integer` }).from(reports)
+        .leftJoin(locations, eq(locations.id, reports.locationId))
+        .where(and(where, eq(reports.category, "fasilitas"))).groupBy(roomKey).orderBy(sql`count(*) desc`, asc(roomLabel), asc(roomKey)),
       // Historical composition includes closed reports; active remains a separate operational count.
       this.db.select({ roomId: roomKey, facility: reportFacilityObjects.objectText, totalReports: sql<number>`count(distinct ${reports.id})::integer`, activeReports: sql<number>`count(distinct ${reports.id}) filter (where ${active})::integer` }).from(reports).innerJoin(reportFacilityObjects, eq(reportFacilityObjects.reportId, reports.id))
         .where(and(where, eq(reports.category, "fasilitas"))).groupBy(roomKey, reportFacilityObjects.objectText).orderBy(sql`count(distinct ${reports.id}) desc`, asc(reportFacilityObjects.objectText)),
@@ -165,15 +172,21 @@ export class DrizzleManagementRepository implements ManagementRepository {
       else if (granularity === "month") point.setUTCMonth(point.getUTCMonth() + 1)
       else point.setUTCFullYear(point.getUTCFullYear() + 1)
     }
+    const facilitiesByRoom = new Map<string, ManagementStatisticsData["rooms"][number]["facilities"]>()
+    for (const { roomId, facility, totalReports, activeReports } of objects) {
+      const facilities = facilitiesByRoom.get(roomId) ?? []
+      facilities.push({ facility, totalReports, activeReports })
+      facilitiesByRoom.set(roomId, facilities)
+    }
     return { ...totals[0], from: dayLabel(from), to: end, granularity, categories, handlers, trend,
-      rooms: rooms.map((room) => ({ ...room, location: room.room, facilities: objects.filter((object) => object.roomId === room.id).map(({ facility, totalReports, activeReports }) => ({ facility, totalReports, activeReports })) })), unclassifiedActive: unclassified[0].count }
+      rooms: rooms.map((room) => ({ ...room, location: room.room, facilities: facilitiesByRoom.get(room.id) ?? [] })), unclassifiedActive: unclassified[0].count }
   }
-  async export(filter: ManagementFilter): Promise<ManagementReport[]> {
-    if (!this.inReadSnapshot) return this.snapshot((repository) => repository.export(filter))
+  async export(filter: ManagementFilter, operational: boolean): Promise<ManagementReport[]> {
+    if (!this.inReadSnapshot) return this.snapshot((repository) => repository.export(filter, operational))
     const order = filter.sort === "terlama" ? asc : desc
     const date = filter.dateBasis === "completed" ? reports.completedAt : reports.submittedAt
     // Export all matching rows, not just the loaded UI page; explicitly cap resource consumption.
-    const rows = await this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(this.criteria(filter, true)).orderBy(order(date), order(reports.id)).limit(5001)
+    const rows = await this.db.select({ report: reports, reporter: users.name, unit: users.unit }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(this.criteria(filter, operational)).orderBy(order(date), order(reports.id)).limit(5001)
     if (rows.length > 5000) throw new ReportError("Ekspor maksimal 5.000 laporan. Persempit periode atau filter.", 422)
     return this.hydrate(rows)
   }
@@ -198,6 +211,6 @@ export class DrizzleManagementRepository implements ManagementRepository {
     const [row] = await this.db.select({ file: reportAttachments }).from(reportAttachments).innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(and(eq(reportAttachments.id, id), this.operator === "tefa" ? this.scope : undefined)).limit(1)
     return row?.file ?? null
   }
-  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor, this.operator === "tefa" ? "tefa" : undefined) }
-  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id, this.operator === "tefa" ? "tefa" : undefined) }
+  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor, this.operator) }
+  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id, this.operator) }
 }

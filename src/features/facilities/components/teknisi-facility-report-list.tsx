@@ -40,7 +40,7 @@ function Feedback({ loading, error }: { loading: boolean; error: string }) {
 
 function FacilityReportRow({ report }: { report: TechnicianFacilityReport }) {
   const openReport = useContext(ReportContext)
-  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : report.status === "Ditolak" ? `Ditolak ${report.updatedAt}` : `Dikirim ${report.submittedAt}`}</span><UnopenedReportBadge unseen={report.unopened} /><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
+  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : report.status === "Ditolak" ? `Ditolak ${report.updatedAt}` : `Dikirim ${report.submittedAt}`}</span><UnopenedReportBadge unseen={report.unopened} attention={report.attention} /><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
 }
 
 function ReportPage({ url, emptyContext = "room-reports", hasFilters = false, onReset }: {
@@ -144,6 +144,7 @@ export function TeknisiFacilityReportList({ initialView = "priority", ticket, hi
   const [view, setView] = useState<ReportView>(initialView)
   const [status, setStatus] = useState(history ? "selesai" : "semua")
   const [query, setQuery] = useState("")
+  const [followUpOnly, setFollowUpOnly] = useState(false)
   const [period, setPeriod] = useState("semua")
   const [sort, setSort] = useState("terbaru")
   const [selectedReport, setSelectedReport] = useState<TechnicianFacilityReport | null>(null)
@@ -158,8 +159,9 @@ export function TeknisiFacilityReportList({ initialView = "priority", ticket, hi
   const search = useDebouncedOperationalQuery(query)
   const params = new URLSearchParams({ q: search, status, period, sort })
   if (!history) params.set("active", "1")
-  const hasFilters = Boolean(search.trim() || status !== (history ? "selesai" : "semua") || period !== "semua")
-  function resetFilters() { setQuery(""); setStatus(history ? "selesai" : "semua"); setPeriod("semua"); setSort("terbaru") }
+  if (!history && followUpOnly) params.set("followUp", "1")
+  const hasFilters = Boolean(followUpOnly || search.trim() || status !== (history ? "selesai" : "semua") || period !== "semua")
+  function resetFilters() { setFollowUpOnly(false); setQuery(""); setStatus(history ? "selesai" : "semua"); setPeriod("semua"); setSort("terbaru") }
   function changeView(value: unknown) {
     if (value !== "priority" && value !== "queue") return
     setView(value)
@@ -237,6 +239,7 @@ export function TeknisiFacilityReportList({ initialView = "priority", ticket, hi
               <TabsContent value="priority"><Priorities status={status} showAll={() => { changeView("queue"); queueTab.current?.focus() }} onReset={() => setStatus("semua")} /></TabsContent>
               <TabsContent value="queue" className="space-y-4">
                 {listFilters}
+                <Button type="button" size="sm" variant={followUpOnly ? "soft" : "outline"} aria-pressed={followUpOnly} onClick={() => setFollowUpOnly((value) => !value)}>Perlu tindak lanjut</Button>
                 <ReportPage url={`/api/teknisi/reports?${params}`} emptyContext="reports" hasFilters={hasFilters} onReset={resetFilters} />
               </TabsContent>
             </Tabs>

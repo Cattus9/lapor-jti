@@ -66,6 +66,7 @@ function SelectContent({
   alignOffset = 0,
   alignItemWithTrigger = false,
   matchTriggerWidth = true,
+  itemSize = "default",
   listClassName,
   style,
   ...props
@@ -76,6 +77,7 @@ function SelectContent({
   > & {
     matchTriggerWidth?: boolean
     listClassName?: string
+    itemSize?: "default" | "form"
   }) {
   return (
     <SelectPrimitive.Portal>
@@ -91,11 +93,11 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           style={matchTriggerWidth ? { ...style, width: "var(--anchor-width)" } : style}
-          className={cn("relative isolate z-50 max-h-(--available-height) min-w-0 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border border-border/80 bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10 motion-safe:duration-150 motion-reduce:transition-none data-[side=bottom]:slide-in-from-top-1 data-[side=bottom]:slide-out-to-top-1 data-[side=inline-end]:slide-in-from-left-1 data-[side=inline-start]:slide-in-from-right-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-[side=top]:slide-out-to-bottom-1 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+          className={cn("relative isolate z-50 max-h-(--available-height) min-w-0 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border border-border/80 bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10 motion-safe:duration-150 motion-reduce:transition-none data-[side=bottom]:slide-in-from-top-1 data-[side=bottom]:slide-out-to-top-1 data-[side=inline-end]:slide-in-from-left-1 data-[side=inline-start]:slide-in-from-right-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-[side=top]:slide-out-to-bottom-1 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", itemSize === "form" && "[&_[data-slot=select-item]]:min-h-9 [&_[data-slot=select-item]]:py-1.5 [&_[data-slot=select-item]]:pl-3 [&_[data-slot=select-item]>span:first-child]:min-w-0 [&_[data-slot=select-item]>span:first-child]:shrink [&_[data-slot=select-item]>span:first-child]:whitespace-normal [&_[data-slot=select-item]>span:first-child]:break-words", className )}
           {...props}
         >
           <SelectScrollUpButton />
-          <SelectPrimitive.List className={listClassName}>{children}</SelectPrimitive.List>
+          <SelectPrimitive.List className={cn(itemSize === "form" && "p-1", listClassName)}>{children}</SelectPrimitive.List>
           <SelectScrollDownButton />
         </SelectPrimitive.Popup>
       </SelectPrimitive.Positioner>

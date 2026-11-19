@@ -48,7 +48,7 @@ Session dan role diperiksa di API; perubahan memeriksa origin. Penyelesaian/peny
 
 ## Pemeriksaan
 
-- `node --import tsx --test scripts/satpam-domain.test.ts scripts/satpam-inventory-domain.test.ts scripts/satpam-report-drafts.test.ts`: 23 lulus.
+- `node --import tsx --test scripts/tests/satpam-domain.test.ts scripts/tests/satpam-inventory-domain.test.ts scripts/tests/satpam-report-drafts.test.ts`: 23 lulus.
 - Dua tes PostgreSQL `satpam-acceptance-db.test.ts`: lulus di database development lokal, dengan fixture transaksi rollback.
 - Tiga tes PostgreSQL pada `satpam-inventory-handover-db.test.ts` dan `satpam-exceptions-db.test.ts` lulus, termasuk retry dan penyerahan bersamaan. Tes tersebut tidak memeriksa file foto yang tertinggal saat retry di lapisan service.
 - `satpam-dashboard-priority-db.test.ts`: gagal pada perbandingan urutan. Tes membandingkan hasil seluruh database dengan fixture saja, sementara fixture sengaja memakai tanggal tahun 1600; data aktif yang sudah ada dapat ikut masuk lima hasil. Kegagalan ini belum membuktikan query salah. Perlu database terisolasi atau fixture yang mengontrol seluruh populasi sebelum menarik kesimpulan.

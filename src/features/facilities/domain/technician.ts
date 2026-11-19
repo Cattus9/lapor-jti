@@ -36,7 +36,7 @@ export function parseTechnicianFilter(value: Record<string, unknown> = {}): Tech
   if (value.active !== undefined && value.active !== "1" && value.active !== "0") throw new ReportError("Filter laporan aktif tidak valid.")
   if (value.classified !== undefined && value.classified !== "1" && value.classified !== "0") throw new ReportError("Filter klasifikasi tidak valid.")
   return { status: status as TechnicianFilter["status"], sort, period: dateFilters.period, from: dateFilters.from, to: dateFilters.to,
-    query: boundedText(value.q, "Pencarian", 200), locationId, activeOnly: value.active === "1", classifiedOnly: value.classified === "1", cursor: value.cursor === undefined ? undefined : boundedText(value.cursor, "Pagination", 160, true) }
+    ...(value.followUp === "1" ? { followUpOnly: true } : {}), query: boundedText(value.q, "Pencarian", 200), locationId, activeOnly: value.active === "1", classifiedOnly: value.classified === "1", cursor: value.cursor === undefined ? undefined : boundedText(value.cursor, "Pagination", 160, true) }
 }
 export function requireNotificationId(value?: string) {
   if (value !== undefined && !isUuid(value)) throw new ReportError("Notifikasi tidak valid.")

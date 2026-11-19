@@ -46,7 +46,7 @@ function ReportList({ page, openReport, retry }: { page: ReturnType<typeof useMa
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
               <span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : `Dikirim ${report.submittedAt}`}</span>
-              <UnopenedReportBadge unseen={report.unopened} /><ManagementStatusBadge status={report.status} />
+              <UnopenedReportBadge unseen={report.unopened} attention={report.attention} /><ManagementStatusBadge status={report.status} />
               <Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" aria-haspopup="dialog" disabled={page.loading || Boolean(page.error)} onClick={(event) => openReport(report, event.currentTarget)}>Lihat detail</Button>
             </div>
           </article>
@@ -71,9 +71,11 @@ function WorkspaceContent({ initialCategory, openReport, retry }: { initialCateg
   const initialStatus = params.get("status")
   const [status, setStatus] = useState<string>(initialStatus === "belum-selesai" || statuses.includes(initialStatus as typeof statuses[number]) ? initialStatus! : "semua")
   const [query, setQuery] = useState("")
+  const [followUpOnly, setFollowUpOnly] = useState(false)
   const [period, setPeriod] = useState(() => params.get("period") && params.get("period") !== "rentang" && Object.hasOwn(reportPeriods, params.get("period")!) ? params.get("period")! : "semua")
   const q = useDebouncedOperationalQuery(query)
   const search = new URLSearchParams({ category, status, q, period })
+  if (followUpOnly) search.set("followUp", "1")
   if (status === "selesai" && params.get("date") === "completed") search.set("date", "completed")
   const page = useManagementPage(`/api/manajemen/reports?${search}`, { keepCategoryPreview: true })
 
@@ -113,6 +115,7 @@ function WorkspaceContent({ initialCategory, openReport, retry }: { initialCateg
               </div>
             </div>
             <TabsContent value={category}>
+              <Button type="button" size="sm" className="mb-3" variant={followUpOnly ? "soft" : "outline"} aria-pressed={followUpOnly} onClick={() => setFollowUpOnly((value) => !value)}>Perlu tindak lanjut</Button>
               <div key={category} className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
                 <ReportList page={page} openReport={openReport} retry={retry} />
               </div>

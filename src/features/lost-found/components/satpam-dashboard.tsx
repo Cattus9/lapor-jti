@@ -94,7 +94,7 @@ function QueueReport({ report }: { report: SatpamQueueReport }) {
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 sm:shrink-0 sm:justify-end">
         <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
           <span className="text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</span>
-          <UnopenedReportBadge unseen={report.unopened} />
+          <UnopenedReportBadge unseen={report.unopened} attention={report.attention} />
           {isDone ? (
             <span className="relative size-5 shrink-0 drop-shadow-xs">
               <Image
@@ -205,7 +205,7 @@ export function SatpamPriorityQueue({
       <div className="space-y-4">
         <div>
           <p className="text-sm text-muted-foreground">
-            Laporan kehilangan dan temuan baru yang belum ditindaklanjuti atau baru masuk, diprioritaskan untuk segera diperiksa.
+            Laporan yang perlu tindak lanjut atau pembaruan ditampilkan lebih dulu.
           </p>
         </div>
 

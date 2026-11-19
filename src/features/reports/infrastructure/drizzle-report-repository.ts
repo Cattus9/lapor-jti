@@ -1,15 +1,16 @@
 import "server-only"
 import { operationalAudit } from "@/db/operations-schema"
-import { and, desc, eq, gte, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm"
+import { and, desc, eq, gte, ilike, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { sequentialQueries } from "@/db/sequential"
 import { users } from "@/db/schema"
 import { facilityObjects, locationAreas, locationFacilityObjects, locations, notifications, reportAttachments, reportDrafts, reportFacilityObjects, reportLostFoundDetails, reportOtherDetails, reports, reportServiceDetails, reportStatusHistory, reportTicketCounters, services } from "@/db/reports-schema"
-import { handlerByCategory, isUuid, reportCategories, ReportError, type ReportActor, type StoredAttachment } from "../domain/report"
+import { handlerByCategory, isUuid, reportCategories, ReportError, type ReportActor, type ReportHandler, type StoredAttachment } from "../domain/report"
 import type { DraftView, ReportRepository, ReportWrite } from "../application/ports"
 import type { ReportListItem, ReportSummary } from "../types"
 import { defaultReportFilters, reportDateBounds, type ReportListFilters } from "../domain/report-list-filters"
 import { getIncidentDateTimeInWib } from "../domain/report-date"
+import { materializeReportReminders, updateReminderKind } from "./report-follow-up"
 import { hasReportDraftContent } from "../domain/report-draft-content"
 
 const pageSize = 20
@@ -260,9 +261,18 @@ export class DrizzleReportRepository implements ReportRepository {
     const [file] = await this.db.select().from(reportAttachments).where(and(eq(reportAttachments.id, id), eq(reportAttachments.ownerId, ownerId))).limit(1)
     return file ?? null
   }
-  async notifications(ownerId: string, cursor?: string, handler?: "tefa") {
+  private notificationScope(ownerId: string, handler?: ReportHandler) {
+    const ownReports = handler ? this.db.select({ id: reports.id }).from(reports).where(eq(reports.handlerRole, handler)) : undefined
+    const regular = ne(notifications.kind, updateReminderKind)
+    const scope = ownReports
+      ? (handler === "tefa" ? inArray(notifications.reportId, ownReports) : or(regular, inArray(notifications.reportId, ownReports)))
+      : regular
+    return and(eq(notifications.recipientId, ownerId), scope)
+  }
+  async notifications(ownerId: string, cursor?: string, handler?: ReportHandler) {
     const after = cursorValue(cursor)
-    const notificationScope = and(eq(notifications.recipientId, ownerId), handler ? sql`${notifications.reportId} in (select ${reports.id} from ${reports} where ${reports.handlerRole} = ${handler} and ${reports.category} = 'layanan')` : undefined)
+    if (handler && !after) await materializeReportReminders(this.db, ownerId, handler)
+    const notificationScope = this.notificationScope(ownerId, handler)
     const [rows, counts] = await sequentialQueries([
       this.db.select({ id: notifications.id, kind: notifications.kind, title: notifications.title, description: notifications.description, createdAt: notifications.createdAt, readAt: notifications.readAt, ticket: reports.ticketNumber, reportTitle: reports.title }).from(notifications).innerJoin(reports, eq(reports.id, notifications.reportId)).where(and(notificationScope, after ? or(lt(notifications.createdAt, after.date), and(eq(notifications.createdAt, after.date), lt(notifications.id, after.id))) : undefined)).orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(pageSize + 1),
       this.db.select({ value: sql<number>`count(*)::integer` }).from(notifications).where(and(notificationScope, isNull(notifications.readAt))),
@@ -273,7 +283,8 @@ export class DrizzleReportRepository implements ReportRepository {
     const today = day(new Date()); const yesterday = day(new Date(Date.now() - 86400000))
     return { items: items.map((row) => ({ id: row.id, kind: row.kind === "response" ? "response" as const : "status" as const, title: row.title, description: row.description, ticketNumber: row.ticket, reportTitle: row.reportTitle, createdAt: dateLabel(row.createdAt), group: day(row.createdAt) === today ? "Hari ini" as const : day(row.createdAt) === yesterday ? "Kemarin" as const : "Sebelumnya" as const, read: row.readAt !== null })), unread: counts[0].value, nextCursor: rows.length > pageSize && last ? nextCursor(last.createdAt, last.id) : null }
   }
-  async markRead(ownerId: string, id?: string, handler?: "tefa") {
-    await this.db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.recipientId, ownerId), isNull(notifications.readAt), id ? eq(notifications.id, id) : undefined, handler ? sql`${notifications.reportId} in (select ${reports.id} from ${reports} where ${reports.handlerRole} = ${handler} and ${reports.category} = 'layanan')` : undefined))
+  async markRead(ownerId: string, id?: string, handler?: ReportHandler) {
+    await this.db.update(notifications).set({ readAt: new Date() })
+      .where(and(this.notificationScope(ownerId, handler), isNull(notifications.readAt), id ? eq(notifications.id, id) : undefined))
   }
 }

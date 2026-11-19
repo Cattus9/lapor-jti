@@ -5,6 +5,7 @@ import Image from "next/image"
 import { CalendarDays, Check, Clock3, MapPin, MessageSquareText, Paperclip, ScrollText, UserRound, UserRoundCog } from "lucide-react"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { ReportAttachmentsEmptyState } from "@/components/reports/report-attachments-empty-state"
+import { ReportProgressAction } from "@/components/reports/report-progress-action"
 import { ReportOpeningTracker } from "@/components/reports/report-opening"
 import { useOperationalResource } from "@/components/reports/use-operational-data"
 import { Badge } from "@/components/ui/badge"
@@ -52,6 +53,7 @@ export function ManagementReportDetailDialog({ ticket, initialReport, open, onOp
       <p className="text-sm font-medium">{readOnly ? "Monitoring laporan" : report?.statusKey === "selesai" ? "Laporan selesai" : report?.statusKey === "ditolak" ? "Laporan ditolak" : "Aksi penanganan"}</p>
       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{readOnly ? `Penanganan dilakukan oleh ${report?.handler ?? "pengelola terkait"}. Tampilan ini hanya untuk pemantauan.` : report?.statusKey === "baru" ? "Tinjau informasi sebelum memulai penanganan laporan." : report?.statusKey === "diproses" ? "Catat tanggapan akhir sebelum laporan dinyatakan selesai." : "Tiket telah ditutup. Catatan dan riwayat tetap dapat dilihat kembali."}</p>
       {editable && report?.statusKey === "baru" ? <div className="mt-4 flex flex-wrap gap-2"><Button type="button" disabled={!ready} onClick={() => void onCommand?.({ ticket, status: "diproses", note: "" })}>{pending ? "Menyimpan…" : "Mulai penanganan"}</Button><Button type="button" variant="outline" disabled={!ready} onClick={() => choose("ditolak")}>Tolak laporan</Button></div> : editable && report?.statusKey === "diproses" ? <Button type="button" className="mt-4" disabled={!ready} onClick={() => choose("selesai")}>Selesaikan laporan</Button> : null}
+      {editable && detail.data && report && (report.statusKey === "baru" || report.statusKey === "diproses") ? <div className="mt-3"><ReportProgressAction id={report.id} handler="manajemen" disabled={!ready} onSaved={onRetry} /></div> : null}
       {detail.loading ? <p className="mt-3 text-xs text-muted-foreground" role="status">Memuat status terbaru…</p> : null}
       {detail.error ? <div className="mt-3 space-y-2"><FieldError>{detail.error}</FieldError><Button type="button" variant="outline" size="sm" onClick={onRetry}>Coba lagi</Button></div> : null}
       {error ? <FieldError className="mt-3">{error}</FieldError> : null}

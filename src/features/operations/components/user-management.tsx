@@ -2,17 +2,18 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, Pencil, Plus, Save, ShieldUser, UserRoundPlus, UsersRound } from "lucide-react"
+import { Eye, EyeOff, KeyRound, ListMinus, Pencil, Plus, Save, ShieldUser, UserRoundPlus, UsersRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { SectionCard } from "@/components/ui/section-card"
+import { CollectionEmptyState } from "@/components/reports/collection-empty-state"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
 import { useDebouncedOperationalQuery } from "@/components/reports/use-operational-data"
-import { operationalRoles, roleLabels, type OperationalRole, type UserRecord, type UsersPage } from "../domain/operations"
+import { managedUserBatchSize, operationalRoles, roleLabels, type OperationalRole, type UserRecord, type UsersPage } from "../domain/operations"
 import { ConfigSelect, EmptyRows, OperationsStatus, PageControls, SearchField, saveOperation, useOperationsData } from "./operations-ui"
 
 const roleTones: Record<OperationalRole, BadgeTone> = {
@@ -56,11 +57,9 @@ function useManagedAccounts() {
   return useSyncExternalStore(subscribeManagedIds, readManagedAccounts, () => emptyManagedAccounts)
 }
 
-function rememberManagedAccount(account: ManagedAccount) {
+function updateManagedAccounts(update: (accounts: ManagedAccount[]) => ManagedAccount[]) {
   try {
-    const accounts = readManagedAccounts()
-    if (accounts.some((item) => item.id === account.id)) return true
-    window.localStorage.setItem(managedUsersKey, JSON.stringify([...accounts, account]))
+    window.localStorage.setItem(managedUsersKey, JSON.stringify(update(readManagedAccounts())))
     window.dispatchEvent(new Event(managedUsersChanged))
     return true
   } catch {
@@ -68,26 +67,27 @@ function rememberManagedAccount(account: ManagedAccount) {
   }
 }
 
-async function fetchUserPage(query: Record<string, string>, signal: AbortSignal): Promise<UsersPage> {
-  const response = await fetch(`/api/manajemen/users?${new URLSearchParams(query)}`, { cache: "no-store", signal })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || "Data pengguna tidak dapat dimuat.")
-  return data as UsersPage
+function rememberManagedAccount(account: ManagedAccount) {
+  return updateManagedAccounts((accounts) => accounts.some((item) => item.id === account.id) ? accounts : [account, ...accounts])
 }
 
 function useManagedDirectory(accounts: ManagedAccount[]) {
   const [revision, setRevision] = useState(0)
-  const key = `${revision}:${accounts.map((account) => `${account.id}:${account.email}`).join("|")}`
+  const key = `${revision}:${accounts.map((account) => account.id).join("|")}`
   const [snapshot, setSnapshot] = useState<{ key: string; items: UserRecord[]; error: string }>({ key: "", items: [], error: "" })
   useEffect(() => {
     const controller = new AbortController()
     async function load() {
       try {
-        const groups = await Promise.all(accounts.map(async (account) => {
-          const result = await fetchUserPage({ q: account.email, role: "all", status: "all", page: "1" }, controller.signal)
-          return result.items.filter((user) => user.id === account.id)
-        }))
-        if (!controller.signal.aborted) setSnapshot({ key, items: [...new Map(groups.flat().map((user) => [user.id, user])).values()], error: "" })
+        const byId = new Map<string, UserRecord>()
+        for (let offset = 0; offset < accounts.length; offset += managedUserBatchSize) {
+          const ids = accounts.slice(offset, offset + managedUserBatchSize).map((account) => account.id).join(",")
+          const response = await fetch(`/api/manajemen/users?${new URLSearchParams({ ids })}`, { cache: "no-store", signal: controller.signal })
+          const data = await response.json()
+          if (!response.ok) throw new Error(data.error || "Data pengguna tidak dapat dimuat.")
+          for (const user of data.items as UserRecord[]) byId.set(user.id, user)
+        }
+        if (!controller.signal.aborted) setSnapshot({ key, items: accounts.flatMap(({ id }) => byId.get(id) ?? []), error: "" })
       } catch (error) {
         if (!controller.signal.aborted) setSnapshot((previous) => ({ ...previous, key, error: error instanceof Error ? error.message : "Data pengguna tidak dapat dimuat." }))
       }
@@ -95,7 +95,55 @@ function useManagedDirectory(accounts: ManagedAccount[]) {
     void load()
     return () => controller.abort()
   }, [accounts, key])
-  return { ...snapshot, loading: snapshot.key !== key, reload: () => setRevision((value) => value + 1) }
+  const selectedIds = new Set(accounts.map(({ id }) => id))
+  return { ...snapshot, items: snapshot.items.filter(({ id }) => selectedIds.has(id)), loading: snapshot.key !== key, reload: () => setRevision((value) => value + 1) }
+}
+
+function PasswordResetDialog({ user, onClose, onSaved }: { user: UserRecord; onClose: () => void; onSaved: () => void }) {
+  const busy = useRef(false)
+  const [password, setPassword] = useState("")
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState("")
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (busy.current) return
+    busy.current = true
+    setPending(true)
+    setError("")
+    try {
+      await saveOperation("/api/manajemen/users/password", { id: user.id, updatedAt: user.updatedAt, password })
+      onSaved()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Password belum dapat diperbarui.")
+    } finally {
+      busy.current = false
+      setPending(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !busy.current) onClose() }}>
+      <DialogContent showCloseButton={!pending}>
+        <DialogHeader>
+          <DialogTitle>Reset password lokal</DialogTitle>
+          <DialogDescription>Atur password baru untuk {user.name} ({user.email}). Semua sesi akun ini akan berakhir setelah disimpan.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4" aria-busy={pending}>
+          <Field>
+            <FieldLabel htmlFor="reset-user-password">Password baru</FieldLabel>
+            <Input id="reset-user-password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required disabled={pending} value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby="reset-user-password-hint" />
+            <FieldDescription id="reset-user-password-hint">Gunakan 12–128 karakter. Sampaikan password langsung kepada pemilik akun melalui kanal pribadi.</FieldDescription>
+          </Field>
+          {error ? <FieldError role="alert">{error}</FieldError> : null}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={pending}>Batal</Button>
+            <Button type="submit" disabled={pending}><KeyRound />{pending ? "Menyimpan…" : "Reset password"}</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function UserEditor({ user, actorId, onClose, onSaved }: { user?: UserRecord; actorId: string; onClose: () => void; onSaved: () => void }) {
@@ -147,10 +195,10 @@ function PullRegisteredUserDialog({ open, onOpenChange, managedAccounts, onPull 
         <SearchField label="Cari nama, email, atau NIM / NIP" value={search} onChange={(value) => { setSearch(value); setPage(1) }} />
         <OperationsStatus loading={resource.loading && !resource.data} error={resource.error} retry={resource.reload} />
         {resource.data ? <>
-          {available.length ? <div className="max-h-72 space-y-2 overflow-y-auto">{available.map((user) => <div key={user.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/15 p-3"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{user.name}</p><p className="mt-1 break-all text-xs text-muted-foreground">{user.email}</p></div><Badge variant="outline" tone={roleTones[user.role]}>{roleLabels[user.role]}</Badge><Button type="button" size="sm" variant="outline" onClick={() => onPull(user)}><UserRoundPlus />Tarik</Button></div>)}</div> : <EmptyRows>{resource.data.total ? "Akun pada halaman ini sudah ditarik. Coba halaman lain atau gunakan pencarian." : "Tidak ada akun terdaftar yang sesuai pencarian."}</EmptyRows>}
+          {available.length ? <div className="max-h-72 space-y-2 overflow-y-auto">{available.map((user) => <div key={user.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/15 p-3"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{user.name}</p><p className="mt-1 break-all text-xs text-muted-foreground">{user.email}</p></div><Badge variant="outline" tone={roleTones[user.role]}>{roleLabels[user.role]}</Badge><Button type="button" size="sm" variant="outline" disabled={resource.loading || Boolean(resource.error)} onClick={() => onPull(user)}><UserRoundPlus />Tarik</Button></div>)}</div> : !resource.loading && !resource.error ? <EmptyRows>{resource.data.total ? "Akun pada halaman ini sudah ditarik. Coba halaman lain atau gunakan pencarian." : "Tidak ada akun terdaftar yang sesuai pencarian."}</EmptyRows> : null}
           <PageControls page={resource.data.page} total={resource.data.total} size={resource.data.pageSize} onChange={setPage} disabled={resource.loading || Boolean(resource.error)} />
         </> : null}
-        <p className="text-xs leading-relaxed text-muted-foreground">Mode demo: pilihan akun tersimpan di browser ini saja, belum tersinkron ke perangkat lain.</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">Pilihan tersimpan di browser ini. Akun yang dikeluarkan dari daftar dapat ditarik kembali.</p>
       </div>
     </DialogContent>
   </Dialog>
@@ -158,21 +206,100 @@ function PullRegisteredUserDialog({ open, onOpenChange, managedAccounts, onPull 
 
 export function UserManagement({ actorId }: { actorId: string }) {
   const router = useRouter()
+  const { notify } = useActivityNotifications()
   const [search, setSearch] = useState(""), [role, setRole] = useState("all"), [status, setStatus] = useState("all"), [page, setPage] = useState(1)
-  const [editor, setEditor] = useState<{ user?: UserRecord } | null>(null), [pullOpen, setPullOpen] = useState(false), [pullError, setPullError] = useState("")
+  const [editor, setEditor] = useState<{ user?: UserRecord } | null>(null)
+  const [pullOpen, setPullOpen] = useState(false)
+  const [passwordTarget, setPasswordTarget] = useState<UserRecord | null>(null)
+  const [selectionError, setSelectionError] = useState("")
   const managedAccounts = useManagedAccounts()
   const directory = useManagedDirectory(managedAccounts)
   const normalizedSearch = search.trim().toLowerCase()
-  const matchingUsers = directory.items.filter((user) => (role === "all" || user.role === role) && (status === "all" || user.isActive === (status === "active")) && (!normalizedSearch || [user.name, user.email, user.identifier].some((value) => value?.toLowerCase().includes(normalizedSearch))))
+  const matchingUsers = directory.items.filter((user) =>
+    (role === "all" || user.role === role) && (status === "all" || user.isActive === (status === "active")) &&
+    (!normalizedSearch || [user.name, user.email, user.identifier].some((value) => value?.toLowerCase().includes(normalizedSearch))),
+  )
   const pageSize = 12, currentPage = Math.min(page, Math.max(1, Math.ceil(matchingUsers.length / pageSize)))
   const managedUsers = matchingUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-  return <Card className="gap-0 rounded-2xl border border-border bg-sidebar p-1.5 shadow-xs ring-0"><div className="overflow-hidden rounded-xl border border-border/60 bg-card">
-    <CardHeader className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><span className="flex size-10 items-center justify-center rounded-xl border bg-background"><UsersRound className="size-5 text-primary" /></span><div className="space-y-1"><CardTitle className="text-base">Akun yang dikelola</CardTitle><CardDescription>Hanya akun yang ditarik atau dibuat manual yang tampil di sini.</CardDescription></div></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={directory.loading || Boolean(directory.error)} onClick={() => setEditor({})}><Plus />Buat akun manual</Button><Button size="sm" disabled={directory.loading || Boolean(directory.error)} onClick={() => { setPullError(""); setPullOpen(true) }}><UserRoundPlus />Tarik pengguna</Button></div></CardHeader>
-    <CardContent className="space-y-4 p-5"><div className="flex flex-col gap-2 sm:flex-row"><SearchField label="Cari nama, email, atau NIM / NIP" value={search} onChange={(value) => { setSearch(value); setPage(1) }} /><div className="sm:w-52"><ConfigSelect label="Filter peran pengguna" value={role} onChange={(value) => { setRole(value); setPage(1) }} options={[{ value: "all", label: "Semua peran" }, ...operationalRoles.map((value) => ({ value, label: roleLabels[value] }))]} /></div><div className="sm:w-36"><ConfigSelect label="Filter status pengguna" value={status} onChange={(value) => { setStatus(value); setPage(1) }} options={[{ value: "all", label: "Semua status" }, { value: "active", label: "Aktif" }, { value: "inactive", label: "Nonaktif" }]} /></div></div>
-      {pullError ? <FieldError role="alert">{pullError}</FieldError> : null}
+  const unavailable = directory.loading || Boolean(directory.error)
+
+  function pull(user: UserRecord) {
+    setPullOpen(false)
+    if (!rememberManagedAccount(user)) {
+      setSelectionError("Pilihan tidak dapat disimpan di browser ini.")
+      return
+    }
+    setSelectionError("")
+    setSearch("")
+    setRole("all")
+    setStatus("all")
+    setPage(1)
+    notify({ title: "Pengguna masuk daftar", description: user.name, tone: "success" })
+  }
+
+  function remove(user: UserRecord) {
+    if (!updateManagedAccounts((accounts) => accounts.filter((account) => account.id !== user.id))) {
+      setSelectionError("Perubahan daftar tidak dapat disimpan di browser ini.")
+      return
+    }
+    setSelectionError("")
+    notify({ title: "Pengguna dikeluarkan dari daftar", description: `${user.name} dapat ditarik kembali kapan saja.`, tone: "success" })
+  }
+
+  return (
+    <SectionCard title="Akun yang dikelola" icon={UsersRound} meta={!unavailable ? `${directory.items.length} akun` : undefined} contentClassName="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">Daftar tarik tersimpan di browser ini.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditor({})}><Plus />Buat akun manual</Button>
+          <Button type="button" size="sm" onClick={() => { setSelectionError(""); setPullOpen(true) }}><UserRoundPlus />Tarik pengguna</Button>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <SearchField label="Cari nama, email, atau NIM / NIP" value={search} onChange={(value) => { setSearch(value); setPage(1) }} />
+        <div className="sm:w-52"><ConfigSelect label="Filter peran pengguna" value={role} onChange={(value) => { setRole(value); setPage(1) }} options={[{ value: "all", label: "Semua peran" }, ...operationalRoles.map((value) => ({ value, label: roleLabels[value] }))]} /></div>
+        <div className="sm:w-36"><ConfigSelect label="Filter status pengguna" value={status} onChange={(value) => { setStatus(value); setPage(1) }} options={[{ value: "all", label: "Semua status" }, { value: "active", label: "Aktif" }, { value: "inactive", label: "Nonaktif" }]} /></div>
+      </div>
+      {selectionError ? <FieldError role="alert">{selectionError}</FieldError> : null}
+      <OperationsStatus loading={directory.loading && !directory.items.length} error={directory.error} retry={directory.reload} />
       {directory.loading && directory.items.length ? <p className="sr-only" role="status">Memperbarui pengguna...</p> : null}
-      {!directory.loading || directory.items.length ? <>{managedUsers.length ? <div className="space-y-2">{managedUsers.map((user) => <div key={user.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/15 p-4 transition-colors duration-150 hover:border-primary/40 focus-within:border-primary/40 motion-reduce:transition-none"><div className="min-w-0 flex-1"><p className="break-words text-sm font-medium">{user.name}{user.id === actorId ? <span className="ml-2 text-xs font-normal text-muted-foreground">Anda</span> : null}</p><p className="mt-1 break-all text-xs text-muted-foreground">{user.email}</p>{user.identifier || user.unit ? <p className="mt-1 text-xs text-muted-foreground">{[user.identifier, user.unit].filter(Boolean).join(" · ")}</p> : null}</div><div className="flex flex-wrap gap-2"><Badge variant="outline" tone={roleTones[user.role]}>{roleLabels[user.role]}</Badge><Badge variant="outline" tone={user.isActive ? "success" : "neutral"}>{user.isActive ? "Aktif" : "Nonaktif"}</Badge></div><Button size="sm" variant="outline" className="border-primary/20 bg-primary/5 text-primary-action-hover hover:bg-primary/10 hover:text-primary-action-hover dark:border-primary/30 dark:bg-primary/10 dark:text-primary dark:hover:bg-primary/15 dark:hover:text-primary motion-reduce:transition-none" aria-label={`Ubah pengguna ${user.name}`} disabled={directory.loading || Boolean(directory.error)} onClick={() => { rememberManagedAccount(user); setEditor({ user }) }}><Pencil />Ubah</Button></div>)}</div> : <EmptyRows>{directory.items.length ? "Tidak ada akun yang sesuai filter." : "Belum ada akun yang dikelola. Tarik pengguna terdaftar untuk memulai."}</EmptyRows>}<PageControls page={currentPage} total={matchingUsers.length} size={pageSize} onChange={setPage} disabled={directory.loading || Boolean(directory.error)} /></> : null}
-      <p className="text-xs leading-relaxed text-muted-foreground">Manajemen hanya mengelola peran operasional. Minimal satu akun Manajemen harus tetap aktif.</p>
-    </CardContent>
-  </div>{editor ? <UserEditor key={editor.user?.id ?? "new"} user={editor.user} actorId={actorId} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); directory.reload(); router.refresh() }} /> : null}<PullRegisteredUserDialog open={pullOpen} onOpenChange={setPullOpen} managedAccounts={managedAccounts} onPull={(user) => { if (!rememberManagedAccount(user)) { setPullError("Pilihan tidak dapat disimpan di browser ini. Periksa izin penyimpanan lalu coba lagi."); setPullOpen(false); return } setSearch(user.email); setRole("all"); setStatus("all"); setPage(1); setPullOpen(false) }} /></Card>
+      {managedUsers.length ? (
+        <>
+          <div className="space-y-2">
+            {managedUsers.map((user) => (
+              <div key={user.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/15 p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm font-medium">{user.name}{user.id === actorId ? <span className="ml-2 text-xs font-normal text-muted-foreground">Anda</span> : null}</p>
+                  <p className="mt-1 break-all text-xs text-muted-foreground">{user.email}</p>
+                  {user.identifier || user.unit ? <p className="mt-1 text-xs text-muted-foreground">{[user.identifier, user.unit].filter(Boolean).join(" · ")}</p> : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" tone={roleTones[user.role]}>{roleLabels[user.role]}</Badge>
+                  <Badge variant="outline" tone={user.isActive ? "success" : "neutral"}>{user.isActive ? "Aktif" : "Nonaktif"}</Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" aria-label={`Ubah pengguna ${user.name}`} disabled={unavailable} onClick={() => setEditor({ user })}><Pencil />Ubah</Button>
+                  {user.hasLocalPassword && user.id !== actorId ? <Button type="button" size="sm" variant="ghost" aria-label={`Reset password ${user.name}`} disabled={unavailable} onClick={() => setPasswordTarget(user)}><KeyRound />Reset password</Button> : null}
+                  <Button type="button" size="sm" variant="ghost" aria-label={`Keluarkan ${user.name} dari daftar`} disabled={unavailable} onClick={() => remove(user)}><ListMinus />Keluarkan dari daftar</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <PageControls page={currentPage} total={matchingUsers.length} size={pageSize} onChange={setPage} disabled={unavailable} />
+        </>
+      ) : !unavailable ? (
+        <CollectionEmptyState icon={UsersRound} size="compact"
+          title={directory.items.length ? "Tidak ada akun yang sesuai" : "Belum ada akun di daftar"}
+          description={directory.items.length ? "Ubah pencarian atau filter untuk menemukan akun." : "Tarik pengguna terdaftar untuk mulai mengelola aksesnya."}
+        />
+      ) : null}
+      {editor ? <UserEditor key={editor.user?.id ?? "new"} user={editor.user} actorId={actorId} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); directory.reload(); router.refresh() }} /> : null}
+      {pullOpen ? <PullRegisteredUserDialog open onOpenChange={setPullOpen} managedAccounts={managedAccounts} onPull={pull} /> : null}
+      {passwordTarget ? <PasswordResetDialog user={passwordTarget} onClose={() => setPasswordTarget(null)} onSaved={() => {
+        setPasswordTarget(null)
+        directory.reload()
+        notify({ title: "Password lokal diperbarui", description: "Pengguna perlu masuk kembali dengan password baru.", tone: "success" })
+      }} /> : null}
+    </SectionCard>
+  )
 }

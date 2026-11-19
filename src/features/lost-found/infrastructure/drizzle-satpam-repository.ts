@@ -1,4 +1,6 @@
 import "server-only"
+import { getReportAttention, reportAttentionCutoffs } from "../../reports/domain/report-follow-up"
+import { reportAttentionOrder, requiresReportFollowUp } from "../../reports/infrastructure/report-follow-up"
 import { createHash, randomUUID } from "node:crypto"
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, notExists, notInArray, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
@@ -57,6 +59,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const compare = filter.sort === "terlama" ? gt : lt
     const order = filter.sort === "terlama" ? asc : desc
     const criteria = and(scope,
+      filter.followUpOnly && !filter.matching ? requiresReportFollowUp() : undefined,
       filter.matching ? notExists(this.db.select({ id: satpamInventory.id }).from(satpamInventory).where(eq(satpamInventory.sourceFoundReportId, reports.id))) : undefined,
       exactTicket ? eq(reports.ticketNumber, exactTicket) : undefined,
       filter.kind !== "semua" ? eq(reportLostFoundDetails.kind, filter.kind) : undefined,
@@ -72,7 +75,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
       filter.query ? or(ilike(reports.title, escaped(filter.query)), ilike(reports.ticketNumber, escaped(filter.query)), ilike(reports.locationText, escaped(filter.query)), ilike(reports.description, escaped(filter.query)), ilike(reportLostFoundDetails.itemName, escaped(filter.query)), ilike(reportLostFoundDetails.itemDetails, escaped(filter.query))) : undefined,
     )!
     const [rows, totals] = await Promise.all([
-      this.db.select({ report: reports, kind: reportLostFoundDetails.kind, characteristics: reportLostFoundDetails.itemDetails, reporter: sql<string>`case when ${satpamLossReports.id} is not null then coalesce(${satpamLossReports.ownerName}, 'Pelapor langsung') else ${users.name} end`, reporterContact: satpamLossReports.ownerContact, reporterEmail: sql<string | null>`case when ${satpamLossReports.id} is not null then null else ${users.email} end`, recordedBy: users.name, inventoryId: satpamInventory.id }).from(reports)
+      this.db.select({ report: reports, kind: reportLostFoundDetails.kind, characteristics: reportLostFoundDetails.itemDetails, reporter: sql<string>`case when ${satpamLossReports.id} is not null then coalesce(${satpamLossReports.ownerName}, 'Pelapor langsung') else ${users.name} end`, reporterContact: satpamLossReports.ownerContact, reporterEmail: sql<string | null>`case when ${satpamLossReports.id} is not null then null else ${users.email} end`, recordedBy: users.name, reporterCanReceiveUpdates: sql<boolean>`${users.role} = 'pelapor' and ${users.isActive}`, inventoryId: satpamInventory.id }).from(reports)
         .innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id)).innerJoin(users, eq(users.id, reports.reporterId)).leftJoin(satpamInventory, eq(satpamInventory.sourceFoundReportId, reports.id)).leftJoin(satpamLossReports, eq(satpamLossReports.id, reports.id))
         .where(and(criteria, after ? or(compare(reports.submittedAt, after.date), and(eq(reports.submittedAt, after.date), compare(reports.id, after.id))) : undefined))
         .orderBy(order(reports.submittedAt), order(reports.id)).limit(pageSize + 1),
@@ -81,9 +84,10 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const page = rows.slice(0, pageSize), ids = page.map((r) => r.report.id)
     // One batch for this page, not one attachment query per card.
     const files = ids.length ? await this.db.select({ id: reportAttachments.id, reportId: reportAttachments.reportId, mime: reportAttachments.mimeType }).from(reportAttachments).where(inArray(reportAttachments.reportId, ids)).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)) : []
-    const items = page.map(({ report: r, kind, characteristics, reporter, reporterContact, reporterEmail, recordedBy, inventoryId }): SatpamLostFoundReport => {
+    const attentionCutoffs = reportAttentionCutoffs(new Date())
+    const items = page.map(({ report: r, kind, characteristics, reporter, reporterContact, reporterEmail, recordedBy, reporterCanReceiveUpdates, inventoryId }): SatpamLostFoundReport => {
       const attached = files.filter((file) => file.reportId === r.id), photo = attached.find((file) => file.mime.startsWith("image/"))
-      return { id: r.id, firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status), inventoryId: inventoryId ?? undefined, reporterContact: reporterContact ?? undefined, reporterEmail: reporterEmail ?? undefined, recordedBy, ticket: r.ticketNumber, kind: kind as "kehilangan" | "temuan", title: r.title, reporter, location: r.locationText,
+      return { id: r.id, attention: getReportAttention(r, attentionCutoffs), firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status), inventoryId: inventoryId ?? undefined, reporterContact: reporterContact ?? undefined, reporterEmail: reporterEmail ?? undefined, recordedBy, reporterCanReceiveUpdates, ticket: r.ticketNumber, kind: kind as "kehilangan" | "temuan", title: r.title, reporter, location: r.locationText,
         eventDate: new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(new Date(`${r.incidentDate}T00:00:00+07:00`)),
         eventTime: r.incidentTime.slice(0, 5).replace(":", "."), submittedAt: dateLabel(r.submittedAt), submittedAtIso: r.submittedAt.toISOString(), updatedAt: dateLabel(r.updatedAt), status: statusLabels[r.status] as SatpamReportStatus,
         description: r.description, characteristics, attachments: attached.length, photoUrl: photo ? `/api/satpam/attachments/${photo.id}?preview=1` : undefined }
@@ -157,8 +161,7 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     return { officers: officers.filter((o) => o.isActive).map(({ id, name }) => ({ id, name })), historyOfficers: officers.map(({ id, name }) => ({ id, name })), pending, counts: { ...totals[0], readyForHandover: pending.total } }
   }
   async dashboard(): Promise<SatpamDashboardData> {
-    // Prioritaskan laporan yang belum ditindaklanjuti (status = 'baru') di posisi teratas,
-    // diurutkan dari yang terbaru (submittedAt desc), diikuti laporan aktif lainnya.
+    const attentionCutoffs = reportAttentionCutoffs(new Date())
     return this.db.transaction(async (tx) => {
       const [totals, handovers, queue, inventory] = await sequentialQueries([
         tx.select({
@@ -173,10 +176,12 @@ export class DrizzleSatpamRepository implements SatpamRepository {
           .innerJoin(lost, eq(lost.id, lostFoundMatches.lossReportId)).innerJoin(found, eq(found.id, lostFoundMatches.foundReportId))
           .leftJoin(reportHandovers, eq(reportHandovers.matchId, lostFoundMatches.id))
           .where(and(isNull(reportHandovers.id), isNull(lostFoundMatches.completedAt), eq(lost.category, "kehilangan-temuan"), eq(found.category, "kehilangan-temuan"), eq(lost.handlerRole, "satpam"), eq(found.handlerRole, "satpam"))),
-        tx.select({ id: reports.id, ticket: reports.ticketNumber, kind: reportLostFoundDetails.kind, title: reports.title, location: reports.locationText, status: reports.status, submittedAt: reports.submittedAt, firstOpenedAt: reports.firstOpenedAt, firstOpenedTracking: reports.firstOpenedTracking })
+        tx.select({ id: reports.id, ticket: reports.ticketNumber, kind: reportLostFoundDetails.kind, title: reports.title, location: reports.locationText, status: reports.status, submittedAt: reports.submittedAt, updatedAt: reports.updatedAt, firstOpenedAt: reports.firstOpenedAt, firstOpenedTracking: reports.firstOpenedTracking })
           .from(reports).innerJoin(reportLostFoundDetails, eq(reportLostFoundDetails.reportId, reports.id))
           .where(and(scope, notInArray(reports.status, ["selesai", "ditolak"])))
           .orderBy(
+            reportAttentionOrder(attentionCutoffs),
+            sql`case when ${reports.submittedAt} < ${attentionCutoffs.followUp.toISOString()} then ${reports.submittedAt} end asc`,
             sql`case when ${reports.status} = 'baru' then 0 else 1 end asc`,
             desc(reports.submittedAt),
             desc(reports.id)
@@ -188,7 +193,9 @@ export class DrizzleSatpamRepository implements SatpamRepository {
         storedItems: inventory[0].count,
         readyForHandover: handovers[0].count,
         queue: queue.map((row) => ({
-          ...row,
+          id: row.id, ticket: row.ticket, title: row.title, location: row.location,
+          firstOpenedAt: row.firstOpenedAt?.toISOString() ?? null, firstOpenedTracking: row.firstOpenedTracking,
+          attention: getReportAttention(row, attentionCutoffs),
           unopened: row.firstOpenedTracking && !row.firstOpenedAt,
           kind: row.kind as "kehilangan" | "temuan",
           status: statusLabels[row.status] as SatpamReportStatus,
@@ -360,8 +367,8 @@ export class DrizzleSatpamRepository implements SatpamRepository {
     const [row] = await this.db.select({ file: reportAttachments }).from(reportAttachments).innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(and(scope, eq(reportAttachments.id, id))).limit(1)
     return row?.file ?? null // Drafts have no submitted report and are never exposed to Satpam.
   }
-  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor) }
-  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id) }
+  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor, "satpam") }
+  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id, "satpam") }
 
   listInventory(filter: InventoryFilter) { return new DrizzleInventoryRepository(this.db).list(filter) }
   getInventoryItem(id: string) { return new DrizzleInventoryRepository(this.db).detail(id) }

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "notifications_report_update_reminder_unique" ON "notifications" USING btree ("recipient_id","report_id") WHERE "notifications"."kind" = 'report_update_reminder';

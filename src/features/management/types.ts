@@ -1,3 +1,4 @@
+import type { ReportAttention } from "@/features/reports/domain/report-follow-up"
 import type { ReportCategory, ReportHandler, ReportStatus } from "../reports/domain/report"
 import type { reportPeriods } from "../reports/domain/report-list-filters"
 import type { NotificationItem } from "../notifications/types"
@@ -8,7 +9,7 @@ export type MonitoringReportStatus = "Baru" | "Diverifikasi" | "Diproses" | "Bar
 export type ManagementReportStatus = Extract<MonitoringReportStatus, "Baru" | "Diproses" | "Selesai" | "Ditolak">
 export type MonitoringStatusFilter = MonitoringReportStatus | "semua" | "dalam-penanganan"
 export type ManagementReport = {
-  firstOpenedAt?: string | null; unopened?: boolean
+  firstOpenedAt?: string | null; unopened?: boolean; attention?: ReportAttention | null
   id: string; ticket: string; title: string; category: MonitoringReportCategory; categoryKey: ReportCategory
   status: MonitoringReportStatus; statusKey: ReportStatus; handler: "Satpam" | "Teknisi" | "Manajemen Jurusan" | "TEFA"
   reporter: string; reporterUnit: string; program?: string; service: string; context: string; location: string
@@ -17,10 +18,10 @@ export type ManagementReport = {
 }
 export type MonitoringReport = ManagementReport
 export type ManagementFilter = {
-  query: string; category: ReportCategory | "semua"; status: ReportStatus | "semua" | "dalam-penanganan" | "belum-selesai"
+  followUpOnly?: boolean; query: string; category: ReportCategory | "semua"; status: ReportStatus | "semua" | "dalam-penanganan" | "belum-selesai"
   dateBasis: "submitted" | "completed"
   period: keyof typeof reportPeriods; from: string; to: string; sort: "terbaru" | "terlama"; cursor?: string
-  serviceId?: string; lifecycle?: "active" | "closed"
+  serviceId?: string; lifecycle?: "active" | "closed"; handler?: ReportHandler
 }
 export type ManagementPage = { items: ManagementReport[]; total: number; nextCursor: string | null; categoryCounts: Record<ReportCategory | "semua", number>; handlerCounts: Record<ReportHandler, number> }
 export type ManagementDetail = {

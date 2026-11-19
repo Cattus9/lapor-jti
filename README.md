@@ -102,7 +102,13 @@ src/
 ├── db/                           # Schema, koneksi PostgreSQL, dan akses server-only
 └── lib/
     └── auth/                     # Better Auth, session server, dan pemeriksaan role
+scripts/
+├── db-migrate.ts, db-seed.ts   # Migrasi dan seed operasional
+├── fixtures/                     # Data contoh untuk seed
+└── tests/                        # Tes domain, integrasi, dan smoke test
 ```
+
+Skrip di `scripts/tests/` disertakan dalam repository agar tersedia setelah clone. Jalankan melalui perintah `npm run test:*` yang sesuai; smoke test dan tes database mengikuti persyaratan environment development masing-masing.
 
 ## Menjalankan proyek dengan Docker
 
@@ -275,7 +281,7 @@ Pengujian tambahan:
 
 ```powershell
 npm run test:reports # Unit domain/application tanpa UI/database
-npx tsx --test scripts/report-list-filters.test.ts # Validasi filter, hari WIB, dan URL pagination
+npx tsx --test scripts/tests/report-list-filters.test.ts # Validasi filter, hari WIB, dan URL pagination
 # Jalankan di container development yang memiliki volume lampiran yang sama dengan aplikasi.
 # Ganti nilai password dengan DEMO_USER_PASSWORD lokal bila diubah.
 docker compose -f compose.yaml -f compose.dev.yaml exec -T -e DEMO_USER_PASSWORD=AspirasiJTI-Dev-2026! -e REPORT_SMOKE_CONNECT_URL=http://127.0.0.1:3000 app npm run test:reports-smoke
@@ -337,7 +343,7 @@ Migrasi **0006** menambah index pengelola/tanggal selesai/UUID dan memperkuat in
 ```powershell
 npm run db:migrate # Terapkan 0006, tanpa seed/reset
 npm run test:teknisi # Unit domain/application dan regresi arsitektur
-npx tsx --test scripts/*.test.ts # Seluruh regresi statis
+npx tsx --test scripts/tests/*.test.ts # Seluruh regresi statis
 ```
 
 `npm run test:teknisi-smoke` adalah pengujian HTTP/database, bukan browser automation. Jalankan hanya pada development loopback dengan konfigurasi database migration, `DEMO_USER_PASSWORD`, origin yang sesuai dan volume lampiran yang sama dengan aplikasi. Jika pengujian berada di container aplikasi, `REPORT_SMOKE_CONNECT_URL=http://127.0.0.1:3000` mengarah ke port internal; `BETTER_AUTH_URL` tetap origin pengguna, misalnya port host 3001. Kirim kredensial migration hanya ke proses tes, bukan ubah kredensial runtime aplikasi. Tes membuat akun/tiket/file sementara dan membersihkan hanya ID miliknya dalam `finally`; tidak mengubah laporan pengguna. Cakupannya: akses lintas role, draft/kategori/lampiran, fanout notifikasi, tiket multi-objek, konflik bersamaan, lifecycle dan catatan, pagination timestamp sama, periode kirim/selesai, penerima notifikasi dan akun nonaktif. Validasi visual/interaksi tetap dilakukan manual oleh pengguna.

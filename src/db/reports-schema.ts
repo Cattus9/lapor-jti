@@ -73,4 +73,9 @@ export const notifications = pgTable("notifications", {
   id: uuid("id").defaultRandom().primaryKey(), recipientId: uuid("recipient_id").notNull().references(() => users.id, { onDelete: "restrict" }),
   reportId: uuid("report_id").notNull().references(() => reports.id, { onDelete: "cascade" }), kind: text("kind").notNull(), title: text("title").notNull(), description: text("description").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(), readAt: timestamp("read_at", { withTimezone: true, precision: 3 }),
-}, (t) => [index("notifications_recipient_date_idx").on(t.recipientId, t.createdAt.desc(), t.id.desc()), index("notifications_unread_idx").on(t.recipientId).where(sql`${t.readAt} is null`), index("notifications_report_idx").on(t.reportId)])
+}, (t) => [
+  index("notifications_recipient_date_idx").on(t.recipientId, t.createdAt.desc(), t.id.desc()),
+  index("notifications_unread_idx").on(t.recipientId).where(sql`${t.readAt} is null`),
+  index("notifications_report_idx").on(t.reportId),
+  uniqueIndex("notifications_report_update_reminder_unique").on(t.recipientId, t.reportId).where(sql`${t.kind} = 'report_update_reminder'`),
+])

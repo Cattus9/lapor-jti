@@ -1,9 +1,17 @@
 import { getFoundNoticeService } from "@/features/found-notices/server"
 import { apiResult, limitedBody, reporterRequest } from "@/features/reports/infrastructure/http"
 import { ReportError } from "@/features/reports/domain/report"
+import type { FoundNoticeState } from "@/features/found-notices/domain/found-notice"
 
 export async function GET(request: Request) {
-  return apiResult(async () => getFoundNoticeService().list(await reporterRequest(request), { cursor: new URL(request.url).searchParams.get("cursor") ?? undefined }))
+  return apiResult(async () => {
+    const params = new URL(request.url).searchParams
+    return getFoundNoticeService().list(await reporterRequest(request), {
+      cursor: params.get("cursor") || undefined,
+      search: params.get("search") || undefined,
+      state: (params.get("state") || undefined) as FoundNoticeState | undefined,
+    })
+  })
 }
 export async function PATCH(request: Request) {
   return apiResult(async () => {

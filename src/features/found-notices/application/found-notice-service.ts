@@ -1,7 +1,7 @@
 import { requireReporter, ReportError, type ReportActor, type StoredAttachment } from "@/features/reports/domain/report"
-import { parseFoundNoticeCursor, parseFoundNoticeRef, type FoundNoticeDetail, type FoundNoticePage, type FoundNoticeRef } from "../domain/found-notice"
+import { foundNoticeStates, parseFoundNoticeCursor, parseFoundNoticeRef, type FoundNoticeDetail, type FoundNoticePage, type FoundNoticeRef, type FoundNoticeState } from "../domain/found-notice"
 
-export type FoundNoticeQuery = { cursor?: string; activeOnly?: boolean; limit?: number }
+export type FoundNoticeQuery = { cursor?: string; activeOnly?: boolean; limit?: number; search?: string; state?: FoundNoticeState }
 export interface FoundNoticeRepository {
   list(userId: string, query: FoundNoticeQuery): Promise<FoundNoticePage>
   detail(userId: string, ref: FoundNoticeRef): Promise<FoundNoticeDetail | null>
@@ -14,6 +14,8 @@ export class FoundNoticeService {
   list(actor: ReportActor, query: FoundNoticeQuery = {}) {
     requireReporter(actor)
     parseFoundNoticeCursor(query.cursor)
+    if (query.search !== undefined && (typeof query.search !== "string" || query.search.length > 100)) throw new ReportError("Pencarian terlalu panjang.")
+    if (query.state !== undefined && !Object.hasOwn(foundNoticeStates, query.state)) throw new ReportError("Status temuan tidak valid.")
     if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 20)) throw new ReportError("Batas informasi temuan tidak valid.")
     return this.repository.list(actor.id, query)
   }

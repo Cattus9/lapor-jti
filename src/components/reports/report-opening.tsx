@@ -3,9 +3,22 @@
 import { useEffect, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import type { ReportAttention } from "@/features/reports/domain/report-follow-up"
 
-export function UnopenedReportBadge({ unseen }: { unseen?: boolean }) {
-  return unseen ? <Badge variant="outline" tone="primary"><span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />Belum dibuka</Badge> : null
+const attentionBadges = {
+  review: { label: "Belum ditinjau", tone: "primary" },
+  update: { label: "Perlu pembaruan", tone: "warning" },
+  followUp: { label: "Perlu tindak lanjut", tone: "destructive" },
+} as const
+
+export function UnopenedReportBadge({ unseen, attention }: { unseen?: boolean; attention?: ReportAttention | null }) {
+  if (!unseen && !attention) return null
+  const badge = attention ? attentionBadges[attention] : { label: "Belum dibuka", tone: "primary" as const }
+  return <Badge variant="outline" tone={badge.tone}>
+    {unseen ? <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" /> : null}
+    {badge.label}
+    {unseen && attention && attention !== "review" ? <span className="sr-only">, belum dibuka</span> : null}
+  </Badge>
 }
 
 // Mount only after an authorized detail has loaded, never on list or monitoring reads.

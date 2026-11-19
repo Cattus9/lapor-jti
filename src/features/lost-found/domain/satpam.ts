@@ -75,7 +75,7 @@ export function parseSatpamFilter(v: Record<string, unknown> = {}): SatpamListFi
   if (!["semua", "kehilangan", "temuan"].includes(String(kind)) || (status !== "semua" && status !== "aktif" && !reportStatuses.includes(status as ReportStatus))) throw new ReportError("Filter laporan tidak valid.")
   if (typeof period !== "string" || !Object.hasOwn(satpamReportPeriods, period)) throw new ReportError("Periode filter tidak valid.")
   if (typeof sort !== "string" || !Object.hasOwn(satpamReportSorts, sort)) throw new ReportError("Urutan laporan tidak valid.")
-  return { kind: kind as SatpamListFilter["kind"], status: status as SatpamListFilter["status"], period: period as SatpamListFilter["period"], sort: sort as SatpamListFilter["sort"], query: text(v.q, "Pencarian", 200), matching: v.matching === "1", cursor: v.cursor === undefined ? undefined : text(v.cursor, "Pagination", 160, true) }
+  return { kind: kind as SatpamListFilter["kind"], status: status as SatpamListFilter["status"], period: period as SatpamListFilter["period"], sort: sort as SatpamListFilter["sort"], ...(v.followUp === "1" ? { followUpOnly: true } : {}), query: text(v.q, "Pencarian", 200), matching: v.matching === "1", cursor: v.cursor === undefined ? undefined : text(v.cursor, "Pagination", 160, true) }
 }
 export function parseHistoryFilter(v: Record<string, unknown> = {}): SatpamHistoryFilter {
   const date = (value: unknown) => {

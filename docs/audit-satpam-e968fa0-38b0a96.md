@@ -224,7 +224,7 @@ Perubahan tes yang terkomit menambah dukungan filter aktif, foundLocation, valid
 | npm run lint | Lolos |
 | npm run typecheck | Lolos |
 | npm run build | Lolos |
-| Seluruh file scripts/*.test.ts dan *.test.tsx, kecuali file integration *-db.test.* | 191 lolos, 0 gagal, 0 skip |
+| Seluruh file scripts/tests/*.test.ts dan *.test.tsx, kecuali file integration *-db.test.* | 191 lolos, 0 gagal, 0 skip |
 | Subset awal 51 tes terkait | Lolos; termasuk dalam 191, jangan dijumlahkan menjadi 242 |
 | npm run db:check | Lolos; hanya bukti koneksi/tabel users, bukan bukti seluruh domain benar |
 | Hak role aplikasi pada tabel baru | SELECT dan INSERT diizinkan |

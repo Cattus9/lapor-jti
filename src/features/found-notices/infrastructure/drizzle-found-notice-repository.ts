@@ -54,13 +54,17 @@ export class DrizzleFoundNoticeRepository implements FoundNoticeRepository {
   async list(userId: string, query: FoundNoticeQuery = {}) {
     const feed = this.feed(), after = parseFoundNoticeCursor(query.cursor), limit = query.limit ?? 20
     const active = query.activeOnly ? sql`${feed.state} in ('reported', 'stored')` : undefined
+    const status = query.state ? eq(feed.state, query.state) : undefined
+    const term = query.search?.trim()
+    const pattern = term ? `%${term.replace(/[\\%_]/g, "\\$&")}%` : undefined
+    const search = pattern ? sql`(${feed.itemName} ilike ${pattern} escape ${"\\"} or ${feed.foundLocation} ilike ${pattern} escape ${"\\"})` : undefined
     const before = after ? or(lt(feed.publishedAt, after.publishedAt), and(eq(feed.publishedAt, after.publishedAt), lt(feed.id, after.id)), and(eq(feed.publishedAt, after.publishedAt), eq(feed.id, after.id), lt(feed.source, after.source))) : undefined
     const [rows, [count]] = await Promise.all([
       this.db.with(feed).select({ source: feed.source, id: feed.id, itemName: feed.itemName, foundLocation: feed.foundLocation, storageLocation: feed.storageLocation, publishedAt: feed.publishedAt, state: feed.state, hasPhoto: feed.hasPhoto, readAt: foundNoticeReads.readAt })
-        .from(feed).leftJoin(foundNoticeReads, this.receipt(userId, feed)).where(and(active, before))
+        .from(feed).leftJoin(foundNoticeReads, this.receipt(userId, feed)).where(and(active, status, search, before))
         .orderBy(desc(feed.publishedAt), desc(feed.id), desc(feed.source)).limit(limit + 1),
       this.db.with(feed).select({ total: sql<number>`count(*)::integer`, unread: sql<number>`count(*) filter (where ${foundNoticeReads.id} is null)::integer` })
-        .from(feed).leftJoin(foundNoticeReads, this.receipt(userId, feed)).where(active),
+        .from(feed).leftJoin(foundNoticeReads, this.receipt(userId, feed)).where(and(active, status, search)),
     ])
     const items = rows.slice(0, limit), last = items.at(-1)
     return { items: items.map(presentFoundNotice), total: count.total, unread: count.unread,

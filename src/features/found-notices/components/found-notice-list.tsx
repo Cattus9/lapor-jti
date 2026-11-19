@@ -13,6 +13,7 @@ import { CollectionEmptyState } from "@/components/reports/collection-empty-stat
 import { ReportDetailTable } from "@/components/reports/report-detail-section"
 import { cn } from "cn"
 import { foundNoticeStates, parseFoundNoticeRef, type FoundNotice, type FoundNoticeDetail, type FoundNoticePage, type FoundNoticeRef } from "../domain/found-notice"
+import { FoundNoticeFilters, type FoundNoticeCriteria } from "./found-notice-filters"
 
 const time = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })
 const key = (notice: FoundNoticeRef) => `${notice.source}:${notice.id}`
@@ -24,12 +25,18 @@ function FoundPhoto({ notice, large = false, detail = false, thumbnail = false }
   </span>
 }
 
-export function FoundNoticeList({ initialPage, preview = false }: { initialPage: FoundNoticePage; preview?: boolean }) {
-  const [page, setPage] = useState(initialPage)
+function startListing(initialPage: FoundNoticePage) {
+  return { initialPage, page: initialPage, loadingMore: false, error: "" }
+}
+
+export function FoundNoticeList({ initialPage, preview = false, filters }: { initialPage: FoundNoticePage; preview?: boolean; filters?: FoundNoticeCriteria }) {
+  const [listing, setListing] = useState(() => startListing(initialPage))
+  const activeListing = listing.initialPage === initialPage ? listing : startListing(initialPage)
+  if (activeListing !== listing) setListing(activeListing)
+  const { page, loadingMore } = activeListing
   const [selected, setSelected] = useState<FoundNoticeRef | null>(null)
   const [detail, setDetail] = useState<FoundNoticeDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState("")
   const [view, setView] = useState<"list" | "photo">("list")
   const [photoIndex, setPhotoIndex] = useState(0)
@@ -52,9 +59,17 @@ export function FoundNoticeList({ initialPage, preview = false }: { initialPage:
         throw new Error(`Informasi terbuka, tetapi tanda sudah dibaca belum tersimpan.${reason}`)
       }
       if (version !== requestVersion.current) return
-      setPage(current => {
-        const wasUnread = current.items.some(item => key(item) === key(notice) && !item.read)
-        return { ...current, unread: Math.max(0, current.unread - Number(wasUnread)), items: current.items.map(item => key(item) === key(notice) ? { ...item, read: true } : item) }
+      setListing(current => {
+        const wasUnread = current.page.items.some(item => key(item) === key(notice) && !item.read)
+        if (!wasUnread) return current
+        return {
+          ...current,
+          page: {
+            ...current.page,
+            unread: Math.max(0, current.page.unread - 1),
+            items: current.page.items.map(item => key(item) === key(notice) ? { ...item, read: true } : item),
+          },
+        }
       })
     } catch (cause) { if (version === requestVersion.current) setError(cause instanceof Error ? cause.message : "Koneksi bermasalah.") }
     finally { if (version === requestVersion.current) setLoadingDetail(false) }
@@ -62,20 +77,30 @@ export function FoundNoticeList({ initialPage, preview = false }: { initialPage:
 
   async function loadMore() {
     if (!page.nextCursor || loadingMore) return
-    setLoadingMore(true); setError("")
+    setListing(current => ({ ...current, loadingMore: true, error: "" }))
     try {
-      const response = await fetch(`/api/pelapor/found-notices?cursor=${encodeURIComponent(page.nextCursor)}`, { cache: "no-store" })
+      const params = new URLSearchParams({ cursor: page.nextCursor })
+      if (filters?.search) params.set("search", filters.search)
+      if (filters?.state) params.set("state", filters.state)
+      const response = await fetch(`/api/pelapor/found-notices?${params}`, { cache: "no-store" })
       const data = await response.json() as FoundNoticePage & { error?: string }
       if (!response.ok) throw new Error(data.error || "Informasi temuan belum berhasil dimuat.")
-      setPage(current => ({ ...data, items: [...new Map([...current.items, ...data.items].map(item => [key(item), item])).values()] }))
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Koneksi bermasalah.") }
-    finally { setLoadingMore(false) }
+      setListing(current => {
+        if (current.initialPage !== initialPage) return current
+        const items = [...new Map([...current.page.items, ...data.items].map(item => [key(item), item])).values()]
+        return { ...current, page: { ...data, items }, loadingMore: false }
+      })
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Koneksi bermasalah."
+      setListing(current => current.initialPage === initialPage ? { ...current, loadingMore: false, error: message } : current)
+    }
   }
 
   return <>
     <SectionCard title="Informasi barang temuan" icon={PackageSearch} className={preview ? "xl:h-full" : undefined} contentClassName={preview ? "xl:flex xl:flex-1 xl:flex-col" : undefined} meta={preview
       ? <Button variant="ghost" size="xs" className="-my-1.5" nativeButton={false} render={<Link href="/pelapor/berita" />}>Lihat semua<ArrowRight className="size-3.5" /></Button>
       : `${page.unread} belum dibaca`}>
+      {!preview && filters ? <FoundNoticeFilters filters={filters} /> : null}
       {preview && page.items.length > 0 ? <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">Temuan terbaru</p>
         <div className="flex gap-1 rounded-lg border border-border bg-muted/50 p-1" role="group" aria-label="Tampilan barang temuan">
@@ -83,7 +108,7 @@ export function FoundNoticeList({ initialPage, preview = false }: { initialPage:
           <Button type="button" size="sm" variant={view === "photo" ? "secondary" : "ghost"} className="h-7 px-2" aria-pressed={view === "photo"} onClick={() => setView("photo")}><ImageIcon />Foto</Button>
         </div>
       </div> : null}
-      {error && !selected ? <FieldError className="mb-3">{error}</FieldError> : null}
+      {activeListing.error ? <FieldError className="mb-3">{activeListing.error}</FieldError> : null}
       {preview && view === "photo" && page.items.length ? <div className="flex flex-1 flex-col gap-3">
         {(() => { const notice = page.items[Math.min(photoIndex, page.items.length - 1)]; return <Button key={key(notice)} type="button" variant="outline" onClick={() => void open(notice)} className="h-auto w-full flex-col items-stretch gap-3 whitespace-normal bg-report-surface p-3 text-left shadow-none">
           <FoundPhoto key={key(notice)} notice={notice} large />
@@ -106,7 +131,7 @@ export function FoundNoticeList({ initialPage, preview = false }: { initialPage:
           </span>
           <ArrowRight className={cn("size-4 shrink-0 text-muted-foreground", preview && "mt-1")} aria-hidden="true" />
         </Button>)}
-        {!page.items.length ? <CollectionEmptyState icon={PackageSearch} title={preview ? "Belum ada informasi temuan aktif" : "Belum ada informasi temuan"} description="Informasi muncul ketika mahasiswa melaporkan temuan atau Satpam menerima barang di pos." size="compact" /> : null}
+        {!page.items.length ? <CollectionEmptyState icon={PackageSearch} title={filters?.search || filters?.state ? "Tidak ada temuan yang sesuai" : preview ? "Belum ada informasi temuan aktif" : "Belum ada informasi temuan"} description={filters?.search || filters?.state ? "Coba ubah kata kunci atau status barang." : "Informasi muncul ketika mahasiswa melaporkan temuan atau Satpam menerima barang di pos."} size="compact" /> : null}
       </div>}
       {!preview && page.nextCursor ? <Button type="button" variant="outline" className="mt-4 w-full" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Memuat…" : "Muat temuan berikutnya"}</Button> : null}
     </SectionCard>

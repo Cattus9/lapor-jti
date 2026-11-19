@@ -36,13 +36,13 @@ export function FacilityMappingFields({ catalog, location, onLocationChange, oth
       <Field><FieldLabel htmlFor="facility-area"><Layers3 className="size-4 text-muted-foreground" />Area / lantai</FieldLabel>
         <Select disabled={disabled} value={activeArea} items={catalog.areas.map((row) => ({ value: row.id, label: row.name }))} onValueChange={(value) => changeArea(value ?? "")}>
           <SelectTrigger id="facility-area" className="!h-11 w-full bg-field-surface dark:bg-field-surface"><SelectValue placeholder="Pilih area atau lantai" /></SelectTrigger>
-          <SelectContent>{catalog.areas.map((row) => <SelectItem key={row.id} value={row.id}>{row.name}</SelectItem>)}</SelectContent>
+          <SelectContent itemSize="form">{catalog.areas.map((row) => <SelectItem key={row.id} value={row.id}>{row.name}</SelectItem>)}</SelectContent>
         </Select><FieldDescription>Area luar tidak memerlukan lantai.</FieldDescription>
       </Field>
       <Field><FieldLabel htmlFor="facility-location"><MapPin className="size-4 text-muted-foreground" />Lokasi fasilitas</FieldLabel>
         <Select disabled={disabled} value={location} items={locationOptions.map((name) => ({ value: name, label: name }))} onValueChange={(value) => changeLocation(value ?? "")}>
           <SelectTrigger id="facility-location" className="!h-11 w-full bg-field-surface dark:bg-field-surface"><SelectValue placeholder={activeArea ? "Pilih ruang atau lokasi" : "Pilih area dahulu atau Lainnya"} /></SelectTrigger>
-          <SelectContent>{locationOptions.map((name) => <SelectItem key={name} value={name} disabled={unavailableLocation && name === location}>{name}</SelectItem>)}</SelectContent>
+          <SelectContent itemSize="form">{locationOptions.map((name) => <SelectItem key={name} value={name} disabled={unavailableLocation && name === location}>{name}</SelectItem>)}</SelectContent>
         </Select><FieldDescription>{activeArea ? `${rooms.length} lokasi tersedia. Gunakan Lainnya jika belum terdaftar.` : "Lainnya tetap tersedia untuk lokasi yang belum terdaftar."}</FieldDescription>
       </Field>
     </div>

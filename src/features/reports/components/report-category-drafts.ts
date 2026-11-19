@@ -5,7 +5,7 @@ import { hasReportDraftContent } from "../domain/report-draft-content"
 
 export type CategoryDraft = {
   id: string; revision: number; payload: ReportPayload; retained: PublicAttachment[]; files: File[]
-  status: "idle" | "saving" | "saved" | "error"; error: string; notice: number; savedKey?: string
+  status: "idle" | "saving" | "saved" | "error"; error: string; savedKey?: string
 }
 type Writer = (draft: CategoryDraft) => Promise<DraftView | { clearedDraftId: string }>
 const key = (draft: Pick<CategoryDraft, "payload" | "retained" | "files">) => JSON.stringify([
@@ -20,7 +20,6 @@ export function hasDraftContent(draft: Pick<CategoryDraft, "payload" | "retained
 export class ReportCategoryDrafts {
   private drafts = new Map<ReportFormCategory, CategoryDraft>()
   private requests = new Map<ReportFormCategory, Promise<CategoryDraft>>()
-  private notices = new Map<ReportFormCategory, number>()
   private listeners = new Set<() => void>()
   private version = 0
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
@@ -28,7 +27,7 @@ export class ReportCategoryDrafts {
   private changed() { this.version++; this.listeners.forEach((listener) => listener()) }
   constructor(saved: DraftView[], initial?: DraftView) {
     for (const draft of [...saved, ...(initial ? [initial] : [])]) {
-      const session: CategoryDraft = { id: draft.id, revision: draft.revision, payload: draft.payload, retained: draft.attachments, files: [], status: "saved", error: "", notice: 0 }
+      const session: CategoryDraft = { id: draft.id, revision: draft.revision, payload: draft.payload, retained: draft.attachments, files: [], status: "saved", error: "" }
       if (!hasDraftContent(session)) session.status = "idle"
       session.savedKey = key(session)
       this.drafts.set(getReportFormCategory(draft.payload), session)
@@ -38,7 +37,7 @@ export class ReportCategoryDrafts {
   ensure(category: ReportFormCategory) {
     let draft = this.get(category)
     if (!draft) {
-      draft = { id: crypto.randomUUID(), revision: 0, payload: payloadForFormCategory({ ...emptyReportPayload, incidentTimeMode: "automatic" }, category), retained: [], files: [], status: "idle", error: "", notice: 0 }
+      draft = { id: crypto.randomUUID(), revision: 0, payload: payloadForFormCategory({ ...emptyReportPayload, incidentTimeMode: "automatic" }, category), retained: [], files: [], status: "idle", error: "" }
       this.drafts.set(category, draft)
     }
     return draft
@@ -50,29 +49,37 @@ export class ReportCategoryDrafts {
     this.drafts.set(category, draft)
     return draft
   }
-  save(category: ReportFormCategory, writer: Writer): Promise<CategoryDraft> {
+  discard(category: ReportFormCategory, writer: Writer): Promise<CategoryDraft> {
+    return this.save(category, writer, true)
+  }
+  save(category: ReportFormCategory, writer: Writer, discard = false): Promise<CategoryDraft> {
     const running = this.requests.get(category)
+    if (running && discard) return Promise.reject(new Error("Tunggu sampai penyimpanan selesai."))
     if (running) return running
     const draft = this.ensure(category)
-    const hasContent = hasDraftContent(draft)
-    if ((!draft.savedKey && !hasContent) || (hasContent && draft.savedKey === key(draft))) return Promise.resolve(draft)
+    const candidate = discard ? {
+      ...draft,
+      payload: payloadForFormCategory({ ...emptyReportPayload, incidentTimeMode: "automatic" }, category),
+      retained: [], files: [],
+    } : draft
+    const hasContent = hasDraftContent(candidate)
+    if (!discard && ((!draft.savedKey && !hasContent) || (hasContent && draft.savedKey === key(draft)))) return Promise.resolve(draft)
     const saving = { ...draft, status: "saving" as const, error: "" }
     this.drafts.set(category, saving)
     this.changed()
-    const request = Promise.resolve().then(() => writer(saving)).then((saved) => {
+    const request = Promise.resolve().then(() => writer(candidate)).then((saved) => {
       if ("clearedDraftId" in saved) {
         if (saved.clearedDraftId !== draft.id || hasContent) throw new Error("Konfirmasi pengosongan draft tidak valid. Coba kembali.")
         this.drafts.delete(category)
         return this.ensure(category)
       }
       if (!hasContent || saved.id !== draft.id || getReportFormCategory(saved.payload) !== category || !Number.isSafeInteger(saved.revision) || saved.revision <= draft.revision || !hasReportDraftContent(saved.payload, saved.attachments.length)) throw new Error("Konfirmasi draft tidak valid. Isian tetap tersedia.")
-      const notice = (this.notices.get(category) ?? 0) + 1
-      this.notices.set(category, notice)
-      const result: CategoryDraft = { ...draft, revision: saved.revision, retained: saved.attachments, files: [], status: "saved", error: "", notice }
+      const result: CategoryDraft = { ...draft, revision: saved.revision, retained: saved.attachments, files: [], status: "saved", error: "" }
       result.savedKey = key(result)
       this.drafts.set(category, result)
       return result
     }).catch((error: unknown) => {
+      if (discard) { this.drafts.set(category, draft); throw error }
       const failed: CategoryDraft = { ...draft, status: "error", error: error instanceof Error ? error.message : "Koneksi bermasalah. Coba simpan kembali." }
       this.drafts.set(category, failed)
       return failed

@@ -7,8 +7,8 @@ export function managementCsvCell(value: string) {
 }
 export function managementCsv(reports: ManagementReport[]) {
   const rows = [
-    ["Nomor tiket", "Judul laporan", "Kategori", "Layanan atau konteks", "Pelapor", "Lokasi atau kanal", "Status", "Waktu laporan (WIB)"],
-    ...reports.map((r) => [r.ticket, r.title, r.category, r.service, r.reporter, r.location, r.status, r.submittedAt]),
+    ["Nomor tiket", "Judul laporan", "Kategori", "Layanan atau konteks", "Pelapor", "Lokasi atau kanal", "Status", "Waktu laporan (WIB)", "Pengelola"],
+    ...reports.map((r) => [r.ticket, r.title, r.category, r.service, r.reporter, r.location, r.status, r.submittedAt, r.handler]),
   ]
   return `\uFEFF${rows.map((row) => row.map(managementCsvCell).join(",")).join("\r\n")}`
 }

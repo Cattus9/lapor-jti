@@ -32,7 +32,7 @@ export function ServiceReportFields({ services, service, program, disabled, audi
           <SelectTrigger id="service" aria-label={serviceLabel} aria-describedby="service-description" className="h-11 w-full bg-field-surface dark:bg-field-surface">
             <SelectValue placeholder={audience === "tefa" ? "Pilih layanan JTI" : "Pilih layanan"} />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent itemSize="form">
             {audience ? services.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>) : groupReportServices(services).map((group) => <SelectGroup key={group.id}>
               <SelectLabel>{group.label}</SelectLabel>
               {group.options.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
@@ -45,7 +45,7 @@ export function ServiceReportFields({ services, service, program, disabled, audi
         <FieldLabel htmlFor="program">Unit atau program studi</FieldLabel>
         <Select value={program} items={[...new Set([...studyPrograms, ...(program ? [program] : [])])].map((value) => ({ value, label: value }))} disabled={disabled} required onValueChange={(value) => onProgramChange(value ?? "")}>
           <SelectTrigger id="program" aria-label="Unit atau program studi" className="h-11 w-full bg-field-surface dark:bg-field-surface"><SelectValue placeholder="Pilih unit terkait" /></SelectTrigger>
-          <SelectContent>{studyPrograms.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent>
+          <SelectContent itemSize="form">{studyPrograms.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent>
         </Select>
       </Field> : null}
     </div>

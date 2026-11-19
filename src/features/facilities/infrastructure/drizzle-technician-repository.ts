@@ -1,4 +1,6 @@
 import "server-only"
+import { getReportAttention, reportAttentionCutoffs } from "../../reports/domain/report-follow-up"
+import { reportAttentionOrder, requiresReportFollowUp } from "../../reports/infrastructure/report-follow-up"
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { users, reports, locations, facilityObjects, reportFacilityObjects, reportAttachments, reportStatusHistory, notifications } from "@/db/schema"
@@ -29,7 +31,7 @@ type Row = { report: typeof reports.$inferSelect; reporter: string }
 export class DrizzleTechnicianRepository implements TechnicianRepository {
   constructor(private readonly db: Database = getDb()) {}
 
-  private async hydrate(rows: Row[]): Promise<TechnicianFacilityReport[]> {
+  private async hydrate(rows: Row[], attentionCutoffs = reportAttentionCutoffs(new Date())): Promise<TechnicianFacilityReport[]> {
     if (!rows.length) return []
     const ids = rows.map((row) => row.report.id)
     // Bounded page batches, never one query per report or a join that multiplies report rows.
@@ -42,7 +44,7 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
     for (const object of objects) names.set(object.reportId, [...(names.get(object.reportId) ?? []), object.objectText])
     for (const file of files) if (file.reportId) counts.set(file.reportId, (counts.get(file.reportId) ?? 0) + 1)
     return rows.map(({ report: r, reporter }) => ({
-      firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status),
+      attention: getReportAttention(r, attentionCutoffs), firstOpenedAt: r.firstOpenedAt?.toISOString() ?? null, unopened: r.firstOpenedTracking && !r.firstOpenedAt && !["selesai", "ditolak"].includes(r.status),
       id: r.id, ticket: r.ticketNumber, title: r.title, facility: (names.get(r.id) ?? []).join(", "), facilities: names.get(r.id) ?? [],
       locationId: r.locationId, room: r.locationText, location: r.locationText, reporter, description: r.description,
       status: statusLabels[r.status] as TechnicianReportStatus, submittedAt: dateLabel(r.submittedAt), updatedAt: dateLabel(r.updatedAt),
@@ -60,6 +62,7 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
       history ? eq(reports.status, rejectedHistory ? "ditolak" : "selesai") : filter.status !== "semua" ? eq(reports.status, filter.status) : undefined,
       history && !rejectedHistory ? isNotNull(reports.completedAt) : undefined,
       filter.activeOnly ? active : undefined,
+      !history && filter.followUpOnly ? requiresReportFollowUp() : undefined,
       filter.classifiedOnly ? and(isNotNull(reports.locationId), sql`exists (select 1 from ${reportFacilityObjects} where ${reportFacilityObjects.reportId} = ${reports.id} and ${reportFacilityObjects.objectId} is not null)`) : undefined,
       filter.locationId ? eq(reports.locationId, filter.locationId) : undefined,
       bounds.from ? gte(date, bounds.from) : undefined, bounds.until ? lt(date, bounds.until) : undefined,
@@ -104,6 +107,7 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
     return rooms.map((room) => ({ ...room, location: room.room, totalReports: room.activeReports, facilities: objects.filter((object) => object.locationId === room.id).map((object) => ({ facility: object.facility, activeReports: object.count })) }))
   }
   async dashboard() {
+    const attentionCutoffs = reportAttentionCutoffs(new Date())
     const today = reportDateBounds({ ...defaultReportFilters, period: "hari-ini" })
     const [totals, priorities, rows] = await Promise.all([
       this.db.select({ newReports: sql<number>`count(*) filter (where ${reports.status} = 'baru')::integer`,
@@ -113,9 +117,10 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
         unclassifiedReports: sql<number>`count(*) filter (where ${reports.status} not in ('selesai', 'ditolak') and (${reports.locationId} is null or not exists (select 1 from ${reportFacilityObjects} where ${reportFacilityObjects.reportId} = ${reports.id} and ${reportFacilityObjects.objectId} is not null)))::integer`,
       }).from(reports).where(scope),
       this.priorities(),
-      this.db.select({ report: reports, reporter: users.name }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(scope, active)).orderBy(desc(reports.submittedAt), desc(reports.id)).limit(5),
+      this.db.select({ report: reports, reporter: users.name }).from(reports).innerJoin(users, eq(users.id, reports.reporterId)).where(and(scope, active))
+        .orderBy(reportAttentionOrder(attentionCutoffs), sql`case when ${reports.submittedAt} < ${attentionCutoffs.followUp.toISOString()} then ${reports.submittedAt} end asc`, desc(reports.submittedAt), desc(reports.id)).limit(5),
     ])
-    return { ...totals[0], inProgress: totals[0].verifiedReports + totals[0].processingReports, priorityRoom: priorities[0]?.room ?? "Tidak ada", priorities, queue: await this.hydrate(rows), updatedAt: dateLabel(new Date()) }
+    return { ...totals[0], inProgress: totals[0].verifiedReports + totals[0].processingReports, priorityRoom: priorities[0]?.room ?? "Tidak ada", priorities, queue: await this.hydrate(rows, attentionCutoffs), updatedAt: dateLabel(new Date()) }
   }
   async execute(actor: ReportActor, command: TechnicianCommand) {
     await this.db.transaction(async (tx) => {
@@ -136,6 +141,6 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
     const [row] = await this.db.select({ file: reportAttachments }).from(reportAttachments).innerJoin(reports, eq(reports.id, reportAttachments.reportId)).where(and(scope, eq(reportAttachments.id, id))).limit(1)
     return row?.file ?? null
   }
-  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor) }
-  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id) }
+  notifications(actorId: string, cursor?: string) { return new DrizzleReportRepository(this.db).notifications(actorId, cursor, "teknisi") }
+  markRead(actorId: string, id?: string) { return new DrizzleReportRepository(this.db).markRead(actorId, id, "teknisi") }
 }

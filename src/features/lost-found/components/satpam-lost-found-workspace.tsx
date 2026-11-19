@@ -6,6 +6,7 @@ import Image from "next/image"
 import { CollectionEmptyState } from "@/components/reports/collection-empty-state"
 import { OperationalReportDialog } from "@/components/reports/operational-report-dialog"
 import { ReportAttachmentsEmptyState } from "@/components/reports/report-attachments-empty-state"
+import { ReportProgressAction } from "@/components/reports/report-progress-action"
 import { ReportOpeningTracker, UnopenedReportBadge } from "@/components/reports/report-opening"
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -247,6 +248,7 @@ function ReportDetailDialog({
       action={<fieldset disabled={detail.loading || Boolean(detail.error)} className="space-y-3">
         <StatusActionPanel report={report} onStatusChange={onStatusChange} onOpenMatching={() => { onOpenChange(false); onOpenMatching() }} onOpenHandover={onOpenHandover ? () => { onOpenChange(false); onOpenHandover() } : undefined} />
         <SatpamExceptionAction report={report} onSaved={onMarked} />
+        {detail.data && !["Selesai", "Ditolak"].includes(report.status) ? <ReportProgressAction id={report.id} handler="satpam" found={isFound} localOnly={!report.reporterCanReceiveUpdates} onSaved={onMarked} /> : null}
         {isFound && !report.inventoryId && ["Baru", "Diproses"].includes(report.status) ? <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Barang sudah diserahkan ke pos?</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Catat langsung sebagai barang titipan di Inventaris.</p></div><Button type="button" variant="soft" aria-haspopup="dialog" onClick={() => setReceiveOpen(true)}><PackagePlus aria-hidden="true" />Catat barang di pos</Button></div> : null}
       </fieldset>}
     >
@@ -295,13 +297,14 @@ function ReportList({ kind }: { kind: SatpamReportKind }) {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<"aktif" | "semua" | SatpamReportStatus>("aktif")
   const [period, setPeriod] = useState<SatpamReportPeriod>("semua")
+  const [followUpOnly, setFollowUpOnly] = useState(false)
   const [sort, setSort] = useState<SatpamReportSort>("terbaru")
   const meta = tabMeta[kind]
   const search = useDebouncedSatpamQuery(query)
   const canonical = status === "aktif" ? "aktif" : status === "semua" ? "semua" : Object.entries(statusLabels).find(([, label]) => label === status)?.[0] ?? "aktif"
-  const page = useSatpamPage<SatpamLostFoundReport>(`/api/satpam/reports?kind=${kind}&status=${canonical}&period=${period}&sort=${sort}&q=${encodeURIComponent(search)}`)
+  const page = useSatpamPage<SatpamLostFoundReport>(`/api/satpam/reports?kind=${kind}&status=${canonical}&period=${period}&sort=${sort}&q=${encodeURIComponent(search)}${followUpOnly ? "&followUp=1" : ""}`)
   const reports = page.items
-  const activeFilterCount = Number(status !== "aktif") + Number(period !== "semua")
+  const activeFilterCount = Number(status !== "aktif") + Number(period !== "semua") + Number(followUpOnly)
 
   return (
     <div className="space-y-4">
@@ -336,8 +339,9 @@ function ReportList({ kind }: { kind: SatpamReportKind }) {
                 </Select>
                 <FieldDescription id={`${id}-period-description`}>Berdasarkan tanggal laporan dikirim (WIB).</FieldDescription>
               </Field>
+              <Button type="button" variant={followUpOnly ? "soft" : "outline"} aria-pressed={followUpOnly} onClick={() => setFollowUpOnly((value) => !value)}>Perlu tindak lanjut</Button>
               <div className="border-t border-border/60 pt-3">
-                <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" disabled={!activeFilterCount} onClick={() => { setStatus("aktif"); setPeriod("semua") }}><RotateCcw aria-hidden="true" />Reset filter</Button>
+                <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" disabled={!activeFilterCount} onClick={() => { setStatus("aktif"); setPeriod("semua"); setFollowUpOnly(false) }}><RotateCcw aria-hidden="true" />Reset filter</Button>
               </div>
             </PopoverContent>
           </Popover>
@@ -420,7 +424,7 @@ function ReportRow({ report }: { report: SatpamLostFoundReport }) {
               <p className="mt-1 text-xs text-muted-foreground">{report.reporter} · Dikirim {report.submittedAt} WIB</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <UnopenedReportBadge unseen={report.unopened} />
+              <UnopenedReportBadge unseen={report.unopened} attention={report.attention} />
               {isDone ? (
                 <span className="relative size-6 shrink-0 drop-shadow-xs">
                   <Image
