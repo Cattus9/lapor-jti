@@ -12,6 +12,14 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, Sid
 import type { AppRole } from "@/lib/auth/roles"
 
 const fallbackUser = { name: "Pengguna AspirasiJTI", email: "", avatar: "" }
+const roleLabels: Record<AppRole, string> = {
+  pelapor: "Pelapor",
+  satpam: "Satpam",
+  teknisi: "Teknisi",
+  manajemen: "Manajemen Jurusan",
+  tefa: "TEFA",
+  admin: "Admin",
+}
 
 export function AppSidebar({ role = "pelapor", user = fallbackUser, ...props }: React.ComponentProps<typeof Sidebar> & { role?: AppRole; user?: { name: string; email: string; avatar?: string } }) {
   const { hasNewReport } = useReportSubmissionFeedback()
@@ -29,13 +37,13 @@ export function AppSidebar({ role = "pelapor", user = fallbackUser, ...props }: 
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="pointer-events-none h-11 select-none gap-2.5 px-3.5">
+            <SidebarMenuButton size="lg" className="pointer-events-none h-11 select-none gap-2.5 px-3.5 group-data-[collapsible=icon]:mx-auto">
               <div className="relative size-8 shrink-0 overflow-hidden rounded-lg">
                 <Image src="/logo/logo-sb-login.png" alt="" fill sizes="32px" className="object-cover" />
               </div>
               <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-medium">AspirasiJTI</span>
-                <span className="truncate text-xs text-muted-foreground">Workspace</span>
+                <span className="truncate text-xs text-muted-foreground">{roleLabels[role]}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
