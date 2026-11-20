@@ -247,6 +247,10 @@ Lokasi lama dipetakan ke lantai berdasarkan nama/group yang eksplisit. Lobi/kori
 
 Nama lokasi/objek/layanan/petugas dalam laporan dan penyerahan lama tetap snapshot. Menonaktifkan master hanya membatasi penggunaan berikutnya; laporan aktif yang sudah masuk tetap dapat ditangani. Mengaktifkan area kembali memulihkan lokasi aktif di dalamnya. Menonaktifkan objek tidak menghapus pemetaan ruangnya.
 
+Migration `0024_confirm_jti_classroom_catalog` menetapkan katalog ruang kelas bawaan Gedung JTI sesuai konfirmasi kampus: Ruang 3.1–3.12 di Lantai 3 dan Ruang 4.1–4.3 di Lantai 4. Entri bawaan Ruang 4.4–4.8 dinonaktifkan jika ID, nama, dan lantainya masih sama. ID, pemetaan fasilitas, dan snapshot laporan tetap tersimpan. Draft yang memakai salah satu ruang nonaktif perlu memilih lokasi lagi sebelum dikirim.
+
+Untuk clone baru, jalankan migration sebelum seed development seperti biasa. Katalog bawaan tersedia setelah migration, termasuk pada setup tanpa akun demo. Menjalankan ulang `db:seed` tidak menimpa pilihan katalog yang dikelola Manajemen.
+
 Kategori fasilitas adalah daftar tetap bersama UI dan backend: Perangkat, Furnitur, Sanitasi, Kelistrikan, Bangunan, Jaringan & Komunikasi, Keamanan, Kebersihan, dan Umum. Tidak ada CRUD kategori atau input kategori bebas. Label kategori bawaan tetap kompatibel tanpa migrasi database. Jika kategori custom lama di luar daftar ditemukan, pengguna harus memilih kategori yang valid ketika mengedit; nilainya tidak diganti diam-diam.
 
 Checkbox "Tersedia untuk dipilih" mengatur pilihan pada penggunaan baru, bukan status penanganan laporan atau akun login. Petugas aktif dapat dipilih saat penyerahan; area/lokasi/fasilitas/layanan aktif dipakai form Pelapor. Lokasi tetap memerlukan area aktif dan fasilitas tetap mengikuti pemetaan lokasi.

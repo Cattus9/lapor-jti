@@ -169,6 +169,13 @@
       "when": 1795106078424,
       "tag": "0023_report_update_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795133622923,
+      "tag": "0024_confirm_jti_classroom_catalog",
+      "breakpoints": true
     }
   ]
 }
