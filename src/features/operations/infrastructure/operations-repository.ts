@@ -1,12 +1,12 @@
 import "server-only"
 import { randomUUID } from "node:crypto"
 import { hashPassword } from "better-auth/crypto"
-import { and, asc, count, eq, exists, ilike, inArray, isNotNull, or, sql } from "drizzle-orm"
+import { and, asc, count, eq, ilike, inArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { accounts, facilityObjects, locationAreas, locationFacilityObjects, locations, operationalAudit, securityOfficers, services, sessions, users } from "@/db/schema"
 import { requireManagement } from "@/features/management/domain/management"
 import { isUuid, ReportError, type ReportActor } from "@/features/reports/domain/report"
-import { assertUserChange, managedUserBatchSize, operationalRoles, parseMasterCommand, parsePasswordReset, parseUserCommand, type MasterRecord, type OperationalCatalog, type UserRecord, type UsersPage } from "../domain/operations"
+import { assertUserChange, managedUserBatchSize, operationalRoles, parseMasterCommand, parseUserCommand, type MasterRecord, type OperationalCatalog, type UserRecord, type UsersPage } from "../domain/operations"
 
 const userColumns = { id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, identifier: users.identifier, unit: users.unit, studyProgram: users.studyProgram, updatedAt: users.updatedAt }
 type UserRow = Pick<typeof users.$inferSelect, keyof typeof userColumns>
@@ -108,64 +108,39 @@ export class OperationsRepository {
     requireManagement(actor)
     const selected = ids.split(",")
     if (selected.length > managedUserBatchSize || selected.some((id) => !isUuid(id))) throw new ReportError("Pilihan pengguna tidak valid.")
-    const credential = this.db.select({ id: accounts.id }).from(accounts).where(and(
-      eq(accounts.userId, users.id), eq(accounts.providerId, "credential"), isNotNull(accounts.password),
-    ))
-    const rows = await this.db.select({ ...userColumns, hasLocalPassword: sql<boolean>`${exists(credential)}` })
+    const rows = await this.db.select(userColumns)
       .from(users).where(and(inArray(users.id, selected), inArray(users.role, [...operationalRoles])))
-    return rows.map((row) => ({ ...publicUser(row), hasLocalPassword: row.hasLocalPassword }))
+    return rows.map(publicUser)
   }
 
-  async resetLocalPassword(actor: ReportActor, raw: unknown) {
-    requireManagement(actor)
-    const input = parsePasswordReset(raw)
-    if (actor.id === input.id) throw new ReportError("Minta pengelola lain untuk mereset password akun Anda.", 403)
-    const password = await hashPassword(input.password)
-    return this.db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(748194)`)
-      const manager = await liveManager(tx, actor)
-      const [target] = await tx.select(userColumns).from(users).where(and(
-        eq(users.id, input.id), inArray(users.role, [...operationalRoles]),
-      )).for("update")
-      if (!target) throw new ReportError("Pengguna tidak ditemukan.", 404)
-      if (target.updatedAt.toISOString() !== input.updatedAt) throw new ReportError("Pengguna telah berubah. Muat ulang sebelum mereset password.", 409)
-      const credentials = await tx.update(accounts).set({ password }).where(and(
-        eq(accounts.userId, target.id), eq(accounts.providerId, "credential"), isNotNull(accounts.password),
-      )).returning({ id: accounts.id })
-      if (credentials.length !== 1) throw new ReportError("Akun ini tidak memiliki satu kredensial password lokal. Hubungi pengelola identitas kampus.", 409)
-      const updatedAt = new Date(Math.max(Date.now(), target.updatedAt.getTime() + 1))
-      await tx.update(users).set({ updatedAt }).where(eq(users.id, target.id))
-      await tx.delete(sessions).where(eq(sessions.userId, target.id))
-      await tx.insert(operationalAudit).values({ actorId: manager.id, actorName: manager.name, entity: "users", entityId: target.id, action: "password_reset" })
-      return { ok: true }
-    })
-  }
   async saveUser(actor: ReportActor, raw: unknown) {
     requireManagement(actor)
     const input = parseUserCommand(raw)
     // Hash outside the transaction to avoid holding database locks during expensive crypto.
-    const passwordHash = input.password ? await hashPassword(input.password) : undefined
+    const passwordHash = input.id === undefined ? await hashPassword(input.password) : undefined
     try { return await this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(748194)`)
       const manager = await liveManager(tx, actor)
-      const [before] = input.id ? await tx.select(userColumns).from(users).where(eq(users.id, input.id)).for("update") : []
-      if (input.id && !before) throw new ReportError("Pengguna tidak ditemukan.", 404)
-      if (before && before.updatedAt.toISOString() !== input.updatedAt) throw new ReportError("Pengguna telah berubah. Muat ulang sebelum menyimpan.", 409)
-      if (before) {
+      if (input.id !== undefined) {
+        const [before] = await tx.select(userColumns).from(users).where(eq(users.id, input.id)).for("update")
+        if (!before) throw new ReportError("Pengguna tidak ditemukan.", 404)
+        if (before.updatedAt.toISOString() !== input.updatedAt) throw new ReportError("Pengguna telah berubah. Muat ulang sebelum menyimpan.", 409)
         const [total] = await tx.select({ value: count() }).from(users).where(and(eq(users.role, "manajemen"), eq(users.isActive, true)))
-        assertUserChange(actor.id, before, input, total.value)
-        if (input.email !== before.email.toLowerCase()) throw new ReportError("Email akun yang sudah dibuat tidak dapat diubah di sini.")
+        assertUserChange(actor.id, before, { role: input.role, isActive: before.isActive }, total.value)
+        if (before.role === input.role) return { ok: true, user: publicUser(before) }
+        const updatedAt = new Date(Math.max(Date.now(), before.updatedAt.getTime() + 1))
+        const [saved] = await tx.update(users).set({ role: input.role, updatedAt }).where(eq(users.id, before.id)).returning(userColumns)
+        await tx.delete(sessions).where(eq(sessions.userId, before.id))
+        await tx.insert(operationalAudit).values({ actorId: manager.id, actorName: manager.name, entity: "users", entityId: before.id, action: "updated", before: { role: before.role }, after: { role: saved.role } })
+        return { ok: true, user: publicUser(saved) }
       }
-      const { password: _password, updatedAt: _version, id: _id, ...profile } = input
-      void _password; void _version; void _id
-      const id = input.id ?? randomUUID()
-      // Keep the edit token strictly increasing even if two writes share a clock millisecond.
-      const updatedAt = new Date(Math.max(Date.now(), (before?.updatedAt.getTime() ?? 0) + 1))
-      const [saved] = before ? await tx.update(users).set({ ...profile, updatedAt }).where(eq(users.id, id)).returning(userColumns) : await tx.insert(users).values({ ...profile, id }).returning(userColumns)
-      if (!before) await tx.insert(accounts).values({ userId: id, accountId: id, providerId: "credential", password: passwordHash! })
-      if (before && (before.role !== input.role || before.isActive !== input.isActive)) await tx.delete(sessions).where(eq(sessions.userId, id))
+      const { password: _password, ...profile } = input
+      void _password
+      const id = randomUUID()
+      const [saved] = await tx.insert(users).values({ ...profile, id }).returning(userColumns)
+      await tx.insert(accounts).values({ userId: id, accountId: id, providerId: "credential", password: passwordHash! })
       const after = publicUser(saved)
-      await tx.insert(operationalAudit).values({ actorId: manager.id, actorName: manager.name, entity: "users", entityId: id, action: before ? "updated" : "created", before: before ? publicUser(before) : null, after })
+      await tx.insert(operationalAudit).values({ actorId: manager.id, actorName: manager.name, entity: "users", entityId: id, action: "created", after })
       return { ok: true, user: after }
     }) } catch (error) { translateError(error) }
   }

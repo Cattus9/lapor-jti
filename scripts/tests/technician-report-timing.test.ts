@@ -93,7 +93,7 @@ test("Detail reuses indexed status history and inserts timing into the canonical
   const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
   const repository = read("src/features/facilities/infrastructure/drizzle-technician-repository.ts")
   const detail = repository.slice(repository.indexOf("async detail("), repository.indexOf("async priorities("))
-  assert.match(detail, /history\.find\(\(entry\) => entry\.toStatus === "diproses"\)\?\.createdAt \?\? null/)
+  assert.match(detail, /history\.find\(\(entry\) =>\s+entry\.toStatus === "diproses" && entry\.fromStatus !== null && entry\.fromStatus !== "diproses",\s+\)\?\.createdAt \?\? null/)
   assert.match(detail, /timing: getTechnicianReportTiming\(rows\[0\]\.report, processingStartedAt\)/)
   assert.equal((detail.match(/\.from\(reportStatusHistory\)/g) ?? []).length, 1)
   assert.match(read("src/db/reports-schema.ts"), /history_report_date_idx/)

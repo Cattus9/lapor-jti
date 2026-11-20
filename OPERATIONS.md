@@ -1,5 +1,11 @@
 # Pengaturan Operasional dan Kelola Pengguna
 
+## Rekap penyelesaian Manajemen
+
+Rekap Laporan dibuka pada periode **Bulan ini** dan menampilkan laporan **Selesai** lintas pengelola. Ringkasan menghitung seluruh hasil filter dan tabel diurutkan dari waktu penyelesaian terbaru. Periode mengikuti tanggal selesai dalam WIB. Laporan yang masuk bulan lalu dan diselesaikan bulan ini masuk rekap bulan ini.
+
+Daftar memakai `GET /api/manajemen/rekap`, sedangkan CSV memakai `GET /api/manajemen/export?scope=completed`. Keduanya menerapkan filter penyelesaian di server. CSV memuat waktu selesai (WIB) dan seluruh hasil filter hingga batas 5.000 laporan. Filter kategori, pengelola, periode, dan pencarian dipakai untuk daftar maupun ekspor.
+
 ## Pengingat penanganan laporan
 Aturan yang sama berlaku di antrean Satpam, Teknisi, Manajemen, dan TEFA. Umur dihitung dari tanggal pengiriman berdasarkan kalender WIB. Laporan yang selesai atau ditolak keluar dari aturan ini.
 
@@ -9,9 +15,9 @@ Aturan yang sama berlaku di antrean Satpam, Teknisi, Manajemen, dan TEFA. Umur d
 | 7 hari | Laporan aktif tanpa pembaruan penanganan selama minimal 7 hari | **Perlu pembaruan** dan satu notifikasi dalam aplikasi per akun petugas per laporan |
 | 14 hari | Laporan masih aktif | **Perlu tindak lanjut**, didahulukan di ringkasan dan tersedia sebagai filter antrean |
 
-Satu label umur ditampilkan per tiket. Ambang yang lebih tinggi mendapat prioritas. Membuka detail mencatat pembukaan, sedangkan perubahan status dan **Catat perkembangan** memperbarui waktu penanganan. Catatan perkembangan memakai pilihan sesuai role, menyimpan riwayat, dan mengirim notifikasi ke akun Pelapor aktif bila ada. Pencatatan langsung di pos tetap menyimpan riwayat untuk Satpam.
+Satu label umur ditampilkan per tiket. Ambang yang lebih tinggi mendapat prioritas. Membuka detail mencatat pembukaan, sedangkan perubahan status dan **Catat perkembangan** memperbarui waktu penanganan. Catatan perkembangan memakai pilihan sesuai role, menyimpan riwayat, dan mengirim notifikasi ke akun Pelapor aktif bila ada. Pilihan Satpam mengikuti jenis barang dan tahap laporan, termasuk kabar barang teridentifikasi atau diserahkan. Pencatatan langsung di pos tetap menyimpan riwayat untuk Satpam. Untuk tiket Teknisi lama berstatus **Diproses**, durasi memakai waktu perubahan status yang tercatat masuk ke tahap tersebut.
 
-Notifikasi internal dibuat ketika petugas membuka halaman pertama **Notifikasi**, dengan maksimal 50 notifikasi baru per muatan. Riwayat baca disimpan per akun. Migration `0023_report_update_reminders` menambah indeks unik parsial agar permintaan bersamaan tidak menggandakan pengingat. Terapkan migration sebelum merilis app terbaru. Tidak diperlukan seed.
+Notifikasi internal dibuat ketika petugas membuka halaman pertama **Notifikasi**, dengan maksimal 50 notifikasi baru per muatan. Setelah laporan diperbarui, selesai, atau ditolak, pengingat tampil sebagai riwayat dan keluar dari hitungan belum dibaca. Riwayat baca disimpan per akun. Migration `0023_report_update_reminders` menambah indeks unik parsial agar permintaan bersamaan tidak menggandakan pengingat. Terapkan migration sebelum merilis app terbaru. Tidak diperlukan seed.
 
 Verifikasi PostgreSQL development dan batas tanggal WIB:
 
@@ -170,7 +176,7 @@ TEFA memakai login/session Better Auth yang sama. Halaman Ringkasan, Kelola Lapo
 - `reports.reporter_id` mengacu ke `users.id`; detail layanan memiliki PK/FK `report_id` dan FK `service_id`. Nama layanan disimpan sebagai snapshot. History mengacu ke report dan actor melalui ID serta menyimpan nama actor saat aksi. Lampiran mengacu ke report/draft serta owner; notifikasi mengacu ke report dan recipient. FK restriktif mempertahankan identitas historis; akun dinonaktifkan, bukan dihapus.
 - Role adalah izin akun, bukan identitas petugas. Tidak dibuat FK ke `users.role` yang bukan unique key. Constraint kategori/pengelola hanya membolehkan TEFA pada kategori layanan, Satpam pada kehilangan/temuan, Teknisi pada fasilitas, dan Manajemen pada layanan/lainnya.
 - TEFA hanya membaca/mengubah laporan ber-snapshot pengelola TEFA. Lampiran draft dan laporan role lain tidak dapat diakses walaupun UUID diketahui. Notifikasi serta hitungan unread dibatasi recipient **dan** laporan TEFA; notifikasi sisa role sebelumnya tidak bocor. Menandai dibaca juga memakai scope tersebut.
-- Manajemen tetap bisa membaca laporan TEFA pada Monitoring dan agregat Statistik, tetapi tidak mengubahnya melalui antrean/endpoint operasional Manajemen. Kelola Laporan/rekap operasional Manajemen tetap ber-scope pemilik Manajemen. TEFA tidak memperoleh akses pengguna, pengaturan, atau API role lain.
+- Manajemen tetap bisa membaca laporan TEFA pada Monitoring, agregat Statistik, dan Rekap Penyelesaian, tetapi tidak mengubahnya melalui antrean/endpoint operasional Manajemen. Kelola Laporan dan cakupan ekspor operasional tetap ber-scope pemilik Manajemen. TEFA tidak memperoleh akses pengguna, pengaturan, atau API role lain.
 
 ### Transaksi, status, dan indeks
 
@@ -273,7 +279,11 @@ Untuk Docker, image migration dan aplikasi perlu dibangun ulang setelah perubaha
 
 Semua halaman/API memakai session dan role database aktif; mutasi memeriksa origin serta memeriksa ulang actor di transaksi. UI bukan batas otorisasi. Management tidak dapat mengelola/menetapkan role admin, menonaktifkan/mengganti peran diri sendiri, atau menghilangkan Manajemen aktif terakhir.
 
-Akun baru memakai email unik dan password awal 12-128 karakter, di-hash oleh `better-auth/crypto` dengan format yang sama dengan login. Email/password akun lama tidak diubah oleh edit profil. Sesi pengguna dicabut bila peran/status berubah. Email belum dianggap terverifikasi; SSO/undangan email/forced-password-change belum tersedia. Password harus disampaikan secara pribadi, bukan dicatat di laporan atau audit.
+Akun manual baru memakai email unik dan password awal 12-128 karakter, di-hash oleh `better-auth/crypto` dengan format yang sama dengan login. Untuk akun yang sudah ada, dialog **Atur peran** menampilkan nama dan email sebagai konteks. Server menerima hanya ID, versi, dan peran pada permintaan edit. Perubahan peran mencabut sesi akun dan mencatat peran sebelum serta sesudahnya. Email belum dianggap terverifikasi; SSO/undangan email/forced-password-change belum tersedia. Password harus disampaikan secara pribadi, bukan dicatat di laporan atau audit.
+
+Di Kelola Pengguna, akun yang dibuat atau ditarik tetap muncul selama halaman terbuka jika browser gagal menyimpan pilihan. Setelah muat ulang, gunakan **Tarik pengguna** untuk menampilkan kembali akun yang sebelumnya hanya masuk daftar sementara. Pembuatan akun tetap disimpan di server.
+
+Pengelola identitas kampus menangani password akun Google atau SSO. Di Kelola Pengguna, Manajemen mengatur peran pengguna AspirasiJTI.
 
 Mutasi menggunakan revision master/updatedAt akun untuk mencegah edit tertimpa, lock transaksi untuk pemetaan dan proteksi Manajemen terakhir, serta audit actor server sebelum/sesudah tanpa password/token. Names, email, dan identitas unik diperiksa database. Pencarian pengguna memakai parameter terikat dan escaped literal `ILIKE`; belum menggunakan `pg_trgm`. Katalog kampus dimuat utuh agar pemetaan lintas section konsisten; daftar UI dibatasi pagination. Untuk katalog berskala besar, endpoint master dapat dipisah ke pagination server.
 

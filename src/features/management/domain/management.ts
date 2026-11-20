@@ -45,3 +45,14 @@ export function parseManagementFilter(raw: Record<string, unknown> = {}, operati
 export function requireManagementNotificationId(id?: string) {
   if (id !== undefined && !isUuid(id)) throw new ReportError("Notifikasi tidak valid.")
 }
+
+export const defaultRecapPeriod = "bulan-ini"
+
+export function parseManagementRecapFilter(raw: Record<string, unknown>): ManagementFilter {
+  return parseManagementFilter({
+    ...raw,
+    period: raw.period ?? defaultRecapPeriod,
+    status: "selesai",
+    date: "completed",
+  })
+}

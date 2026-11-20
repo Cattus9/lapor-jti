@@ -87,8 +87,9 @@ export class DrizzleTechnicianRepository implements TechnicianRepository {
       this.db.select().from(reportStatusHistory).where(eq(reportStatusHistory.reportId, id)).orderBy(asc(reportStatusHistory.createdAt), asc(reportStatusHistory.id)),
       this.db.select().from(reportAttachments).where(eq(reportAttachments.reportId, id)).orderBy(asc(reportAttachments.createdAt), asc(reportAttachments.id)),
     ])
-    // Reuse the indexed history read above; never infer a start time from updatedAt.
-    const processingStartedAt = history.find((entry) => entry.toStatus === "diproses")?.createdAt ?? null
+    const processingStartedAt = history.find((entry) =>
+      entry.toStatus === "diproses" && entry.fromStatus !== null && entry.fromStatus !== "diproses",
+    )?.createdAt ?? null
     return { report, timing: getTechnicianReportTiming(rows[0].report, processingStartedAt), history: history.map((entry) => ({ status: statusLabels[entry.toStatus] as TechnicianReportStatus, actor: entry.actorName, timestamp: dateLabel(entry.createdAt), note: entry.note })),
       files: files.map((file) => ({ id: file.id, name: file.name, mimeType: file.mimeType, url: `/api/teknisi/attachments/${file.id}`, previewUrl: file.mimeType.startsWith("image/") ? `/api/teknisi/attachments/${file.id}?preview=1` : undefined })) }
   }

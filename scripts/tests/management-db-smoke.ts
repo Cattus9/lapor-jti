@@ -147,6 +147,25 @@ async function main() {
     assert.ok(!(await service.export(actor, { q: tag })).includes(tefaTitle))
     assert.equal((await service.statistics(actor, { q: tag, handler: "tefa" })).handlers[0].handler, "tefa")
     console.log("PASS: applied indexes and EXPLAIN ANALYZE for global, status-filtered and operational queues")
+
+    const recapFilter = { q: tag, period: "hari-ini", status: "semua", date: "submitted" }
+    const recap = await service.recap(actor, recapFilter)
+    assert.deepEqual(new Set(recap.items.map((item) => item.id)), new Set([owned.id, facilityRows[1].id]))
+    assert.equal(recap.total, 2)
+    assert.deepEqual(recap.handlerCounts, { satpam: 0, teknisi: 1, manajemen: 1, tefa: 0 })
+    const recapCsv = await service.export(actor, { ...recapFilter, scope: "completed", handler: "teknisi", category: "fasilitas" })
+    assert.match(recapCsv, /Waktu selesai \(WIB\)/)
+    assert.ok(recapCsv.includes(facilityRows[1].title) && recapCsv.includes(recap.items.find((item) => item.id === facilityRows[1].id)!.completedAt!))
+    for (const excluded of [facilityRows[0].title, facilityRows[2].title, rejected.ticketNumber, owned.ticketNumber, tefaTitle]) assert.ok(!recapCsv.includes(excluded))
+    await db.update(reports).set({ status: "selesai", submittedAt: oldDate, completedAt: timestamp }).where(inArray(reports.id, rows.map((row) => row.id)))
+    const firstRecapPage = await service.recap(actor, recapFilter)
+    assert.ok(firstRecapPage.nextCursor)
+    const secondRecapPage = await service.recap(actor, { ...recapFilter, cursor: firstRecapPage.nextCursor })
+    assert.equal(firstRecapPage.items.length, 20)
+    assert.equal(secondRecapPage.total, rows.length + 2)
+    assert.deepEqual(secondRecapPage.handlerCounts, firstRecapPage.handlerCounts)
+    assert.equal(new Set([...firstRecapPage.items, ...secondRecapPage.items].map((item) => item.id)).size, rows.length + 2)
+    console.log("PASS: cross-role recap and CSV use completion dates, counts, filters and stable pagination")
     console.log("Management DB integration smoke passed.")
   } finally {
     try {

@@ -35,15 +35,18 @@ test("Management wrapper labels supply context without duplicate internal headin
   assert.match(monitoring, /<SectionCard title="Pengawasan lintas pengelola"/)
   assert.doesNotMatch(monitoring, /CardTitle|Monitoring lintas pengelola/)
   assert.match(monitoring, /initialTicket=\{ticket\} readOnly/)
-  assert.match(recap, /<SectionCard title="Data dan ekspor laporan"/)
+  assert.match(recap, /<SectionCard title="Rekap penyelesaian"/)
   assert.doesNotMatch(recap, /CardTitle|>Rekap laporan</)
   assert.equal((recap.match(/"Ekspor CSV"/g) ?? []).length, 1)
   assert.match(recap, /onClick=\{\(\) => void exportCsv\(\)\}/)
   for (const source of [monitoring, recap]) {
     assert.match(source, /<ConfigSelect label="Filter kategori/)
-    assert.match(source, /<ConfigSelect label="Filter status/)
     assert.match(source, /<ConfigSelect label="Filter periode/)
   }
+  assert.match(monitoring, /<ConfigSelect label="Filter status/)
+  assert.doesNotMatch(recap, /Filter status|Cakupan rekap/)
+  assert.match(recap, /page\.handlerCounts/)
+  assert.match(recap, /report\.completedAt/)
 })
 
 test("Category changes share a snapshot scope, but other filters and mutations invalidate it", () => {

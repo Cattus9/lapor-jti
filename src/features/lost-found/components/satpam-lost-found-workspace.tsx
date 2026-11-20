@@ -62,7 +62,7 @@ import { satpamReportPeriods, satpamReportSorts } from "../domain/satpam-list-fi
 import { SatpamRefreshContext, useSatpamPage, useSatpamResource, useDebouncedSatpamQuery } from "./use-satpam-data"
 import { SatpamPageFeedback } from "./satpam-page-feedback"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
-import { lifecycleByCategory, statusLabels, type ReportStatus } from "../../reports/domain/report"
+import { lifecycleByCategory, reportStatuses, statusLabels, type ReportStatus } from "../../reports/domain/report"
 import type { CurrentUser } from "@/lib/auth/current-user"
 import { cn } from "cn"
 
@@ -233,6 +233,7 @@ function ReportDetailDialog({
   const isFound = sourceReport.kind === "temuan"
   const detail = useSatpamResource<SatpamDetail>(open ? `/api/satpam/reports/${sourceReport.ticket}` : undefined, { keepPreviousData: true })
   const report = detail.data?.report ?? sourceReport
+  const progressStatus = reportStatuses.find((status) => statusLabels[status] === report.status)
 
   return (
     <OperationalReportDialog
@@ -248,7 +249,7 @@ function ReportDetailDialog({
       action={<fieldset disabled={detail.loading || Boolean(detail.error)} className="space-y-3">
         <StatusActionPanel report={report} onStatusChange={onStatusChange} onOpenMatching={() => { onOpenChange(false); onOpenMatching() }} onOpenHandover={onOpenHandover ? () => { onOpenChange(false); onOpenHandover() } : undefined} />
         <SatpamExceptionAction report={report} onSaved={onMarked} />
-        {detail.data && !["Selesai", "Ditolak"].includes(report.status) ? <ReportProgressAction id={report.id} handler="satpam" found={isFound} localOnly={!report.reporterCanReceiveUpdates} onSaved={onMarked} /> : null}
+        {detail.data && progressStatus && progressStatus !== "selesai" && progressStatus !== "ditolak" ? <ReportProgressAction id={report.id} handler="satpam" status={progressStatus} kind={report.kind} localOnly={!report.reporterCanReceiveUpdates} onSaved={onMarked} /> : null}
         {isFound && !report.inventoryId && ["Baru", "Diproses"].includes(report.status) ? <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Barang sudah diserahkan ke pos?</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Catat langsung sebagai barang titipan di Inventaris.</p></div><Button type="button" variant="soft" aria-haspopup="dialog" onClick={() => setReceiveOpen(true)}><PackagePlus aria-hidden="true" />Catat barang di pos</Button></div> : null}
       </fieldset>}
     >

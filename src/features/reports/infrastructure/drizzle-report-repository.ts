@@ -1,6 +1,6 @@
 import "server-only"
 import { operationalAudit } from "@/db/operations-schema"
-import { and, desc, eq, gte, ilike, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm"
+import { and, desc, eq, gte, ilike, inArray, isNull, lt, ne, not, notInArray, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { sequentialQueries } from "@/db/sequential"
 import { users } from "@/db/schema"
@@ -273,15 +273,41 @@ export class DrizzleReportRepository implements ReportRepository {
     const after = cursorValue(cursor)
     if (handler && !after) await materializeReportReminders(this.db, ownerId, handler)
     const notificationScope = this.notificationScope(ownerId, handler)
+    const archivedReminder = and(eq(notifications.kind, updateReminderKind),
+      or(inArray(reports.status, ["selesai", "ditolak"]), gte(reports.updatedAt, notifications.createdAt)),
+    )!
     const [rows, counts] = await sequentialQueries([
-      this.db.select({ id: notifications.id, kind: notifications.kind, title: notifications.title, description: notifications.description, createdAt: notifications.createdAt, readAt: notifications.readAt, ticket: reports.ticketNumber, reportTitle: reports.title }).from(notifications).innerJoin(reports, eq(reports.id, notifications.reportId)).where(and(notificationScope, after ? or(lt(notifications.createdAt, after.date), and(eq(notifications.createdAt, after.date), lt(notifications.id, after.id))) : undefined)).orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(pageSize + 1),
-      this.db.select({ value: sql<number>`count(*)::integer` }).from(notifications).where(and(notificationScope, isNull(notifications.readAt))),
+      this.db.select({
+        id: notifications.id, kind: notifications.kind, title: notifications.title, description: notifications.description,
+        createdAt: notifications.createdAt, readAt: notifications.readAt, ticket: reports.ticketNumber, reportTitle: reports.title,
+        archivedReminder: sql<boolean>`${archivedReminder}`, reportStatus: reports.status,
+      }).from(notifications).innerJoin(reports, eq(reports.id, notifications.reportId))
+        .where(and(notificationScope, after ? or(lt(notifications.createdAt, after.date), and(eq(notifications.createdAt, after.date), lt(notifications.id, after.id))) : undefined))
+        .orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(pageSize + 1),
+      this.db.select({ value: sql<number>`count(*)::integer` }).from(notifications)
+        .innerJoin(reports, eq(reports.id, notifications.reportId))
+        .where(and(notificationScope, isNull(notifications.readAt), not(archivedReminder))),
     ])
     const items = rows.slice(0, pageSize)
     const last = items.at(-1)
     const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(date)
     const today = day(new Date()); const yesterday = day(new Date(Date.now() - 86400000))
-    return { items: items.map((row) => ({ id: row.id, kind: row.kind === "response" ? "response" as const : "status" as const, title: row.title, description: row.description, ticketNumber: row.ticket, reportTitle: row.reportTitle, createdAt: dateLabel(row.createdAt), group: day(row.createdAt) === today ? "Hari ini" as const : day(row.createdAt) === yesterday ? "Kemarin" as const : "Sebelumnya" as const, read: row.readAt !== null })), unread: counts[0].value, nextCursor: rows.length > pageSize && last ? nextCursor(last.createdAt, last.id) : null }
+    const mappedItems = items.map((row) => {
+      const groupDate = day(row.createdAt)
+      const archivedDescription = row.reportStatus === "selesai" ? "Laporan ini sudah selesai."
+        : row.reportStatus === "ditolak" ? "Laporan ini sudah ditolak."
+        : "Perkembangan penanganan sudah tercatat setelah pengingat ini."
+      return {
+        id: row.id,
+        kind: row.kind === "response" ? "response" as const : "status" as const,
+        title: row.archivedReminder ? "Riwayat pengingat pembaruan" : row.title,
+        description: row.archivedReminder ? archivedDescription : row.description,
+        ticketNumber: row.ticket, reportTitle: row.reportTitle, createdAt: dateLabel(row.createdAt),
+        group: groupDate === today ? "Hari ini" as const : groupDate === yesterday ? "Kemarin" as const : "Sebelumnya" as const,
+        read: row.archivedReminder || row.readAt !== null,
+      }
+    })
+    return { items: mappedItems, unread: counts[0].value, nextCursor: rows.length > pageSize && last ? nextCursor(last.createdAt, last.id) : null }
   }
   async markRead(ownerId: string, id?: string, handler?: ReportHandler) {
     await this.db.update(notifications).set({ readAt: new Date() })

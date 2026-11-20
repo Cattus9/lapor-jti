@@ -37,18 +37,21 @@ test("Facility categories are a fixed allowlist for creates and edits, not arbit
   assert.equal(parseMasterCommand({ ...master, group: "Ignored unrelated field" }).group, "")
 })
 test("User creation uses operational roles only and bounded Better Auth passwords", () => {
-  assert.equal(parseUserCommand(user).email, "petugas@example.test")
+  const created = parseUserCommand(user)
+  assert.equal(created.id, undefined)
+  if (created.id === undefined) assert.equal(created.email, "petugas@example.test")
   for (const role of ["admin", "", {}, null]) assert.throws(() => parseUserCommand({ ...user, role }), ReportError)
   for (const password of [undefined, "x".repeat(11), "x".repeat(129)]) assert.throws(() => parseUserCommand({ ...user, password }), ReportError)
   for (const email of ["abc", "a b@example.test", "a@x"]) assert.throws(() => parseUserCommand({ ...user, email }), ReportError)
   const parsed = parseUserCommand({ ...user, actorId: "spoof", emailVerified: true, image: "spoof" })
   assert.equal("actorId" in parsed, false); assert.equal("emailVerified" in parsed, false)
 })
-test("Editing a user requires its version and never silently resets a credential", () => {
-  const { password: _password, ...profile } = user; void _password
-  const edit = { ...profile, id, updatedAt: "2026-10-08T00:00:00.000Z" }
-  assert.equal(parseUserCommand(edit).password, undefined)
-  assert.throws(() => parseUserCommand({ ...edit, password: user.password }), ReportError)
+test("Editing an existing user accepts only a role and its version", () => {
+  const edit = { id, role: "satpam", updatedAt: "2026-10-08T00:00:00.000Z" }
+  assert.deepEqual(parseUserCommand(edit), edit)
+  for (const key of ["password", "name", "email", "identifier", "unit", "studyProgram", "isActive"]) {
+    assert.throws(() => parseUserCommand({ ...edit, [key]: "changed" }), /hanya dapat mengubah peran/)
+  }
   assert.throws(() => parseUserCommand({ ...edit, updatedAt: "bad" }), ReportError)
 })
 test("Self-demotion, self-deactivation, admin targets and the last active manager are protected", () => {

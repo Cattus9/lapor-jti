@@ -9,5 +9,5 @@ export default async function ManagementReportRecapPage() {
   // Pertahankan guard ini saat beralih ke Google Workspace; adaptasi session ada di server-session.ts.
   const user = await requireRole("manajemen")
 
-  return <DashboardLayout role="manajemen" user={user}><ContentShell><PageHeader title="Rekap Laporan" description={`Siapkan rekap operasional sesuai filter laporan, ${user.name}.`} /><ManagementReportRecap /></ContentShell></DashboardLayout>
+  return <DashboardLayout role="manajemen" user={user}><ContentShell><PageHeader title="Rekap Laporan" description="Ringkasan laporan yang selesai ditangani lintas pengelola dan ekspor berdasarkan tanggal selesai." /><ManagementReportRecap /></ContentShell></DashboardLayout>
 }

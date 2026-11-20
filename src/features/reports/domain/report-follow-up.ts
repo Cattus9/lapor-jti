@@ -34,10 +34,12 @@ export function getReportAttention(report: {
   return null
 }
 
-export const progressMessages = {
+const progressMessages = {
   satpam: {
     searching: "Barang belum ditemukan. Satpam masih memeriksa informasi yang ada.",
     checking: "Satpam masih memeriksa informasi dan ciri barang.",
+    awaitingHandover: "Barang sudah teridentifikasi dan menunggu penyerahan.",
+    handedOver: "Barang sudah diserahkan. Satpam sedang menyelesaikan laporan.",
   },
   teknisi: {
     repairing: "Perbaikan fasilitas masih berlangsung.",
@@ -52,3 +54,22 @@ export const progressMessages = {
     coordinating: "TEFA sedang berkoordinasi dengan pihak terkait.",
   },
 } satisfies Record<ReportHandler, Record<string, string>>
+
+export type ReportProgressContext =
+  | { handler: "satpam"; status: ReportStatus; kind: "kehilangan" | "temuan" }
+  | { handler: Exclude<ReportHandler, "satpam"> }
+
+export function getReportProgressOptions(context: ReportProgressContext): Array<[string, string]> {
+  if (context.handler !== "satpam") return Object.entries(progressMessages[context.handler])
+
+  const messages = progressMessages.satpam
+  switch (context.status) {
+    case "barang_teridentifikasi": return [["awaitingHandover", messages.awaitingHandover]]
+    case "diserahkan": return [["handedOver", messages.handedOver]]
+    case "selesai":
+    case "ditolak": return []
+    default: return context.kind === "kehilangan"
+      ? [["searching", messages.searching], ["checking", messages.checking]]
+      : [["checking", messages.checking]]
+  }
+}

@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { parseManagementCommand, parseManagementFilter, requireManagement, managementExpectedStatus, requireManagementNotificationId } from "../../src/features/management/domain/management"
+import { parseManagementCommand, parseManagementFilter, parseManagementRecapFilter, requireManagement, managementExpectedStatus, requireManagementNotificationId } from "../../src/features/management/domain/management"
 import { ManagementService } from "../../src/features/management/application/management-service"
 import { managementCsv, managementCsvCell } from "../../src/features/management/domain/management-csv"
 import type { ManagementRepository } from "../../src/features/management/application/ports"
@@ -44,6 +44,9 @@ test("Completion date filters are explicit and restricted to completed reports",
   assert.equal(parseManagementFilter({ status: "selesai", date: "completed", period: "bulan-ini" }, true).dateBasis, "completed")
   for (const value of [{ date: "completed" }, { status: "diproses", date: "completed" }, { date: {} }, { date: "updated" }]) assert.throws(() => parseManagementFilter(value), ReportError)
   assert.equal(parseManagementFilter({ status: "belum-selesai" }, true).status, "belum-selesai")
+  assert.equal(parseManagementRecapFilter({}).period, "bulan-ini")
+  const recap = parseManagementRecapFilter({ status: "baru", date: "submitted", handler: "tefa" })
+  assert.deepEqual([recap.status, recap.dateBasis, recap.handler], ["selesai", "completed", "tefa"])
 })
 test("Only Management can export and cross-role scope must be explicit", async () => {
   let calls = 0
@@ -53,7 +56,7 @@ test("Only Management can export and cross-role scope must be explicit", async (
     export: async (filter: unknown, operational: boolean) => { exports.push({ filter, operational }); return [] },
   } as unknown as ManagementRepository
   const service = new ManagementService(repository, {} as AttachmentStorage), other = { ...actor, role: "teknisi" }
-  for (const read of [() => service.list(other, {}), () => service.dashboard(other), () => service.statistics(other, {}), () => service.notifications(other), () => service.markRead(other)]) assert.throws(read, ReportError)
+  for (const read of [() => service.list(other, {}), () => service.recap(other, {}), () => service.dashboard(other), () => service.statistics(other, {}), () => service.notifications(other), () => service.markRead(other)]) assert.throws(read, ReportError)
   await assert.rejects(service.export(other, {}), ReportError)
   await assert.rejects(service.export(other, { scope: "monitoring", handler: "tefa" }), ReportError)
   await assert.rejects(service.export(actor, { category: "fasilitas" }), ReportError)
@@ -64,6 +67,7 @@ test("Only Management can export and cross-role scope must be explicit", async (
   assert.deepEqual(exports, [{ filter: parseManagementFilter({ handler: "tefa" }), operational: false }])
   assert.equal(calls, 0)
   assert.equal(await service.list(actor, {}, false), false); assert.equal(await service.list(actor, {}), true)
+  assert.equal(await service.recap(actor, { handler: "tefa" }), false)
 })
 test("Invalid writes stop before repository access", async () => {
   let calls = 0

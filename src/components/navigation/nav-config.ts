@@ -41,7 +41,7 @@ export const navigationByRole: Record<AppRole, NavigationItem[]> = {
     { title: "Statistik", url: "/manajemen/statistik", icon: ChartColumnIncreasing, group: "Analisis" },
     { title: "Rekap Laporan", url: "/manajemen/rekap-laporan", icon: FileSpreadsheet, group: "Analisis" },
     { title: "Kelola Pengguna", url: "/manajemen/pengguna", icon: UsersRound, group: "Administrasi" },
-    { title: "Pengaturan Operasional", url: "/manajemen/pengaturan", icon: Settings2, group: "Administrasi" },
+    { title: "Pengaturan", accessibleLabel: "Pengaturan Operasional", url: "/manajemen/pengaturan", icon: Settings2, group: "Administrasi" },
     { title: "Notifikasi", url: "/manajemen/notifikasi", icon: BellRing, group: "Akun" },
     { title: "Profil", url: "/manajemen/profil", icon: UserRoundCog, group: "Akun" },
   ],

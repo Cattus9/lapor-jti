@@ -8,7 +8,7 @@ test("Management runtime components no longer import sample data", () => {
   assert.doesNotMatch(read("src/features/notifications/components/manajemen-notification-list.tsx"), /\/mock\//)
 })
 test("API routes require session guards; monitoring exposes no mutations", () => {
-  for (const route of ["reports", "monitoring", "dashboard", "statistics", "export", "notifications", "reports/[ticket]", "monitoring/[ticket]", "attachments/[id]"]) assert.match(read(`src/app/api/manajemen/${route}/route.ts`), /await managementRequest\(request/)
+  for (const route of ["reports", "monitoring", "rekap", "dashboard", "statistics", "export", "notifications", "reports/[ticket]", "monitoring/[ticket]", "attachments/[id]"]) assert.match(read(`src/app/api/manajemen/${route}/route.ts`), /await managementRequest\(request/)
   assert.doesNotMatch(read("src/app/api/manajemen/monitoring/route.ts"), /function (POST|PATCH|DELETE)/)
   assert.match(read("src/features/management/infrastructure/http.ts"), /request.headers.get\("origin"\)/)
   assert.match(read("src/features/management/infrastructure/http.ts"), /size > 12000/)

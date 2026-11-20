@@ -2,7 +2,7 @@ import "server-only"
 import { and, asc, eq, lt, notExists, notInArray, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { notifications, reportLostFoundDetails, reports, reportStatusHistory, users } from "@/db/schema"
-import { isReportHandler, progressMessages, reportAttentionCutoffs } from "../domain/report-follow-up"
+import { getReportProgressOptions, isReportHandler, reportAttentionCutoffs, type ReportProgressContext } from "../domain/report-follow-up"
 import { isUuid, ReportError, type ReportActor, type ReportHandler } from "../domain/report"
 
 type Database = ReturnType<typeof getDb>
@@ -47,9 +47,7 @@ export async function materializeReportReminders(db: Database, recipientId: stri
 export async function recordReportProgress(actor: ReportActor, reportId: string, choice: unknown, db: Database = getDb()) {
   const { role } = actor
   if (!isReportHandler(role) || !isUuid(reportId)) throw new ReportError("Laporan tidak ditemukan.", 404)
-  const options: Record<string, string> = progressMessages[role]
-  if (typeof choice !== "string" || !Object.hasOwn(options, choice)) throw new ReportError("Pilih perkembangan yang sesuai.")
-  const note = options[choice]
+  if (typeof choice !== "string") throw new ReportError("Pilih perkembangan yang sesuai.")
 
   return db.transaction(async (tx) => {
     const [account] = await tx.select({ name: users.name }).from(users)
@@ -59,10 +57,17 @@ export async function recordReportProgress(actor: ReportActor, reportId: string,
       .where(and(eq(reports.id, reportId), eq(reports.handlerRole, role))).for("update")
     if (!report) throw new ReportError("Laporan tidak ditemukan.", 404)
     if (report.status === "selesai" || report.status === "ditolak") throw new ReportError("Laporan sudah ditutup.", 409)
-    if (role === "satpam" && choice === "searching") {
-      const [loss] = await tx.select({ kind: reportLostFoundDetails.kind }).from(reportLostFoundDetails).where(eq(reportLostFoundDetails.reportId, reportId))
-      if (loss?.kind !== "kehilangan") throw new ReportError("Pilih perkembangan yang sesuai untuk laporan temuan.")
+    let context: ReportProgressContext
+    if (role === "satpam") {
+      const [details] = await tx.select({ kind: reportLostFoundDetails.kind }).from(reportLostFoundDetails).where(eq(reportLostFoundDetails.reportId, reportId))
+      if (details?.kind !== "kehilangan" && details?.kind !== "temuan") throw new ReportError("Detail barang tidak ditemukan.", 404)
+      context = { handler: role, status: report.status, kind: details.kind }
+    } else {
+      context = { handler: role }
     }
+    const option = getReportProgressOptions(context).find(([key]) => key === choice)
+    if (!option) throw new ReportError("Pilihan perkembangan tidak sesuai dengan status laporan saat ini.")
+    const [, note] = option
 
     const [last] = await tx.select().from(reportStatusHistory)
       .where(eq(reportStatusHistory.reportId, reportId))

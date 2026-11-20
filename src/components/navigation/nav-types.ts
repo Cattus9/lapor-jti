@@ -2,6 +2,7 @@ import type { ComponentType } from "react"
 
 export type NavigationItem = {
   title: string
+  accessibleLabel?: string
   url: string
   icon: ComponentType<{ className?: string }>
   group?: string

@@ -7,11 +7,13 @@ export const roleLabels: Record<OperationalRole, string> = { pelapor: "Pelapor",
 export type MasterKind = "areas" | "locations" | "objects" | "services" | "officers"
 export type MasterRecord = { id: string; name: string; isActive: boolean; revision: number; kind?: string; sortOrder?: number; areaId?: string; group?: string; objectIds?: string[]; handlerRole?: "manajemen" | "tefa" }
 export type OperationalCatalog = Record<MasterKind, MasterRecord[]>
-export type UserRecord = { id: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; updatedAt: string; hasLocalPassword?: boolean }
+export type UserRecord = { id: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; updatedAt: string }
 export type UsersPage = { items: UserRecord[]; total: number; page: number; pageSize: number }
 export const managedUserBatchSize = 50
 export type MasterCommand = { entity: MasterKind; id?: string; revision?: number; name: string; isActive: boolean; kind: "floor" | "area"; sortOrder: number; areaId: string; group: FacilityCategory | ""; objectIds: string[]; handlerRole?: "manajemen" | "tefa" }
-export type UserCommand = { id?: string; updatedAt?: string; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; password?: string }
+export type UserCommand =
+  | { id?: undefined; name: string; email: string; role: OperationalRole; isActive: boolean; identifier: string | null; unit: string | null; studyProgram: string | null; password: string }
+  | { id: string; updatedAt: string; role: OperationalRole }
 function object(raw: unknown) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new ReportError("Isian tidak valid.")
   return raw as Record<string, unknown>
@@ -49,28 +51,23 @@ export function parseMasterCommand(raw: unknown): MasterCommand {
   return { entity, id, revision: revision as number | undefined, name, isActive: active(value.isActive), kind: kind as "floor" | "area", sortOrder: Number(sortOrder), areaId: entity === "locations" ? text(value.areaId, "Area/lantai", 150) : "", group, objectIds, ...(entity === "services" && value.handlerRole !== undefined ? { handlerRole: value.handlerRole as "manajemen" | "tefa" } : {}) }
 }
 export function parseUserCommand(raw: unknown): UserCommand {
-  const value = object(raw), id = value.id as string | undefined, role = value.role as OperationalRole
-  if (id !== undefined && !isUuid(id)) throw new ReportError("ID pengguna tidak valid.")
+  const value = object(raw), { id, updatedAt, password } = value, role = value.role as OperationalRole
   if (!operationalRoles.includes(role)) throw new ReportError("Peran ini tidak dapat dikelola.", 403)
+  if (id !== undefined) {
+    if (!isUuid(id)) throw new ReportError("ID pengguna tidak valid.")
+    if (typeof updatedAt !== "string" || !Number.isFinite(Date.parse(updatedAt))) throw new ReportError("Versi pengguna tidak valid.")
+    if (Object.keys(value).some((key) => !["id", "updatedAt", "role"].includes(key))) throw new ReportError("Pengaturan akun ini hanya dapat mengubah peran.")
+    return { id, updatedAt, role }
+  }
   const email = text(value.email, "Email", 254).toLowerCase()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ReportError("Alamat email tidak valid.")
-  // Editing profiles never resets passwords. Passwords only provision a NEW credential account.
-  if (id && value.password !== undefined) throw new ReportError("Password tidak dapat diubah melalui pengaturan profil.")
-  if (!id && (typeof value.password !== "string" || value.password.length < 12 || value.password.length > 128)) throw new ReportError("Password awal harus 12-128 karakter.")
-  if (id && (typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt)))) throw new ReportError("Versi pengguna tidak valid.")
-  return { id, updatedAt: value.updatedAt as string | undefined, name: text(value.name, "Nama"), email, role, isActive: active(value.isActive), identifier: text(value.identifier, "Identitas", 80, false) || null, unit: text(value.unit, "Unit", 100, false) || null, studyProgram: text(value.studyProgram, "Program studi", 100, false) || null, ...(!id ? { password: value.password as string } : {}) }
+  if (typeof password !== "string" || password.length < 12 || password.length > 128) throw new ReportError("Password awal harus 12-128 karakter.")
+  return { name: text(value.name, "Nama"), email, role, isActive: active(value.isActive), identifier: text(value.identifier, "Identitas", 80, false) || null, unit: text(value.unit, "Unit", 100, false) || null, studyProgram: text(value.studyProgram, "Program studi", 100, false) || null, password }
 }
-export function assertUserChange(actorId: string, before: { id: string; role: string; isActive: boolean }, after: Pick<UserCommand, "role" | "isActive">, activeManagers: number) {
+export function assertUserChange(actorId: string, before: { id: string; role: string; isActive: boolean }, after: { role: OperationalRole; isActive: boolean }, activeManagers: number) {
   if (!operationalRoles.includes(before.role as OperationalRole)) throw new ReportError("Akun ini tidak dapat dikelola.", 403)
   if (actorId === before.id && (!after.isActive || after.role !== "manajemen")) throw new ReportError("Anda tidak dapat menonaktifkan atau mengganti peran akun sendiri.", 409)
   if (before.role === "manajemen" && before.isActive && (after.role !== "manajemen" || !after.isActive) && activeManagers <= 1) throw new ReportError("Minimal satu akun Manajemen harus tetap aktif.", 409)
-}
-export function parsePasswordReset(raw: unknown) {
-  const { id, updatedAt, password } = object(raw)
-  if (typeof id !== "string" || !isUuid(id)) throw new ReportError("ID pengguna tidak valid.")
-  if (typeof updatedAt !== "string" || !Number.isFinite(Date.parse(updatedAt))) throw new ReportError("Versi pengguna tidak valid.")
-  if (typeof password !== "string" || password.length < 12 || password.length > 128) throw new ReportError("Password baru harus 12–128 karakter.")
-  return { id, updatedAt, password }
 }
 export function availableFacilities(catalog: OperationalCatalog, locationName: string) {
   const location = catalog.locations.find((row) => row.name === locationName)

@@ -5,13 +5,10 @@ import { useActivityNotifications } from "@/components/activity-notification-pro
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
-import { progressMessages } from "@/features/reports/domain/report-follow-up"
-import type { ReportHandler } from "@/features/reports/domain/report"
+import { getReportProgressOptions, type ReportProgressContext } from "@/features/reports/domain/report-follow-up"
 
-export function ReportProgressAction({ id, handler, found, localOnly, disabled, onSaved }: {
+export function ReportProgressAction({ id, localOnly, disabled, onSaved, ...context }: ReportProgressContext & {
   id: string
-  handler: ReportHandler
-  found?: boolean
   localOnly?: boolean
   disabled?: boolean
   onSaved: () => void
@@ -22,7 +19,8 @@ export function ReportProgressAction({ id, handler, found, localOnly, disabled, 
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
   const sending = useRef(false)
-  const options = Object.entries(progressMessages[handler]).filter(([key]) => !(found && key === "searching"))
+  const options = getReportProgressOptions(context)
+  const validChoice = options.some(([value]) => value === choice)
 
   function changeOpen(value: boolean) {
     if (sending.current) return
@@ -33,7 +31,7 @@ export function ReportProgressAction({ id, handler, found, localOnly, disabled, 
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!choice || sending.current) return
+    if (!validChoice || disabled || sending.current) return
     sending.current = true
     setSaving(true)
     setError("")
@@ -70,7 +68,7 @@ export function ReportProgressAction({ id, handler, found, localOnly, disabled, 
         {error ? <FieldError>{error}</FieldError> : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" disabled={saving} onClick={() => changeOpen(false)}>Batal</Button>
-          <Button type="submit" disabled={!choice || saving}>{saving ? "Menyimpan…" : localOnly ? "Simpan perkembangan" : "Kirim pembaruan"}</Button>
+          <Button type="submit" disabled={!validChoice || disabled || saving}>{saving ? "Menyimpan…" : localOnly ? "Simpan perkembangan" : "Kirim pembaruan"}</Button>
         </div>
       </form>
     </DialogContent>

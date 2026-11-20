@@ -1,12 +1,16 @@
 import { isUuid, ReportError, type ReportActor } from "../../reports/domain/report"
 import type { AttachmentStorage } from "../../reports/application/ports"
-import { parseManagementCommand, parseManagementFilter, requireManagement, requireManagementNotificationId, requireManagementTicket } from "../domain/management"
+import { parseManagementCommand, parseManagementFilter, parseManagementRecapFilter, requireManagement, requireManagementNotificationId, requireManagementTicket } from "../domain/management"
 import { managementCsv } from "../domain/management-csv"
 import type { ManagementRepository } from "./ports"
 
 export class ManagementService {
   constructor(private readonly repository: ManagementRepository, private readonly storage: AttachmentStorage) {}
   list(actor: ReportActor, raw: Record<string, unknown>, operational = true) { requireManagement(actor); return this.repository.list(parseManagementFilter(raw, operational), operational) }
+  recap(actor: ReportActor, raw: Record<string, unknown>) {
+    requireManagement(actor)
+    return this.repository.list(parseManagementRecapFilter(raw), false)
+  }
   dashboard(actor: ReportActor) { requireManagement(actor); return this.repository.dashboard() }
   statistics(actor: ReportActor, raw: Record<string, unknown>) {
     requireManagement(actor)
@@ -18,6 +22,7 @@ export class ManagementService {
   async export(actor: ReportActor, raw: Record<string, unknown>) {
     requireManagement(actor)
     const scope = raw.scope ?? "operational"
+    if (scope === "completed") return managementCsv(await this.repository.export(parseManagementRecapFilter(raw), false), true)
     if (scope !== "operational" && scope !== "monitoring") throw new ReportError("Cakupan ekspor tidak valid.")
     const operational = scope === "operational"
     return managementCsv(await this.repository.export(parseManagementFilter(raw, operational), operational))

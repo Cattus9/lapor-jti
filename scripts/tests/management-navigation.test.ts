@@ -9,7 +9,7 @@ test("Management navigation has four meaningful sections while preserving route 
   assert.deepEqual(groups.map(({ label, items }) => [label, items.map(({ title }) => title)]), [
     ["Operasional", ["Ringkasan", "Kelola Laporan", "Monitoring"]],
     ["Analisis", ["Statistik", "Rekap Laporan"]],
-    ["Administrasi", ["Kelola Pengguna", "Pengaturan Operasional"]],
+    ["Administrasi", ["Kelola Pengguna", "Pengaturan"]],
     ["Akun", ["Notifikasi", "Profil"]],
   ])
   assert.deepEqual(groups.flatMap((group) => group.items), items)
