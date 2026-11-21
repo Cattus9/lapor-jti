@@ -48,7 +48,8 @@ export function parseSatpamCommand(raw: unknown): SatpamCommand {
     const recipientEmail = text(v.recipientEmail, "Email penerima", 255) || undefined
     const recipientPhone = text(v.recipientPhone, "Nomor HP penerima", 50) || undefined
     if (!recipientEmail && !recipientPhone) throw new ReportError("Isi minimal salah satu kontak penerima: Email atau Nomor HP.")
-    if (recipientEmail && !/.+@.+\..+/.test(recipientEmail)) throw new ReportError("Format email penerima tidak valid.")
+    if (recipientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) throw new ReportError("Format email penerima tidak valid.")
+    if (recipientPhone && !/^\d{11,13}$/.test(recipientPhone)) throw new ReportError("Nomor HP penerima harus berupa angka dengan panjang 11 sampai 13 digit.")
     return {
       type: "handover",
       matchId: v.matchId,

@@ -39,6 +39,9 @@ test("Handover requires an explicit officer, recipient, location, and at least e
     { recipientEmail: undefined, recipientPhone: undefined },
     { recipientEmail: "bukan-email", recipientPhone: undefined },
     { recipientEmail: "   ", recipientPhone: "   " },
+    { recipientPhone: "1234567890", recipientEmail: undefined },
+    { recipientPhone: "12345678901234", recipientEmail: undefined },
+    { recipientPhone: "0812345678a", recipientEmail: undefined },
   ]) assert.throws(() => parseSatpamCommand({ ...handover, ...patch }), ReportError)
   assert.equal(parseSatpamCommand({ ...handover, officerName: "Impersonated", actorId: id }).type, "handover")
 })
@@ -67,12 +70,14 @@ test("Server filters reject malformed statuses, officers and calendar dates", ()
 test("Service rejects unauthorized/invalid commands before repository or storage calls", async () => {
   let calls = 0
   const repository = { execute: async () => { calls++ } } as unknown as SatpamRepository
-  const storage = {} as AttachmentStorage
+  const storage = { store: async () => [{ id, storageKey: "key", name: "foto.jpg", mimeType: "image/jpeg", size: 100 }] } as unknown as AttachmentStorage
   const service = new SatpamService(repository, storage)
-  await assert.rejects(service.execute({ id, role: "pelapor" }, handover), ReportError)
-  await assert.rejects(service.execute({ id, role: "satpam" }, { ...handover, officerId: null }), ReportError)
+  const photo = { name: "foto.jpg", mimeType: "image/jpeg", bytes: new Uint8Array([255, 216, 255]) }
+  await assert.rejects(service.execute({ id, role: "pelapor" }, handover, photo), ReportError)
+  await assert.rejects(service.execute({ id, role: "satpam" }, { ...handover, officerId: null }, photo), ReportError)
+  await assert.rejects(service.execute({ id, role: "satpam" }, handover), /Foto dokumentasi penyerahan wajib diunggah/)
   assert.equal(calls, 0)
-  await service.execute({ id, role: "satpam" }, handover)
+  await service.execute({ id, role: "satpam" }, handover, photo)
   assert.equal(calls, 1)
 })
 test("List defaults preserve newest/all-time and accept the same periods for both kinds", () => {

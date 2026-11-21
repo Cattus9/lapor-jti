@@ -124,7 +124,7 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
     const trimmedNote = note.trim()
     const photo = handoverPhoto.file
 
-    if (!trimmedRecipient || !officerId || !trimmedEvidence) return
+    if (!trimmedRecipient || !officerId || !trimmedEvidence || !photo) return
 
     if (!trimmedEmail && !trimmedPhone) {
       setError("Minimal salah satu antara email atau nomor HP penerima wajib diisi.")
@@ -134,8 +134,16 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
       setError("Format email penerima tidak valid.")
       return
     }
+    if (trimmedPhone && !/^\d{11,13}$/.test(trimmedPhone)) {
+      setError("Nomor HP penerima harus berupa angka dengan panjang 11 sampai 13 digit.")
+      return
+    }
     if (handoverPhoto.error) {
       setError(handoverPhoto.error)
+      return
+    }
+    if (!photo) {
+      setError("Foto penyerahan wajib diunggah.")
       return
     }
 
@@ -153,35 +161,17 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
     if (!command.current || command.current.fingerprint !== fingerprint) command.current = { fingerprint, key: crypto.randomUUID() }
     setPending(true); setError("")
     try {
-      let response: Response
-      if (photo && photo.size > 0) {
-        const formData = new FormData()
-        formData.append("recipient", trimmedRecipient)
-        if (trimmedEmail) formData.append("recipientEmail", trimmedEmail)
-        if (trimmedPhone) formData.append("recipientPhone", trimmedPhone)
-        formData.append("officerId", officerId)
-        formData.append("ownershipEvidence", trimmedEvidence)
-        if (trimmedNote) formData.append("note", trimmedNote)
-        if (selectedLoss?.ticket) formData.append("lossTicket", selectedLoss.ticket)
-        formData.append("submissionKey", command.current.key)
-        formData.append("photo", photo)
-        response = await fetch(`/api/satpam/inventory/${item.id}/handover`, { method: "POST", body: formData })
-      } else {
-        response = await fetch(`/api/satpam/inventory/${item.id}/handover`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            recipient: trimmedRecipient,
-            recipientEmail: trimmedEmail || undefined,
-            recipientPhone: trimmedPhone || undefined,
-            officerId,
-            ownershipEvidence: trimmedEvidence,
-            note: trimmedNote,
-            lossTicket: selectedLoss?.ticket,
-            submissionKey: command.current.key,
-          }),
-        })
-      }
+      const formData = new FormData()
+      formData.append("recipient", trimmedRecipient)
+      if (trimmedEmail) formData.append("recipientEmail", trimmedEmail)
+      if (trimmedPhone) formData.append("recipientPhone", trimmedPhone)
+      formData.append("officerId", officerId)
+      formData.append("ownershipEvidence", trimmedEvidence)
+      if (trimmedNote) formData.append("note", trimmedNote)
+      if (selectedLoss?.ticket) formData.append("lossTicket", selectedLoss.ticket)
+      formData.append("submissionKey", command.current.key)
+      formData.append("photo", photo)
+      const response = await fetch(`/api/satpam/inventory/${item.id}/handover`, { method: "POST", body: formData })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Penyerahan belum berhasil.")
       setMode(false); setRevision(value => value + 1); onUpdated(data)
@@ -213,16 +203,17 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
           <Input
             id="inventory-recipient-phone"
             type="tel"
+            inputMode="numeric"
             value={recipientPhone}
-            maxLength={30}
-            onChange={event => setRecipientPhone(event.target.value)}
+            maxLength={13}
+            onChange={event => setRecipientPhone(event.target.value.replace(/\D/g, "").slice(0, 13))}
             disabled={pending}
             placeholder="081234567890"
             className="bg-background"
           />
         </Field>
       </div>
-      <FieldDescription>Minimal salah satu (email atau nomor HP) harus diisi sebagai kontak verifikasi penerima.</FieldDescription>
+      <FieldDescription>Minimal salah satu (email atau nomor HP) harus diisi sebagai kontak verifikasi penerima. Format nomor HP: 11–13 digit angka.</FieldDescription>
       <Field>
         <FieldLabel htmlFor="inventory-officer">Petugas penyerah</FieldLabel>
         <Select items={workspace.data?.officers.map(o => ({ value: o.id, label: o.name })) ?? []} value={officerId} onValueChange={value => setOfficerId(value ?? "")} disabled={pending || workspace.loading}>
@@ -233,7 +224,7 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
       </Field>
       <ItemPhotoField
         idPrefix="inventory-handover"
-        label="Foto penyerahan (opsional)"
+        label="Foto penyerahan"
         description="Format JPG, PNG, atau WebP (maks. 5 MB) sebagai dokumentasi serah terima."
         photo={handoverPhoto}
         disabled={pending}
@@ -263,7 +254,7 @@ export function InventoryDetailDialog({ item: initialItem, open, onOpenChange, o
         <FieldDescription>{selectedLoss ? "Laporan ini akan selesai bersama penyerahan barang." : "Kosongkan jika penerima belum pernah membuat laporan. Cari kata yang lebih spesifik jika laporan belum terlihat."}</FieldDescription>
       </Field>
       <Field><FieldLabel htmlFor="inventory-note">Catatan tambahan (opsional)</FieldLabel><Textarea id="inventory-note" value={note} maxLength={2000} onChange={event => setNote(event.target.value)} disabled={pending} rows={2} /></Field>
-      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" disabled={pending} onClick={() => setMode(false)}>Batal</Button><Button type="submit" disabled={unavailable || !officerId || !recipient.trim() || !evidence.trim() || !hasContact || Boolean(workspace.error)}><Handshake aria-hidden="true" />{pending ? "Menyimpan…" : "Konfirmasi penyerahan"}</Button></div>
+      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" disabled={pending} onClick={() => setMode(false)}>Batal</Button><Button type="submit" disabled={unavailable || !officerId || !recipient.trim() || !evidence.trim() || !hasContact || !handoverPhoto.file || Boolean(workspace.error)}><Handshake aria-hidden="true" />{pending ? "Menyimpan…" : "Konfirmasi penyerahan"}</Button></div>
     </form></div>
   </DialogContent></Dialog>
   const action = <div className="rounded-xl border border-border bg-muted/40 p-4">{isStored ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">Penyerahan barang</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Periksa kepemilikan, lalu catat penerima dan petugas. Laporan web terkait bersifat opsional.</p></div><Button variant="soft" disabled={unavailable} onClick={() => setEditing(true)}>Koreksi informasi</Button><Button disabled={unavailable} onClick={() => { if (linkedLoss) { if (!recipient && linkedLoss.reporter) setRecipient(linkedLoss.reporter); if (!recipientEmail && linkedLoss.reporterEmail) setRecipientEmail(linkedLoss.reporterEmail); if (!recipientPhone && linkedLoss.reporterContact) setRecipientPhone(linkedLoss.reporterContact) } setMode(true) }}><Handshake aria-hidden="true" />Serahkan barang</Button></div> : <p className="text-sm">Barang sudah diserahkan. Catatan tersimpan pada Riwayat.</p>}

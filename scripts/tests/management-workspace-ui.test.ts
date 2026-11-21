@@ -2,7 +2,10 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import React from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { managementCategoryScope, resolveManagementCategoryPreview, type ManagementCategoryPreview } from "../../src/features/management/components/management-category-preview"
+import { MonitoringRow } from "../../src/features/management/components/management-monitoring"
 import type { ManagementPage, ManagementReport } from "../../src/features/management/types"
 import { navigationByRole } from "../../src/components/navigation/nav-config"
 import { ChartColumnIncreasing, ChartNoAxesCombined } from "lucide-react"
@@ -119,4 +122,72 @@ test("Workspace refresh keeps confirmed content, disables stale actions, and res
   assert.match(hook, /cache.scope !== scope/)
   assert.match(hook, /visit: cursor.visit \+ 1/)
   assert.match(read("src/components/reports/use-operational-data.ts"), /return \(\) => controller.abort\(\)/)
+})
+
+test("Monitoring row renders stepper and status indicators according to category lifecycle and status", () => {
+  const baseReport: ManagementReport = {
+    id: "mon-1",
+    ticket: "T-MON-1",
+    title: "Atap Bocor di Lantai 5",
+    category: "Fasilitas",
+    categoryKey: "fasilitas",
+    handler: "Teknisi",
+    reporter: "Budi Santoso",
+    reporterUnit: "Staff",
+    service: "Sarana",
+    context: "Gedung Utama",
+    location: "Lantai 5 Ruang 501",
+    submittedAt: "17 Nov 2026, 14.30",
+    submittedAtIso: "2026-11-17T14:30:00Z",
+    updatedAt: "17 Nov 2026, 15.00",
+    reportedOn: "17 Nov 2026",
+    eventDate: "17 Nov 2026",
+    eventTime: "14.00",
+    description: "Atap bocor saat hujan deras.",
+    attachments: 1,
+    status: "Selesai",
+    statusKey: "selesai",
+  }
+
+  // 1. Completed report: has DoneStatusIc icon, emerald glow, stepper
+  const completedHtml = renderToStaticMarkup(React.createElement(MonitoringRow, { report: baseReport, openReport: () => { } }))
+  assert.match(completedHtml, /DoneStatusIc\.png/)
+  assert.match(completedHtml, /bg-emerald-500\/20/)
+  assert.match(completedHtml, /Tahapan penanganan/)
+  assert.match(completedHtml, /Progres penanganan laporan/)
+
+  // 2. In progress service report: has blue glow, no DoneStatusIc, 3-step lifecycle
+  const inProgressHtml = renderToStaticMarkup(
+    React.createElement(MonitoringRow, {
+      report: { ...baseReport, id: "mon-2", category: "Layanan", categoryKey: "layanan", handler: "TEFA", status: "Diproses", statusKey: "diproses" },
+      openReport: () => { },
+    })
+  )
+  assert.doesNotMatch(inProgressHtml, /DoneStatusIc\.png/)
+  assert.match(inProgressHtml, /bg-blue-500\/20/)
+  assert.doesNotMatch(inProgressHtml, /bg-emerald-500\/20/)
+  assert.match(inProgressHtml, /Tahapan penanganan/)
+
+  // 3. New report: no glow, no DoneStatusIc
+  const newHtml = renderToStaticMarkup(
+    React.createElement(MonitoringRow, {
+      report: { ...baseReport, id: "mon-3", status: "Baru", statusKey: "baru" },
+      openReport: () => { },
+    })
+  )
+  assert.doesNotMatch(newHtml, /DoneStatusIc\.png/)
+  assert.doesNotMatch(newHtml, /bg-emerald-500\/20/)
+  assert.doesNotMatch(newHtml, /bg-blue-500\/20/)
+  assert.match(newHtml, /Tahapan penanganan/)
+
+  // 4. Rejected report: status akhir Ditolak
+  const rejectedHtml = renderToStaticMarkup(
+    React.createElement(MonitoringRow, {
+      report: { ...baseReport, id: "mon-4", status: "Ditolak", statusKey: "ditolak" },
+      openReport: () => { },
+    })
+  )
+  assert.doesNotMatch(rejectedHtml, /DoneStatusIc\.png/)
+  assert.match(rejectedHtml, /Status akhir/)
+  assert.match(rejectedHtml, /Ditolak/)
 })

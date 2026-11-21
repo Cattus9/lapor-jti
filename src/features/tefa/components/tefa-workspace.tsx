@@ -2,8 +2,10 @@
 
 import { useRef, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import dynamic from "next/dynamic"
 import { Archive, ArrowRight, ClipboardCheck, ClipboardList, Headphones, Inbox, TimerReset } from "lucide-react"
+import { cn } from "cn"
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { ContentShell } from "@/components/layout/content-shell"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -12,7 +14,9 @@ import { OperationalRefreshContext, useDebouncedOperationalQuery, useOperational
 import { UnopenedReportBadge } from "@/components/reports/report-opening"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { Stepper, type StepperStep } from "@/components/ui/stepper"
 import { ConfigSelect, EmptyRows, OperationsStatus, SearchField } from "@/features/operations/components/operations-ui"
 import type { CurrentUser } from "@/lib/auth/current-user"
 import type { ManagementCommand } from "@/features/management/domain/management"
@@ -73,6 +77,143 @@ function TefaReportList({ history, initialStatus, onOpen, refresh }: { history: 
     <OperationsStatus loading={page.loading} error={page.error} retry={refresh} /><div className="space-y-3">{page.items.map((report) => <TefaReportRow key={report.id} report={report} onOpen={onOpen} />)}{!page.loading && !page.error && !page.items.length ? <EmptyRows>Tidak ada laporan yang sesuai filter.</EmptyRows> : null}</div>{page.nextCursor ? <div className="mt-4 flex justify-center"><Button variant="outline" disabled={page.loading || Boolean(page.error)} onClick={page.loadMore}>Muat 6 laporan berikutnya</Button></div> : null}<p className="mt-4 text-xs text-muted-foreground">{page.items.length} dari {page.total} laporan</p></TefaPanel>
 }
 
-function TefaReportRow({ report, onOpen }: { report: ManagementReport; onOpen: (report: ManagementReport, button: HTMLButtonElement) => void }) {
-  return <div className="rounded-xl border border-border bg-background/30 p-4 transition-colors hover:border-primary/40 focus-within:border-primary/40 motion-reduce:transition-none"><div className="flex flex-wrap items-center gap-2"><p className="break-words text-sm font-semibold">{report.title}</p><UnopenedReportBadge unseen={report.unopened} attention={report.attention} /><StatusBadge status={report.status} /></div><p className="mt-1 text-xs text-muted-foreground">{report.reporter}</p><div className="mt-3 flex flex-wrap items-center gap-2"><Badge variant="outline" tone="teal">{report.service}</Badge><span className="text-xs text-muted-foreground">Dikirim {report.submittedAt} WIB</span></div><div className="mt-4 flex justify-end border-t border-border/60 pt-3"><Button type="button" size="sm" variant="outline" className="border-primary/20 bg-primary/5 text-primary-action-hover hover:bg-primary/10 hover:text-primary-action-hover dark:text-primary dark:hover:text-primary" aria-haspopup="dialog" aria-label={`Lihat detail ${report.title}`} onClick={(event) => onOpen(report, event.currentTarget)}>Lihat detail<ArrowRight /></Button></div></div>
+const tefaSteps: readonly StepperStep[] = [
+  { value: "baru", label: "Baru" },
+  { value: "diproses", label: "Diproses" },
+  { value: "selesai", label: "Selesai" },
+]
+
+export function TefaReportRow({
+  report,
+  onOpen,
+}: {
+  report: ManagementReport
+  onOpen: (report: ManagementReport, button: HTMLButtonElement) => void
+}) {
+  const isDone = report.status === "Selesai" || report.statusKey === "selesai"
+  const isInProgress = report.status === "Diproses" || report.statusKey === "diproses"
+  const isRejected = report.status === "Ditolak" || report.statusKey === "ditolak"
+  const currentStep = isDone ? "selesai" : isInProgress ? "diproses" : "baru"
+
+  return (
+    <Card
+      role="article"
+      className="group relative gap-0 overflow-hidden border border-border bg-card p-4 shadow-none ring-0 transition-colors hover:border-primary/40 focus-within:border-primary/40 md:p-5"
+    >
+      {/* Blurry corner half-circle glow with fading gradient */}
+      {isDone ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-emerald-500/20 blur-2xl transition-opacity dark:bg-emerald-500/25"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-emerald-500/15 via-emerald-500/5 to-transparent transition-opacity"
+          />
+        </>
+      ) : isInProgress ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-blue-500/20 blur-2xl transition-opacity dark:bg-blue-500/25"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-blue-500/15 via-blue-500/5 to-transparent transition-opacity"
+          />
+        </>
+      ) : null}
+
+      {/* Header row */}
+      <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="break-words text-sm font-semibold text-foreground md:text-base">
+              {report.title}
+            </p>
+            <UnopenedReportBadge unseen={report.unopened} />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{report.reporter}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {isDone ? (
+            <span className="relative size-6 shrink-0 drop-shadow-xs">
+              <Image
+                src="/assets/DoneStatusIc.png"
+                alt="Selesai"
+                fill
+                sizes="24px"
+                className="object-contain"
+                unoptimized
+              />
+            </span>
+          ) : null}
+          <StatusBadge status={report.status} />
+        </div>
+      </div>
+
+      {/* Metadata tags */}
+      <div className="relative z-10 mt-3 flex flex-wrap items-center gap-2">
+        <Badge variant="outline" tone="teal">
+          {report.service}
+        </Badge>
+        <span className="text-xs text-muted-foreground">
+          Dikirim {report.submittedAt} WIB
+        </span>
+      </div>
+
+      {/* Stepper Progres Penanganan */}
+      {isRejected ? (
+        <div className="relative z-10 mt-3.5 flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <span>Status akhir</span>
+          <span className="font-semibold">Ditolak</span>
+        </div>
+      ) : (
+        <div className="relative z-10 mt-3.5 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+            <span>Tahapan penanganan</span>
+            <span
+              className={cn(
+                "font-semibold",
+                isDone
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : isInProgress
+                    ? "text-blue-600 dark:text-blue-400"
+                    : "text-muted-foreground"
+              )}
+            >
+              {report.status}
+            </span>
+          </div>
+          <Stepper
+            aria-label="Progres penanganan layanan"
+            value={currentStep}
+            steps={tefaSteps}
+            className="w-full"
+          />
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="relative z-10 mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <span className="text-xs text-muted-foreground">
+          {report.updatedAt ? `Diperbarui ${report.updatedAt}` : `Dikirim ${report.submittedAt} WIB`}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="border-primary/20 bg-primary/5 text-primary-action-hover hover:bg-primary/10 hover:text-primary-action-hover dark:text-primary dark:hover:text-primary"
+          aria-haspopup="dialog"
+          aria-label={`Lihat detail ${report.title}`}
+          onClick={(event) => onOpen(report, event.currentTarget)}
+        >
+          Lihat detail
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+        </Button>
+      </div>
+    </Card>
+  )
 }

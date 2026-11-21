@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { Armchair, ArrowRight, ChevronDown, ClipboardList, LampCeiling, Layers3, ListTodo, MapPin, Monitor, RotateCcw, Search, Snowflake, Table2, Tv, Wrench, type LucideIcon } from "lucide-react"
 import { useActivityNotifications } from "@/components/activity-notification-provider"
 import { OperationalRefreshContext, useDebouncedOperationalQuery, useOperationalPage, useOperationalResource } from "@/components/reports/use-operational-data"
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { Stepper, type StepperStep } from "@/components/ui/stepper"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { technicianStatuses, type TechnicianCommand } from "../domain/technician"
 import { reportPeriods } from "../../reports/domain/report-list-filters"
@@ -31,16 +33,173 @@ const periodOptions = Object.entries(reportPeriods).filter(([value]) => value !=
 const sortOptions = [{ value: "terbaru", label: "Terbaru" }, { value: "terlama", label: "Terlama" }]
 type OpenReport = (report: TechnicianFacilityReport, trigger: HTMLButtonElement) => void
 const ReportContext = createContext<OpenReport | null>(null)
-const RetryContext = createContext(() => {})
+const RetryContext = createContext(() => { })
 
 function Feedback({ loading, error }: { loading: boolean; error: string }) {
   const retry = useContext(RetryContext)
   return <>{error ? <div className="space-y-2"><FieldError>{error}</FieldError><Button type="button" size="sm" variant="outline" onClick={retry}>Coba lagi</Button></div> : null}{loading ? <div className="space-y-2" role="status" aria-label="Memuat laporan"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : null}</>
 }
 
-function FacilityReportRow({ report }: { report: TechnicianFacilityReport }) {
+const facilityIcons: Record<string, LucideIcon> = { AC: Snowflake, Komputer: Monitor, Kursi: Armchair, Lampu: LampCeiling, LCD: Monitor, Meja: Table2, TV: Tv }
+
+export function FacilityReportRow({ report }: { report: TechnicianFacilityReport }) {
   const openReport = useContext(ReportContext)
-  return <article className="rounded-xl border border-border/60 bg-background/40 p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground"><Wrench className="size-4" aria-hidden="true" /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{report.title}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="break-words">{report.facility} · {report.location}</span></p></div></div><div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="text-xs text-muted-foreground">{report.completedAt ? `Selesai ${report.completedAt}` : report.status === "Ditolak" ? `Ditolak ${report.updatedAt}` : `Dikirim ${report.submittedAt}`}</span><UnopenedReportBadge unseen={report.unopened} attention={report.attention} /><StatusBadge status={report.status} /><Button type="button" variant="outline" size="sm" className="shrink-0 bg-card" data-report-detail={report.id} aria-haspopup="dialog" onClick={(event) => openReport?.(report, event.currentTarget)}>Lihat detail</Button></div></div>{report.completionNote ? <p className="mt-3 whitespace-pre-wrap break-words border-t border-border/60 pt-3 text-sm text-muted-foreground">{report.completionNote}</p> : null}</article>
+  const Icon = facilityIcons[report.facility] ?? Wrench
+
+  const isDone = report.status === "Selesai"
+  const isRejected = report.status === "Ditolak"
+  const isInProgress = report.status === "Diproses" || report.status === "Diverifikasi"
+
+  const firstValue = report.status === "Diproses" ? "diproses" : report.status === "Diverifikasi" ? "diverifikasi" : "baru"
+  const firstLabel = report.status === "Diproses" ? "Diproses" : report.status === "Diverifikasi" ? "Diverifikasi" : "Baru"
+  const currentStep = isDone ? "selesai" : firstValue
+
+  const steps: readonly StepperStep[] = [
+    { value: firstValue, label: firstLabel },
+    { value: "selesai", label: "Selesai" },
+  ]
+
+  return (
+    <Card
+      role="article"
+      className="group relative gap-0 overflow-hidden border border-border bg-card p-4 shadow-none ring-0 transition-colors hover:border-primary/40 focus-within:border-primary/40 md:p-5"
+    >
+      {/* Blurry corner half-circle glow with fading gradient */}
+      {isDone ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-emerald-500/20 blur-2xl transition-opacity dark:bg-emerald-500/25"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-emerald-500/15 via-emerald-500/5 to-transparent transition-opacity"
+          />
+        </>
+      ) : isInProgress ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-blue-500/20 blur-2xl transition-opacity dark:bg-blue-500/25"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 size-28 rounded-bl-full bg-gradient-to-bl from-blue-500/15 via-blue-500/5 to-transparent transition-opacity"
+          />
+        </>
+      ) : null}
+
+      {/* Header row */}
+      <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-primary">
+            <Icon className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="break-words text-sm font-semibold text-foreground md:text-base">
+                {report.title}
+              </p>
+              <UnopenedReportBadge unseen={report.unopened} />
+            </div>
+            {report.location ? (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="break-words">{report.room ? `${report.room} · ` : ""}{report.location}</span>
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {isDone ? (
+            <span className="relative size-6 shrink-0 drop-shadow-xs">
+              <Image
+                src="/assets/DoneStatusIc.png"
+                alt="Selesai"
+                fill
+                sizes="24px"
+                className="object-contain"
+                unoptimized
+              />
+            </span>
+          ) : null}
+          <StatusBadge status={report.status} />
+        </div>
+      </div>
+
+      {/* Metadata tags */}
+      <div className="relative z-10 mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant="outline" tone="warning">
+          {report.facility}
+        </Badge>
+        <span>· Dikirim {report.submittedAt} WIB</span>
+      </div>
+
+      {/* Completion note if available */}
+      {report.completionNote ? (
+        <p className="relative z-10 mt-3 whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/30 p-2.5 text-xs text-muted-foreground">
+          {report.completionNote}
+        </p>
+      ) : null}
+
+      {/* Stepper Progres Perbaikan */}
+      {isRejected ? (
+        <div className="relative z-10 mt-3.5 flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <span>Status akhir</span>
+          <span className="font-semibold">Ditolak</span>
+        </div>
+      ) : (
+        <div className="relative z-10 mt-3.5 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+            <span>Tahapan perbaikan</span>
+            <span
+              className={cn(
+                "font-semibold",
+                isDone
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : isInProgress
+                    ? "text-blue-600 dark:text-blue-400"
+                    : "text-muted-foreground"
+              )}
+            >
+              {report.status}
+            </span>
+          </div>
+          <Stepper
+            aria-label="Progres perbaikan fasilitas"
+            value={currentStep}
+            steps={steps}
+            className="w-full"
+          />
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="relative z-10 mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <span className="text-xs text-muted-foreground">
+          {report.completedAt
+            ? `Selesai ${report.completedAt} WIB`
+            : report.status === "Ditolak"
+              ? `Ditolak ${report.updatedAt} WIB`
+              : `Diperbarui ${report.updatedAt}`}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="border-primary/20 bg-primary/5 text-primary-action-hover hover:bg-primary/10 hover:text-primary-action-hover dark:text-primary dark:hover:text-primary"
+          data-report-detail={report.id}
+          aria-haspopup="dialog"
+          aria-label={`Lihat detail ${report.title}`}
+          onClick={(event) => openReport?.(report, event.currentTarget)}
+        >
+          Lihat detail
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+        </Button>
+      </div>
+    </Card>
+  )
 }
 
 function ReportPage({ url, emptyContext = "room-reports", hasFilters = false, onReset }: {
@@ -52,7 +211,7 @@ function ReportPage({ url, emptyContext = "room-reports", hasFilters = false, on
   const retry = useContext(RetryContext)
   const page = useOperationalPage<TechnicianFacilityReport>(url)
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <p className="text-xs text-muted-foreground" aria-live="polite">{!page.loading && !page.error ? `${page.total} laporan ditemukan` : ""}</p>
       {page.items.map((report) => <FacilityReportRow key={report.id} report={report} />)}
       <Feedback loading={page.loading} error={page.error} />
@@ -67,8 +226,6 @@ function ReportPage({ url, emptyContext = "room-reports", hasFilters = false, on
     </div>
   )
 }
-
-const facilityIcons: Record<string, LucideIcon> = { AC: Snowflake, Komputer: Monitor, Kursi: Armchair, Lampu: LampCeiling, LCD: Monitor, Meja: Table2, TV: Tv }
 function PriorityRoomCard({ room, highest, status }: { room: TechnicianRoomPriority; highest: number; status: string }) {
   const [expanded, setExpanded] = useState(false)
   const maxObject = room.facilities[0]?.activeReports

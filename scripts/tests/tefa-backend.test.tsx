@@ -6,7 +6,7 @@ import { navigationByRole } from "../../src/components/navigation/nav-config"
 import { parseTefaFilter, requireTefa } from "../../src/features/tefa/domain/tefa"
 import { ReportError } from "../../src/features/reports/domain/report"
 import { parseMasterCommand } from "../../src/features/operations/domain/operations"
-import { TefaOverview } from "../../src/features/tefa/components/tefa-workspace"
+import { TefaOverview, TefaReportRow } from "../../src/features/tefa/components/tefa-workspace"
 
 test("TEFA only accepts service filters in their own active/history scope", () => {
   assert.equal(parseTefaFilter().lifecycle, "active")
@@ -33,8 +33,79 @@ test("TEFA navigation/pages stay protected and runtime does not import demo repo
   assert.ok(dialog.indexOf('title="Lampiran"') < dialog.indexOf("Riwayat status</h3>"))
 })
 test("Live dashboard renders real totals and safe empty states with shared KPI cards", () => {
-  const html = renderToStaticMarkup(<TefaOverview data={{ newReports: 0, inProgress: 0, completedThisMonth: 0, activeServiceReports: 0, queue: [], updatedAt: "", services: [] }} onOpen={() => {}} />)
+  const html = renderToStaticMarkup(<TefaOverview data={{ newReports: 0, inProgress: 0, completedThisMonth: 0, activeServiceReports: 0, queue: [], updatedAt: "", services: [] }} onOpen={() => { }} />)
   assert.equal((html.match(/>Detail<\/span>/g) ?? []).length, 4)
   assert.match(html, /Tidak ada laporan yang perlu ditangani/)
   assert.doesNotMatch(html, /Data contoh|Pratinjau|simulasi/)
+})
+
+test("TEFA report cards render stepper and status indicators according to lifecycle state", () => {
+  const baseReport = {
+    id: "rep-1",
+    ticket: "T-001",
+    title: "Kendala S-Learn",
+    category: "Layanan" as const,
+    categoryKey: "layanan" as const,
+    handler: "TEFA" as const,
+    reporter: "Ayu Santoso",
+    reporterUnit: "Mahasiswa",
+    service: "JTI E-Learning",
+    context: "Layanan JTI",
+    location: "Online",
+    submittedAt: "6 Nov 2026, 13.05",
+    submittedAtIso: "2026-11-06T13:05:00Z",
+    updatedAt: "6 Nov 2026, 14.00",
+    reportedOn: "6 Nov 2026",
+    eventDate: "6 Nov 2026",
+    eventTime: "13.00",
+    description: "Tidak bisa login.",
+    attachments: 0,
+  }
+
+  // 1. Completed report: has DoneStatusIc icon, emerald glow, and completed stepper
+  const completedHtml = renderToStaticMarkup(
+    <TefaReportRow
+      report={{ ...baseReport, status: "Selesai", statusKey: "selesai" }}
+      onOpen={() => { }}
+    />
+  )
+  assert.match(completedHtml, /DoneStatusIc\.png/)
+  assert.match(completedHtml, /bg-emerald-500\/20/)
+  assert.match(completedHtml, /Tahapan penanganan/)
+  assert.match(completedHtml, /Progres penanganan layanan/)
+
+  // 2. In progress report: has blue glow, no DoneStatusIc
+  const inProgressHtml = renderToStaticMarkup(
+    <TefaReportRow
+      report={{ ...baseReport, id: "rep-2", status: "Diproses", statusKey: "diproses" }}
+      onOpen={() => { }}
+    />
+  )
+  assert.doesNotMatch(inProgressHtml, /DoneStatusIc\.png/)
+  assert.match(inProgressHtml, /bg-blue-500\/20/)
+  assert.doesNotMatch(inProgressHtml, /bg-emerald-500\/20/)
+  assert.match(inProgressHtml, /Tahapan penanganan/)
+
+  // 3. New report: no glow, no DoneStatusIc
+  const newHtml = renderToStaticMarkup(
+    <TefaReportRow
+      report={{ ...baseReport, id: "rep-3", status: "Baru", statusKey: "baru" }}
+      onOpen={() => { }}
+    />
+  )
+  assert.doesNotMatch(newHtml, /DoneStatusIc\.png/)
+  assert.doesNotMatch(newHtml, /bg-emerald-500\/20/)
+  assert.doesNotMatch(newHtml, /bg-blue-500\/20/)
+  assert.match(newHtml, /Tahapan penanganan/)
+
+  // 4. Rejected report: status akhir Ditolak
+  const rejectedHtml = renderToStaticMarkup(
+    <TefaReportRow
+      report={{ ...baseReport, id: "rep-4", status: "Ditolak", statusKey: "ditolak" }}
+      onOpen={() => { }}
+    />
+  )
+  assert.doesNotMatch(rejectedHtml, /DoneStatusIc\.png/)
+  assert.match(rejectedHtml, /Status akhir/)
+  assert.match(rejectedHtml, /Ditolak/)
 })

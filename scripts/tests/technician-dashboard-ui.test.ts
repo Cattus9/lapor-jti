@@ -5,7 +5,9 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { TechnicianEmptyState } from "../../src/features/facilities/components/technician-empty-state"
 import { TechnicianPriorityAnalysis } from "../../src/features/facilities/components/technician-priority-analysis"
+import { FacilityReportRow } from "../../src/features/facilities/components/teknisi-facility-report-list"
 import { ReportAttachmentsEmptyState } from "../../src/components/reports/report-attachments-empty-state"
+import type { TechnicianFacilityReport } from "../../src/features/facilities/types"
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 
@@ -175,3 +177,66 @@ for (const selector of [":root", ".dark"]) {
     assert.match(css, /--color-empty-surface: var\(--empty-surface\)/)
   })
 }
+
+test("Teknisi facility report row renders stepper and status indicators according to status", () => {
+  const baseReport: TechnicianFacilityReport = {
+    id: "tek-1",
+    ticket: "T-TEK-1",
+    title: "AC Bocor dan Tidak Dingin",
+    facility: "AC",
+    facilities: ["AC"],
+    locationId: "loc-1",
+    room: "Lab Jaringan",
+    location: "Lantai 2 Ruang 204",
+    reporter: "Ayu Santoso",
+    submittedAt: "17 Nov 2026, 10.00",
+    updatedAt: "17 Nov 2026, 11.00",
+    eventDate: "17 Nov 2026",
+    eventTime: "09.30",
+    description: "AC meneteskan air ke meja mahasiswa.",
+    attachments: 1,
+    status: "Selesai",
+    completedAt: "17 Nov 2026, 11.00",
+    completionNote: "Pipa drainase dibersihkan dan freon diisi ulang.",
+  }
+
+  // 1. Completed report: has DoneStatusIc icon, emerald glow, stepper
+  const completedHtml = renderToStaticMarkup(createElement(FacilityReportRow, { report: baseReport }))
+  assert.match(completedHtml, /DoneStatusIc\.png/)
+  assert.match(completedHtml, /bg-emerald-500\/20/)
+  assert.match(completedHtml, /Tahapan perbaikan/)
+  assert.match(completedHtml, /Progres perbaikan fasilitas/)
+  assert.match(completedHtml, /Pipa drainase dibersihkan/)
+
+  // 2. In progress report: has blue glow, no DoneStatusIc
+  const inProgressHtml = renderToStaticMarkup(
+    createElement(FacilityReportRow, {
+      report: { ...baseReport, id: "tek-2", status: "Diproses", completedAt: undefined },
+    })
+  )
+  assert.doesNotMatch(inProgressHtml, /DoneStatusIc\.png/)
+  assert.match(inProgressHtml, /bg-blue-500\/20/)
+  assert.doesNotMatch(inProgressHtml, /bg-emerald-500\/20/)
+  assert.match(inProgressHtml, /Tahapan perbaikan/)
+
+  // 3. New report: no glow, no DoneStatusIc
+  const newHtml = renderToStaticMarkup(
+    createElement(FacilityReportRow, {
+      report: { ...baseReport, id: "tek-3", status: "Baru", completedAt: undefined },
+    })
+  )
+  assert.doesNotMatch(newHtml, /DoneStatusIc\.png/)
+  assert.doesNotMatch(newHtml, /bg-emerald-500\/20/)
+  assert.doesNotMatch(newHtml, /bg-blue-500\/20/)
+  assert.match(newHtml, /Tahapan perbaikan/)
+
+  // 4. Rejected report: status akhir Ditolak
+  const rejectedHtml = renderToStaticMarkup(
+    createElement(FacilityReportRow, {
+      report: { ...baseReport, id: "tek-4", status: "Ditolak", completedAt: undefined },
+    })
+  )
+  assert.doesNotMatch(rejectedHtml, /DoneStatusIc\.png/)
+  assert.match(rejectedHtml, /Status akhir/)
+  assert.match(rejectedHtml, /Ditolak/)
+})

@@ -134,6 +134,9 @@ test("Inventory handover requires an officer, ownership evidence, contact (email
   assert.throws(() => validateHandoverInventory({ ...input, lossTicket: "bad" }), /tiket tidak valid/)
   assert.throws(() => validateHandoverInventory({ ...input, recipientEmail: undefined, recipientPhone: undefined }), /minimal salah satu kontak/i)
   assert.throws(() => validateHandoverInventory({ ...input, recipientEmail: "invalid-email", recipientPhone: undefined }), /Format email/)
+  assert.throws(() => validateHandoverInventory({ ...input, recipientEmail: undefined, recipientPhone: "1234567890" }), /11 sampai 13 digit/)
+  assert.throws(() => validateHandoverInventory({ ...input, recipientEmail: undefined, recipientPhone: "12345678901234" }), /11 sampai 13 digit/)
+  assert.throws(() => validateHandoverInventory({ ...input, recipientEmail: undefined, recipientPhone: "0812345678a" }), /11 sampai 13 digit/)
 })
 
 test("SatpamService inventory endpoints enforce satpam role authorization", async () => {
@@ -149,4 +152,17 @@ test("SatpamService inventory endpoints enforce satpam role authorization", asyn
   // Satpam actor is authorized
   const list = await service.listInventory(satpamActor, {})
   assert.equal(list.total, 0)
+
+  // Handover requires photo
+  await assert.rejects(
+    () => service.handoverInventory(satpamActor, {
+      id: "00000000-0000-4000-8000-000000000001",
+      recipient: "Budi",
+      recipientPhone: "081234567890",
+      officerId: "00000000-0000-4000-8000-000000000002",
+      submissionKey: "00000000-0000-4000-8000-000000000003",
+      ownershipEvidence: "Membawa bukti identitas",
+    }),
+    /Foto penyerahan wajib diunggah/
+  )
 })

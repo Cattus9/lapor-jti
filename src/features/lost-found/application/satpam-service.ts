@@ -36,7 +36,8 @@ export class SatpamService {
     requireSatpam(actor)
     const command = parseSatpamCommand(raw)
     let storedPhoto: StoredAttachment | undefined
-    if (file && command.type === "handover") {
+    if (command.type === "handover") {
+      if (!file) throw new ReportError("Foto dokumentasi penyerahan wajib diunggah.", 400)
       validateUploads([file], 0)
       if (!file.mimeType.startsWith("image/")) throw new ReportError("Lampiran penyerahan harus berupa foto.")
       const [photo] = await this.storage.store([file])
@@ -95,13 +96,11 @@ export class SatpamService {
   async handoverInventory(actor: ReportActor, raw: unknown, file?: AttachmentUpload) {
     requireSatpam(actor)
     const validated = validateHandoverInventory(raw)
-    let storedPhoto: StoredAttachment | undefined
-    if (file) {
-      validateUploads([file], 0)
-      if (!file.mimeType.startsWith("image/")) throw new ReportError("Lampiran penyerahan harus berupa foto.")
-      const [photo] = await this.storage.store([file])
-      storedPhoto = photo
-    }
+    if (!file) throw new ReportError("Foto penyerahan wajib diunggah.", 400)
+    validateUploads([file], 0)
+    if (!file.mimeType.startsWith("image/")) throw new ReportError("Lampiran penyerahan harus berupa foto.")
+    const [photo] = await this.storage.store([file])
+    const storedPhoto: StoredAttachment = photo
     try {
       const result = await this.repository.handoverInventory(actor, validated, storedPhoto)
       await this.discardUnusedPhoto(storedPhoto)

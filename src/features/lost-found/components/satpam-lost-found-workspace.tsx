@@ -534,7 +534,7 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
         const trimmedNote = note.trim()
         const photo = handoverPhoto.file
 
-        if (pending || !validOfficer || !trimmedRecipient || !trimmedLocation || !trimmedEvidence) return
+        if (pending || !validOfficer || !trimmedRecipient || !trimmedLocation || !trimmedEvidence || !photo) return
 
         if (!trimmedEmail && !trimmedPhone) {
           setError("Minimal salah satu antara email atau nomor HP penerima wajib diisi.")
@@ -544,8 +544,16 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
           setError("Format email penerima tidak valid.")
           return
         }
+        if (trimmedPhone && !/^\d{11,13}$/.test(trimmedPhone)) {
+          setError("Nomor HP penerima harus berupa angka dengan panjang 11 sampai 13 digit.")
+          return
+        }
         if (handoverPhoto.error) {
           setError(handoverPhoto.error)
+          return
+        }
+        if (!photo) {
+          setError("Foto dokumentasi penyerahan wajib diunggah.")
           return
         }
 
@@ -603,19 +611,20 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
             <Input
               id="handover-recipient-phone"
               type="tel"
+              inputMode="numeric"
               value={recipientPhone}
-              onChange={(event) => setRecipientPhone(event.target.value)}
+              onChange={(event) => setRecipientPhone(event.target.value.replace(/\D/g, "").slice(0, 13))}
               className="h-9 bg-background"
-              maxLength={30}
+              maxLength={13}
               disabled={pending}
               placeholder="081234567890"
             />
           </Field>
         </div>
-        <FieldDescription>Minimal salah satu (email atau nomor HP) harus diisi sebagai kontak verifikasi penyerahan.</FieldDescription>
+        <FieldDescription>Minimal salah satu (email atau nomor HP) harus diisi sebagai kontak verifikasi penyerahan. Format nomor HP: 11–13 digit angka.</FieldDescription>
         <ItemPhotoField
           idPrefix="satpam-handover"
-          label="Foto dokumentasi penyerahan (opsional)"
+          label="Foto dokumentasi penyerahan"
           description="Format JPG, PNG, atau WebP (maks. 5 MB) sebagai arsip dokumentasi serah terima fisik."
           photo={handoverPhoto}
           disabled={pending}
@@ -627,7 +636,7 @@ function HandoverDialog({ pair, officers, open, onOpenChange, onConfirm }: {
         {error ? <FieldError>{error}</FieldError> : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button type="submit" disabled={pending || !validOfficer || !recipient.trim() || !location.trim() || !evidence.trim() || !hasContact}><Handshake />{pending ? "Menyimpan..." : "Konfirmasi penyerahan"}</Button>
+          <Button type="submit" disabled={pending || !validOfficer || !recipient.trim() || !location.trim() || !evidence.trim() || !hasContact || !handoverPhoto.file}><Handshake />{pending ? "Menyimpan..." : "Konfirmasi penyerahan"}</Button>
         </div>
       </form>
     </DialogContent>
